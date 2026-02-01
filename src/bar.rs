@@ -1,32 +1,26 @@
-fn get_battery_percentage() -> Option<u8> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::fs;
-
-        let battery_path = "/sys/class/power_supply/BAT0/capacity";
-        if let Ok(contents) = fs::read_to_string(battery_path) {
-            if let Ok(percentage) = contents.trim().parse::<u8>() {
-                return Some(percentage);
-            }
-        }
-    }
-    None
-}
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui::{
-    App, Application, Bounds, Context, FontWeight, Pixels, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
-    point, prelude::*, px, rems, rgba, white,
+    App, Application, Bounds, Context, FontWeight, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
+    rgba, white,
 };
 
-struct LayerShellBar;
+use crate::widgets::{self, WorkspaceInfo};
+
+struct LayerShellBar {
+    workspaces: Vec<WorkspaceInfo>,
+}
 
 impl LayerShellBar {
     fn new(cx: &mut Context<Self>) -> Self {
         cx.spawn(async move |this, cx| {
             loop {
-                let _ = this.update(cx, |_, cx| cx.notify());
+                let workspaces = widgets::fetch_workspaces();
+                let _ = this.update(cx, |this, cx| {
+                    this.workspaces = workspaces;
+                    cx.notify();
+                });
                 cx.background_executor()
                     .timer(Duration::from_millis(500))
                     .await;
@@ -34,12 +28,12 @@ impl LayerShellBar {
         })
         .detach();
 
-        LayerShellBar
+        LayerShellBar {
+            workspaces: widgets::fetch_workspaces(),
+        }
     }
-}
 
-impl Render for LayerShellBar {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn get_time(&self) -> (u64, u64, u64) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -49,7 +43,14 @@ impl Render for LayerShellBar {
         let minutes = (now / 60) % 60;
         let seconds = now % 60;
 
-        let bat = get_battery_percentage().map_or("N/A".to_string(), |p| format!("{}%", p));
+        (hours, minutes, seconds)
+    }
+}
+
+impl Render for LayerShellBar {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let (hours, minutes, seconds) = self.get_time();
+        let battery = widgets::get_battery_percentage();
 
         div()
             .size_full()
@@ -61,9 +62,22 @@ impl Render for LayerShellBar {
             .font_weight(FontWeight::MEDIUM)
             .text_color(white())
             .bg(rgba(0x1a1a1aff))
-            .child("TopBar")
-            .child(format!("{:02}:{:02}:{:02}", hours, minutes, seconds))
-            .child(format!("Battery: {}", bat))
+            // Start section
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .child(widgets::workspaces(&self.workspaces)),
+            )
+            // Center section
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .child(widgets::clock(hours, minutes, seconds)),
+            )
+            // End section
+            .child(div().flex().items_center().child(widgets::battery(battery)))
     }
 }
 

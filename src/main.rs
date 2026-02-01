@@ -1,5 +1,6 @@
 mod bar;
 mod examples;
+mod widgets;
 
 fn main() {
     // #[cfg(all(target_os = "linux", feature = "wayland"))]
