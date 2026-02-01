@@ -5,7 +5,7 @@ use gpui::{
 };
 
 use crate::services::Services;
-use crate::widgets::{Battery, Clock, Systray, Workspaces};
+use crate::widgets::{Clock, Info, Systray, Workspaces};
 
 pub const BAR_HEIGHT: f32 = 32.0;
 
@@ -13,7 +13,7 @@ struct LayerShellBar {
     workspaces: Entity<Workspaces>,
     clock: Entity<Clock>,
     systray: Entity<Systray>,
-    battery: Entity<Battery>,
+    info: Entity<Info>,
 }
 
 impl LayerShellBar {
@@ -23,7 +23,7 @@ impl LayerShellBar {
             workspaces: cx.new(|cx| Workspaces::with_services(services.clone(), cx)),
             clock: cx.new(Clock::new),
             systray: cx.new(Systray::new),
-            battery: cx.new(Battery::new),
+            info: cx.new(|cx| Info::with_services(services, cx)),
         }
     }
 }
@@ -51,7 +51,7 @@ impl Render for LayerShellBar {
                     .items_center()
                     .gap(px(12.))
                     .child(self.systray.clone())
-                    .child(self.battery.clone()),
+                    .child(self.info.clone()),
             )
     }
 }
