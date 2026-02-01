@@ -92,21 +92,22 @@ impl HyprlandWorkspaces {
 
 impl Render for HyprlandWorkspaces {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .children(self.workspaces.iter().map(|ws| {
-                div()
-                    .px(px(8.))
-                    .py(px(2.))
-                    .rounded(px(4.))
-                    .bg(if ws.is_active {
-                        rgba(0x3b82f6ff)
-                    } else {
-                        rgba(0x333333ff)
-                    })
-                    .child(ws.name.clone())
-            }))
+        div().flex().items_center().gap(px(4.)).children(
+            self.workspaces
+                .iter()
+                .filter(|ws| !ws.name.starts_with("special"))
+                .map(|ws| {
+                    div()
+                        .px(px(8.))
+                        .py(px(2.))
+                        .rounded(px(4.))
+                        .bg(if ws.is_active {
+                            rgba(0x3b82f6ff)
+                        } else {
+                            rgba(0x333333ff)
+                        })
+                        .child(ws.name.clone())
+                }),
+        )
     }
 }
