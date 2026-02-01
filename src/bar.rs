@@ -1,28 +1,24 @@
-use std::time::Duration;
-
 use gpui::{
-    App, Application, Bounds, Context, FontWeight, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
-    rgba, white,
+    App, Application, Bounds, Context, Entity, FontWeight, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
+    point, prelude::*, px, rems, rgba, white,
 };
 
-use crate::widgets;
+use crate::widgets::{Battery, Clock, HyprlandWorkspaces};
 
-struct LayerShellBar;
+struct LayerShellBar {
+    workspaces: Entity<HyprlandWorkspaces>,
+    clock: Entity<Clock>,
+    battery: Entity<Battery>,
+}
 
 impl LayerShellBar {
     fn new(cx: &mut Context<Self>) -> Self {
-        cx.spawn(async move |this, cx| {
-            loop {
-                let _ = this.update(cx, |_, cx| cx.notify());
-                cx.background_executor()
-                    .timer(Duration::from_millis(500))
-                    .await;
-            }
-        })
-        .detach();
-
-        LayerShellBar
+        LayerShellBar {
+            workspaces: cx.new(HyprlandWorkspaces::new),
+            clock: cx.new(Clock::new),
+            battery: cx.new(Battery::new),
+        }
     }
 }
 
@@ -39,11 +35,11 @@ impl Render for LayerShellBar {
             .text_color(white())
             .bg(rgba(0x1a1a1aff))
             // Start section
-            .child(div().flex().items_center().child(widgets::workspaces()))
+            .child(div().flex().items_center().child(self.workspaces.clone()))
             // Center section
-            .child(div().flex().items_center().child(widgets::clock()))
+            .child(div().flex().items_center().child(self.clock.clone()))
             // End section
-            .child(div().flex().items_center().child(widgets::battery()))
+            .child(div().flex().items_center().child(self.battery.clone()))
     }
 }
 
