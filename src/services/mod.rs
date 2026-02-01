@@ -1,8 +1,10 @@
+pub mod applications;
 pub mod audio;
 pub mod compositor;
 pub mod network;
 pub mod upower;
 
+use applications::Applications;
 use audio::Audio;
 use compositor::Compositor;
 use gpui::{App, AppContext, Entity};
@@ -48,6 +50,7 @@ pub struct Services {
     pub network: Entity<Network>,
     pub upower: Entity<UPower>,
     pub audio: Entity<Audio>,
+    pub applications: Entity<Applications>,
 }
 
 impl Services {
@@ -58,6 +61,7 @@ impl Services {
             network: cx.new(Network::new),
             upower: cx.new(UPower::new),
             audio: cx.new(Audio::new),
+            applications: cx.new(Applications::new),
         }
     }
 }

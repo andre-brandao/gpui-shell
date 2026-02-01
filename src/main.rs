@@ -1,6 +1,7 @@
 use gpui::Application;
 
 mod bar;
+mod launcher;
 mod services;
 mod widgets;
 
@@ -13,11 +14,13 @@ fn main() {
         // Create all services once at startup
         let services = services::Services::new(cx);
 
+        // Register launcher keybindings
+        launcher::register_keybindings(cx);
+
         // Open the bar window with shared services
         bar::open(services.clone(), cx);
 
-        // You can open additional windows sharing the same services:
-        // bar::open(services.clone(), cx);  // Another bar (e.g., different monitor)
-        // launcher::open(services.clone(), cx);
+        // Open the launcher
+        launcher::open(services.applications.clone(), cx);
     });
 }
