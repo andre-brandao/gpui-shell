@@ -20,7 +20,7 @@ fn main() {
         // Open the bar window with shared services
         bar::open(services.clone(), cx);
 
-        // Open the launcher
+        // Open the launcher on startup
         launcher::open(services.applications.clone(), cx);
     });
 }

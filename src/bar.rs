@@ -1,35 +1,117 @@
 use gpui::{
-    App, AppContext, Bounds, Context, Entity, FontWeight, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
-    rgba, white,
+    AnyElement, App, AppContext, Bounds, Context, Entity, FontWeight, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
+    point, prelude::*, px, rems, rgba, white,
 };
 
 use crate::services::Services;
-use crate::widgets::{Clock, Info, Systray, Workspaces};
+use crate::widgets::{Clock, Info, LauncherBtn, Systray, Workspaces};
 
 pub const BAR_HEIGHT: f32 = 32.0;
 
+/// Bar layout configuration.
+#[derive(Clone)]
+pub struct BarConfig {
+    pub left: Vec<String>,
+    pub center: Vec<String>,
+    pub right: Vec<String>,
+}
+
+impl Default for BarConfig {
+    fn default() -> Self {
+        BarConfig {
+            left: vec!["LauncherBtn".to_string(), "Workspaces".to_string()],
+            center: vec!["Clock".to_string()],
+            right: vec!["Systray".to_string(), "Info".to_string()],
+        }
+    }
+}
+
+/// Wrapper enum for all possible widget types.
+enum Widget {
+    LauncherBtn(Entity<LauncherBtn>),
+    Workspaces(Entity<Workspaces>),
+    Clock(Entity<Clock>),
+    Systray(Entity<Systray>),
+    Info(Entity<Info>),
+}
+
+impl Widget {
+    fn render(&self) -> AnyElement {
+        match self {
+            Widget::LauncherBtn(e) => e.clone().into_any_element(),
+            Widget::Workspaces(e) => e.clone().into_any_element(),
+            Widget::Clock(e) => e.clone().into_any_element(),
+            Widget::Systray(e) => e.clone().into_any_element(),
+            Widget::Info(e) => e.clone().into_any_element(),
+        }
+    }
+}
+
 struct LayerShellBar {
-    workspaces: Entity<Workspaces>,
-    clock: Entity<Clock>,
-    systray: Entity<Systray>,
-    info: Entity<Info>,
+    left_widgets: Vec<Widget>,
+    center_widgets: Vec<Widget>,
+    right_widgets: Vec<Widget>,
 }
 
 impl LayerShellBar {
-    /// Create a bar with all services.
-    fn with_services(services: Services, cx: &mut Context<Self>) -> Self {
+    /// Create a bar with services and configuration.
+    fn new(services: Services, config: BarConfig, cx: &mut Context<Self>) -> Self {
+        let create_widget =
+            |name: &str, services: &Services, cx: &mut Context<Self>| -> Option<Widget> {
+                match name {
+                    "LauncherBtn" => Some(Widget::LauncherBtn(
+                        cx.new(|cx| LauncherBtn::with_services(services.clone(), cx)),
+                    )),
+                    "Workspaces" => Some(Widget::Workspaces(
+                        cx.new(|cx| Workspaces::with_services(services.clone(), cx)),
+                    )),
+                    "Clock" => Some(Widget::Clock(cx.new(Clock::new))),
+                    "Systray" => Some(Widget::Systray(cx.new(Systray::new))),
+                    "Info" => Some(Widget::Info(
+                        cx.new(|cx| Info::with_services(services.clone(), cx)),
+                    )),
+                    _ => {
+                        eprintln!("Unknown widget: {}", name);
+                        None
+                    }
+                }
+            };
+
+        let left_widgets: Vec<Widget> = config
+            .left
+            .iter()
+            .filter_map(|name| create_widget(name, &services, cx))
+            .collect();
+
+        let center_widgets: Vec<Widget> = config
+            .center
+            .iter()
+            .filter_map(|name| create_widget(name, &services, cx))
+            .collect();
+
+        let right_widgets: Vec<Widget> = config
+            .right
+            .iter()
+            .filter_map(|name| create_widget(name, &services, cx))
+            .collect();
+
         LayerShellBar {
-            workspaces: cx.new(|cx| Workspaces::with_services(services.clone(), cx)),
-            clock: cx.new(Clock::new),
-            systray: cx.new(Systray::new),
-            info: cx.new(|cx| Info::with_services(services, cx)),
+            left_widgets,
+            center_widgets,
+            right_widgets,
         }
     }
 }
 
 impl Render for LayerShellBar {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let left_elements: Vec<AnyElement> = self.left_widgets.iter().map(|w| w.render()).collect();
+        let center_elements: Vec<AnyElement> =
+            self.center_widgets.iter().map(|w| w.render()).collect();
+        let right_elements: Vec<AnyElement> =
+            self.right_widgets.iter().map(|w| w.render()).collect();
+
         div()
             .size_full()
             .flex()
@@ -40,18 +122,29 @@ impl Render for LayerShellBar {
             .font_weight(FontWeight::MEDIUM)
             .text_color(white())
             .bg(rgba(0x1a1a1aff))
-            // Start section
-            .child(div().flex().items_center().child(self.workspaces.clone()))
+            // Left section
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .children(left_elements),
+            )
             // Center section
-            .child(div().flex().items_center().child(self.clock.clone()))
-            // End section
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .children(center_elements),
+            )
+            // Right section
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(self.systray.clone())
-                    .child(self.info.clone()),
+                    .children(right_elements),
             )
     }
 }
@@ -79,9 +172,15 @@ pub fn window_options() -> WindowOptions {
     }
 }
 
+/// Open the bar with default configuration.
 pub fn open(services: Services, cx: &mut App) {
+    open_with_config(services, BarConfig::default(), cx);
+}
+
+/// Open the bar with custom configuration.
+pub fn open_with_config(services: Services, config: BarConfig, cx: &mut App) {
     cx.open_window(window_options(), move |_, cx| {
-        cx.new(|cx| LayerShellBar::with_services(services, cx))
+        cx.new(|cx| LayerShellBar::new(services, config, cx))
     })
     .unwrap();
 }
