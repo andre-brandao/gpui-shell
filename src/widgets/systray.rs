@@ -86,8 +86,8 @@ impl Systray {
                     let _ = this.update(cx, |this, _| match event {
                         SystrayEvent::Add(id, item, menu) => {
                             let tray_item = TrayItem {
-                                id: id.clone(),
-                                address: item.id.clone(),
+                                id: item.id.clone(),
+                                address: id.clone(), // DBus bus name
                                 title: item.title.clone().unwrap_or_default(),
                                 icon_name: item.icon_name.clone(),
                                 menu_path: item.menu.clone(),
@@ -168,19 +168,12 @@ impl Systray {
                 focus: true,
                 ..Default::default()
             },
-            |window, cx| {
-                cx.new(|cx| {
-                    let focus_subscription =
-                        cx.on_focus_lost(window, |this: &mut SystrayMenu, window, _cx| {
-                            this.close_window(window);
-                        });
-                    SystrayMenu {
-                        menu,
-                        address,
-                        menu_path,
-                        client,
-                        focus_subscription,
-                    }
+            |_window, cx| {
+                cx.new(|_cx| SystrayMenu {
+                    menu,
+                    address,
+                    menu_path,
+                    client,
                 })
             },
         )
@@ -252,8 +245,6 @@ struct SystrayMenu {
     address: String,
     menu_path: String,
     client: Arc<Mutex<Option<Client>>>,
-    #[allow(dead_code)]
-    focus_subscription: gpui::Subscription,
 }
 
 impl SystrayMenu {
@@ -265,6 +256,11 @@ impl SystrayMenu {
         let client = self.client.clone();
         let address = self.address.clone();
         let menu_path = self.menu_path.clone();
+
+        eprintln!(
+            "Activating menu item: {} (address: {}, path: {})",
+            submenu_id, address, menu_path
+        );
 
         std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -280,8 +276,14 @@ impl SystrayMenu {
                             menu_path,
                             submenu_id,
                         };
-                        let _ = client.activate(request).await;
+                        eprintln!("Sending activate request: {:?}", request);
+                        let result = client.activate(request).await;
+                        eprintln!("Activate result: {:?}", result);
+                    } else {
+                        eprintln!("No client available");
                     }
+                } else {
+                    eprintln!("Failed to lock client");
                 }
             });
         });
