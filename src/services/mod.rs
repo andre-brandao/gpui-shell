@@ -1,4 +1,9 @@
 pub mod compositor;
+pub mod network;
+
+use compositor::Compositor;
+use gpui::{App, AppContext, Entity};
+use network::Network;
 
 /// Event wrapper for service state changes.
 #[derive(Debug, Clone)]
@@ -29,4 +34,22 @@ pub trait ReadOnlyService: Sized + Clone + Send + 'static {
 
     /// Apply an update event to the service state.
     fn update(&mut self, event: Self::UpdateEvent);
+}
+
+/// Container holding all service entities.
+/// Pass this to components that need access to multiple services.
+#[derive(Clone)]
+pub struct Services {
+    pub compositor: Entity<Compositor>,
+    pub network: Entity<Network>,
+}
+
+impl Services {
+    /// Create all services. Call this once at app startup.
+    pub fn new(cx: &mut App) -> Self {
+        Services {
+            compositor: cx.new(Compositor::new),
+            network: cx.new(Network::new),
+        }
+    }
 }

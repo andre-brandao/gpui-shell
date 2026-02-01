@@ -3851,6 +3851,7 @@ dependencies = [
  "anyhow",
  "calloop-wayland-source",
  "freedesktop-icons",
+ "futures-lite 2.6.1",
  "gpui",
  "gpui-macros",
  "hyprland",
@@ -3868,6 +3869,7 @@ dependencies = [
  "wayland-protocols",
  "wayland-protocols-plasma",
  "wayland-protocols-wlr",
+ "zbus",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-use gpui::{AppContext, Application};
+use gpui::Application;
 
 mod bar;
 mod services;
@@ -10,13 +10,14 @@ fn main() {
 
     #[cfg(all(target_os = "linux", feature = "wayland"))]
     Application::new().run(|cx| {
-        use crate::services::compositor::Compositor;
+        // Create all services once at startup
+        let services = services::Services::new(cx);
 
-        let compositor = cx.new(Compositor::new);
-        // Open the bar window
-        // bar::open(cx);
-        bar::open_with_compositor(compositor.clone(), cx);
-        // You can open additional independent windows here, e.g.:
-        // launcher::open(cx);
+        // Open the bar window with shared services
+        bar::open(services.clone(), cx);
+
+        // You can open additional windows sharing the same services:
+        // bar::open(services.clone(), cx);  // Another bar (e.g., different monitor)
+        // launcher::open(services.clone(), cx);
     });
 }

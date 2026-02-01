@@ -4,7 +4,7 @@ use gpui::{
     rgba, white,
 };
 
-use crate::services::compositor::Compositor;
+use crate::services::Services;
 use crate::widgets::{Battery, Clock, Systray, Workspaces};
 
 pub const BAR_HEIGHT: f32 = 32.0;
@@ -17,20 +17,10 @@ struct LayerShellBar {
 }
 
 impl LayerShellBar {
-    fn new(cx: &mut Context<Self>) -> Self {
+    /// Create a bar with all services.
+    fn with_services(services: Services, cx: &mut Context<Self>) -> Self {
         LayerShellBar {
-            workspaces: cx.new(Workspaces::new),
-            clock: cx.new(Clock::new),
-            systray: cx.new(Systray::new),
-            battery: cx.new(Battery::new),
-        }
-    }
-
-    /// Create a bar with a shared compositor entity.
-    /// Use this when opening multiple bars (e.g., one per monitor).
-    fn with_compositor(compositor: Entity<Compositor>, cx: &mut Context<Self>) -> Self {
-        LayerShellBar {
-            workspaces: cx.new(|cx| Workspaces::with_compositor(compositor, cx)),
+            workspaces: cx.new(|cx| Workspaces::with_services(services.clone(), cx)),
             clock: cx.new(Clock::new),
             systray: cx.new(Systray::new),
             battery: cx.new(Battery::new),
@@ -89,28 +79,9 @@ pub fn window_options() -> WindowOptions {
     }
 }
 
-/// Opens the bar window (creates its own compositor entity).
-pub fn open(cx: &mut App) {
-    cx.open_window(window_options(), |_, cx| cx.new(LayerShellBar::new))
-        .unwrap();
-}
-
-/// Opens a bar window with a shared compositor entity.
-/// Use this when you want multiple windows to share compositor state.
-///
-/// Example for multi-monitor setup:
-/// ```ignore
-/// let compositor = cx.new(Compositor::new);
-/// bar::open_with_compositor(compositor.clone(), cx);
-/// bar::open_with_compositor(compositor.clone(), cx);
-/// ```
-///
-/// Note: GPUI's LayerShellOptions doesn't currently support targeting
-/// specific outputs. The compositor will place each window on the
-/// focused output when created.
-pub fn open_with_compositor(compositor: Entity<Compositor>, cx: &mut App) {
+pub fn open(services: Services, cx: &mut App) {
     cx.open_window(window_options(), move |_, cx| {
-        cx.new(|cx| LayerShellBar::with_compositor(compositor, cx))
+        cx.new(|cx| LayerShellBar::with_services(services, cx))
     })
     .unwrap();
 }

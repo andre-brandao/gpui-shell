@@ -1,3 +1,4 @@
+use crate::services::Services;
 use crate::services::compositor::{Compositor, CompositorCommand};
 use gpui::{Context, Entity, MouseButton, Window, div, prelude::*, px, rgba};
 
@@ -6,20 +7,13 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(cx: &mut Context<Self>) -> Self {
-        let compositor = cx.new(Compositor::new);
-
-        // Observe the compositor entity to re-render when it changes
-        cx.observe(&compositor, |_, _, cx| cx.notify()).detach();
-
-        Workspaces { compositor }
-    }
-
-    /// Create workspaces widget with a shared compositor entity.
-    /// Use this when you want multiple widgets to share the same compositor state.
-    pub fn with_compositor(compositor: Entity<Compositor>, cx: &mut Context<Self>) -> Self {
-        cx.observe(&compositor, |_, _, cx| cx.notify()).detach();
-        Workspaces { compositor }
+    /// Create workspaces widget with shared services.
+    pub fn with_services(services: Services, cx: &mut Context<Self>) -> Self {
+        cx.observe(&services.compositor, |_, _, cx| cx.notify())
+            .detach();
+        Workspaces {
+            compositor: services.compositor,
+        }
     }
 }
 
