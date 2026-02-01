@@ -1,71 +1,47 @@
 mod panel;
 
 use crate::services::Services;
+use crate::services::upower::BatteryStatus;
 use gpui::{
     App, AppContext, Bounds, Context, MouseButton, Point, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px, rgba,
+    WindowBounds, WindowHandle, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px,
+    rgba,
 };
 use panel::InfoPanel;
-use std::time::Duration;
 
 /// Info widget showing battery, volume, and network status icons.
 /// Clicking opens a detailed settings panel.
 pub struct Info {
     services: Services,
-    battery_percent: Option<u8>,
-    battery_charging: bool,
-    volume_percent: u8,
-    volume_muted: bool,
-    panel_open: bool,
+    panel_window: Option<WindowHandle<InfoPanel>>,
 }
 
 impl Info {
     pub fn with_services(services: Services, cx: &mut Context<Self>) -> Self {
-        // Observe network service for WiFi status
+        // Observe services for updates
         cx.observe(&services.network, |_, _, cx| cx.notify())
             .detach();
-
-        // Poll battery and volume periodically
-        cx.spawn(async move |this, cx| {
-            loop {
-                let (battery_percent, battery_charging) = read_battery_status();
-                let (volume_percent, volume_muted) = read_volume_status();
-
-                let _ = this.update(cx, |this, cx| {
-                    this.battery_percent = battery_percent;
-                    this.battery_charging = battery_charging;
-                    this.volume_percent = volume_percent;
-                    this.volume_muted = volume_muted;
-                    cx.notify();
-                });
-
-                cx.background_executor().timer(Duration::from_secs(2)).await;
-            }
-        })
-        .detach();
-
-        let (battery_percent, battery_charging) = read_battery_status();
-        let (volume_percent, volume_muted) = read_volume_status();
+        cx.observe(&services.upower, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
 
         Info {
             services,
-            battery_percent,
-            battery_charging,
-            volume_percent,
-            volume_muted,
-            panel_open: false,
+            panel_window: None,
         }
     }
 
     fn toggle_panel(&mut self, cx: &mut App) {
-        if self.panel_open {
-            // Panel will close itself
-            self.panel_open = false;
+        if let Some(handle) = self.panel_window.take() {
+            // Close the panel
+            let _ = handle.update(cx, |_, window, _| {
+                window.remove_window();
+            });
         } else {
-            self.panel_open = true;
+            // Open the panel
             let services = self.services.clone();
 
-            cx.open_window(
+            if let Ok(window) = cx.open_window(
                 WindowOptions {
                     titlebar: None,
                     window_bounds: Some(WindowBounds::Windowed(Bounds {
@@ -87,32 +63,53 @@ impl Info {
                     ..Default::default()
                 },
                 move |_, cx| cx.new(|cx| InfoPanel::with_services(services, cx)),
-            )
-            .ok();
+            ) {
+                self.panel_window = Some(window);
+            }
         }
     }
 
-    fn battery_icon(&self) -> &'static str {
-        match (self.battery_charging, self.battery_percent) {
-            (true, _) => "󰂄", // charging
-            (false, Some(p)) if p >= 90 => "󰁹",
-            (false, Some(p)) if p >= 70 => "󰂀",
-            (false, Some(p)) if p >= 50 => "󰁾",
-            (false, Some(p)) if p >= 30 => "󰁼",
-            (false, Some(p)) if p >= 10 => "󰁺",
-            (false, Some(_)) => "󰂃", // low
-            (false, None) => "󰂑",    // unknown
+    fn battery_icon(&self, cx: &Context<Self>) -> &'static str {
+        let upower = self.services.upower.read(cx);
+
+        match &upower.battery {
+            Some(battery) => {
+                let charging = battery.status == BatteryStatus::Charging;
+                let percent = battery.percentage;
+
+                match (charging, percent) {
+                    (true, _) => "󰂄", // charging
+                    (false, p) if p >= 90 => "󰁹",
+                    (false, p) if p >= 70 => "󰂀",
+                    (false, p) if p >= 50 => "󰁾",
+                    (false, p) if p >= 30 => "󰁼",
+                    (false, p) if p >= 10 => "󰁺",
+                    (false, _) => "󰂃", // low
+                }
+            }
+            None => "󰂑", // unknown/no battery
         }
     }
 
-    fn volume_icon(&self) -> &'static str {
-        if self.volume_muted {
+    fn battery_percent(&self, cx: &Context<Self>) -> Option<u8> {
+        self.services
+            .upower
+            .read(cx)
+            .battery
+            .as_ref()
+            .map(|b| b.percentage)
+    }
+
+    fn volume_icon(&self, cx: &Context<Self>) -> &'static str {
+        let audio = self.services.audio.read(cx);
+
+        if audio.sink_muted {
             "󰝟"
-        } else if self.volume_percent >= 70 {
+        } else if audio.sink_volume >= 70 {
             "󰕾"
-        } else if self.volume_percent >= 30 {
+        } else if audio.sink_volume >= 30 {
             "󰖀"
-        } else if self.volume_percent > 0 {
+        } else if audio.sink_volume > 0 {
             "󰕿"
         } else {
             "󰝟"
@@ -135,11 +132,11 @@ impl Info {
 
 impl Render for Info {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let battery_icon = self.battery_icon();
-        let volume_icon = self.volume_icon();
+        let battery_icon = self.battery_icon(cx);
+        let volume_icon = self.volume_icon(cx);
         let wifi_icon = self.wifi_icon(cx);
         let battery_text = self
-            .battery_percent
+            .battery_percent(cx)
             .map(|p| format!("{}%", p))
             .unwrap_or_default();
 
@@ -173,53 +170,4 @@ impl Render for Info {
                     .child(battery_text),
             )
     }
-}
-
-fn read_battery_status() -> (Option<u8>, bool) {
-    #[cfg(target_os = "linux")]
-    {
-        use std::fs;
-
-        let capacity = fs::read_to_string("/sys/class/power_supply/BAT0/capacity")
-            .ok()
-            .and_then(|s| s.trim().parse::<u8>().ok());
-
-        let charging = fs::read_to_string("/sys/class/power_supply/BAT0/status")
-            .map(|s| s.trim() == "Charging")
-            .unwrap_or(false);
-
-        (capacity, charging)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    (None, false)
-}
-
-fn read_volume_status() -> (u8, bool) {
-    // Try to read volume using wpctl (WirePlumber/PipeWire)
-    #[cfg(target_os = "linux")]
-    {
-        use std::process::Command;
-
-        let output = Command::new("wpctl")
-            .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
-            .output()
-            .ok();
-
-        if let Some(output) = output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // Format: "Volume: 0.50" or "Volume: 0.50 [MUTED]"
-            let muted = stdout.contains("[MUTED]");
-            let volume = stdout
-                .split_whitespace()
-                .nth(1)
-                .and_then(|v| v.parse::<f32>().ok())
-                .map(|v| (v * 100.0) as u8)
-                .unwrap_or(0);
-
-            return (volume, muted);
-        }
-    }
-
-    (50, false) // fallback
 }

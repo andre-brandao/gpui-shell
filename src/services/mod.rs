@@ -1,9 +1,13 @@
+pub mod audio;
 pub mod compositor;
 pub mod network;
+pub mod upower;
 
+use audio::Audio;
 use compositor::Compositor;
 use gpui::{App, AppContext, Entity};
 use network::Network;
+use upower::UPower;
 
 /// Event wrapper for service state changes.
 #[derive(Debug, Clone)]
@@ -42,6 +46,8 @@ pub trait ReadOnlyService: Sized + Clone + Send + 'static {
 pub struct Services {
     pub compositor: Entity<Compositor>,
     pub network: Entity<Network>,
+    pub upower: Entity<UPower>,
+    pub audio: Entity<Audio>,
 }
 
 impl Services {
@@ -50,6 +56,8 @@ impl Services {
         Services {
             compositor: cx.new(Compositor::new),
             network: cx.new(Network::new),
+            upower: cx.new(UPower::new),
+            audio: cx.new(Audio::new),
         }
     }
 }

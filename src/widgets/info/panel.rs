@@ -1,18 +1,12 @@
 use crate::services::Services;
+use crate::services::audio::AudioCommand;
 use crate::services::network::NetworkCommand;
+use crate::services::upower::{BatteryStatus, PowerProfile, UPowerCommand};
 use gpui::{Context, FocusHandle, Focusable, MouseButton, Window, div, prelude::*, px, rgba};
-use std::time::Duration;
 
 /// Info panel showing detailed battery, volume, and network settings.
 pub struct InfoPanel {
     services: Services,
-    battery_percent: Option<u8>,
-    battery_charging: bool,
-    battery_time_to_full: Option<String>,
-    battery_time_to_empty: Option<String>,
-    volume_percent: u8,
-    volume_muted: bool,
-    wifi_enabled: bool,
     focus_handle: FocusHandle,
 }
 
@@ -20,47 +14,15 @@ impl InfoPanel {
     pub fn with_services(services: Services, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        // Observe network for updates
-        cx.observe(&services.network, |this, network, cx| {
-            this.wifi_enabled = network.read(cx).wifi_enabled;
-            cx.notify();
-        })
-        .detach();
-
-        // Poll battery and volume
-        cx.spawn(async move |this, cx| {
-            loop {
-                let battery = read_battery_info();
-                let (volume_percent, volume_muted) = super::read_volume_status();
-
-                let _ = this.update(cx, |this, cx| {
-                    this.battery_percent = battery.percent;
-                    this.battery_charging = battery.charging;
-                    this.battery_time_to_full = battery.time_to_full;
-                    this.battery_time_to_empty = battery.time_to_empty;
-                    this.volume_percent = volume_percent;
-                    this.volume_muted = volume_muted;
-                    cx.notify();
-                });
-
-                cx.background_executor().timer(Duration::from_secs(2)).await;
-            }
-        })
-        .detach();
-
-        let battery = read_battery_info();
-        let (volume_percent, volume_muted) = super::read_volume_status();
-        let wifi_enabled = services.network.read(cx).wifi_enabled;
+        // Observe all services for updates
+        cx.observe(&services.network, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.upower, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
 
         InfoPanel {
             services,
-            battery_percent: battery.percent,
-            battery_charging: battery.charging,
-            battery_time_to_full: battery.time_to_full,
-            battery_time_to_empty: battery.time_to_empty,
-            volume_percent,
-            volume_muted,
-            wifi_enabled,
             focus_handle,
         }
     }
@@ -71,29 +33,22 @@ impl InfoPanel {
         });
     }
 
-    fn toggle_mute(&mut self) {
-        #[cfg(target_os = "linux")]
-        {
-            use std::process::Command;
-            let _ = Command::new("wpctl")
-                .args(["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
-                .spawn();
-        }
+    fn toggle_mute(&mut self, cx: &mut Context<Self>) {
+        self.services.audio.update(cx, |audio, cx| {
+            audio.dispatch(AudioCommand::ToggleSinkMute, cx);
+        });
     }
 
-    fn set_volume(&mut self, percent: u8) {
-        #[cfg(target_os = "linux")]
-        {
-            use std::process::Command;
-            let _ = Command::new("wpctl")
-                .args([
-                    "set-volume",
-                    "@DEFAULT_AUDIO_SINK@",
-                    &format!("{}%", percent),
-                ])
-                .spawn();
-        }
-        self.volume_percent = percent;
+    fn set_volume(&mut self, percent: u8, cx: &mut Context<Self>) {
+        self.services.audio.update(cx, |audio, cx| {
+            audio.dispatch(AudioCommand::SetSinkVolume(percent), cx);
+        });
+    }
+
+    fn cycle_power_profile(&mut self, cx: &mut Context<Self>) {
+        self.services.upower.update(cx, |upower, cx| {
+            upower.dispatch(UPowerCommand::CyclePowerProfile, cx);
+        });
     }
 }
 
@@ -105,7 +60,7 @@ impl Focusable for InfoPanel {
 
 impl Render for InfoPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let wifi_enabled = self.wifi_enabled;
+        let wifi_enabled = self.services.network.read(cx).wifi_enabled;
 
         div()
             .id("info-panel")
@@ -122,7 +77,7 @@ impl Render for InfoPanel {
             .flex_col()
             .gap(px(16.))
             // Battery section
-            .child(self.render_battery_section())
+            .child(self.render_battery_section(cx))
             // Volume section
             .child(self.render_volume_section(cx))
             // Divider
@@ -133,90 +88,147 @@ impl Render for InfoPanel {
 }
 
 impl InfoPanel {
-    fn render_battery_section(&self) -> impl IntoElement {
-        let battery_icon = if self.battery_charging {
-            "󰂄"
-        } else {
-            match self.battery_percent {
-                Some(p) if p >= 90 => "󰁹",
-                Some(p) if p >= 70 => "󰂀",
-                Some(p) if p >= 50 => "󰁾",
-                Some(p) if p >= 30 => "󰁼",
-                Some(p) if p >= 10 => "󰁺",
-                Some(_) => "󰂃",
-                None => "󰂑",
+    fn render_battery_section(&self, cx: &Context<Self>) -> impl IntoElement {
+        let upower = self.services.upower.read(cx);
+
+        let (battery_icon, battery_text, time_text, battery_color) = match &upower.battery {
+            Some(battery) => {
+                let charging = battery.status == BatteryStatus::Charging;
+                let percent = battery.percentage;
+
+                let icon = if charging {
+                    "󰂄"
+                } else {
+                    match percent {
+                        p if p >= 90 => "󰁹",
+                        p if p >= 70 => "󰂀",
+                        p if p >= 50 => "󰁾",
+                        p if p >= 30 => "󰁼",
+                        p if p >= 10 => "󰁺",
+                        _ => "󰂃",
+                    }
+                };
+
+                let text = format!("{}%", percent);
+
+                let time = if charging {
+                    battery.time_to_full.map(|d| {
+                        let mins = d.as_secs() / 60;
+                        let hours = mins / 60;
+                        let mins = mins % 60;
+                        if hours > 0 {
+                            format!("Full in {}h {}m", hours, mins)
+                        } else {
+                            format!("Full in {}m", mins)
+                        }
+                    })
+                } else {
+                    battery.time_to_empty.map(|d| {
+                        let mins = d.as_secs() / 60;
+                        let hours = mins / 60;
+                        let mins = mins % 60;
+                        if hours > 0 {
+                            format!("{}h {}m remaining", hours, mins)
+                        } else {
+                            format!("{}m remaining", mins)
+                        }
+                    })
+                };
+
+                let color = match percent {
+                    p if p >= 50 => rgba(0x22c55eff), // green
+                    p if p >= 20 => rgba(0xeab308ff), // yellow
+                    _ => rgba(0xef4444ff),            // red
+                };
+
+                (icon, text, time, color)
             }
+            None => ("󰂑", "N/A".to_string(), None, rgba(0x888888ff)),
         };
 
-        let battery_text = self
-            .battery_percent
-            .map(|p| format!("{}%", p))
-            .unwrap_or_else(|| "N/A".to_string());
-
-        let time_text = if self.battery_charging {
-            self.battery_time_to_full
-                .as_ref()
-                .map(|t| format!("Full in {}", t))
-        } else {
-            self.battery_time_to_empty
-                .as_ref()
-                .map(|t| format!("{} remaining", t))
+        let power_profile = upower.power_profile;
+        let profile_icon = match power_profile {
+            PowerProfile::Performance => "󰓅",
+            PowerProfile::Balanced => "󰾅",
+            PowerProfile::PowerSaver => "󰾆",
+            PowerProfile::Unknown => "󰾅",
+        };
+        let profile_text = match power_profile {
+            PowerProfile::Performance => "Performance",
+            PowerProfile::Balanced => "Balanced",
+            PowerProfile::PowerSaver => "Power Saver",
+            PowerProfile::Unknown => "Unknown",
         };
 
-        let battery_color = match self.battery_percent {
-            Some(p) if p >= 50 => rgba(0x22c55eff), // green
-            Some(p) if p >= 20 => rgba(0xeab308ff), // yellow
-            Some(_) => rgba(0xef4444ff),            // red
-            None => rgba(0x888888ff),               // gray
-        };
-
-        div().flex().flex_col().gap(px(8.)).child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .text_size(px(24.))
-                                .text_color(battery_color)
-                                .child(battery_icon),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(18.))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(battery_text),
-                        ),
-                )
-                .when_some(time_text, |el, text| {
-                    el.child(
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            // Battery row
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
                         div()
-                            .text_size(px(12.))
-                            .text_color(rgba(0x888888ff))
-                            .child(text),
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .text_size(px(24.))
+                                    .text_color(battery_color)
+                                    .child(battery_icon),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(18.))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child(battery_text),
+                            ),
                     )
-                }),
-        )
+                    .when_some(time_text, |el, text| {
+                        el.child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(rgba(0x888888ff))
+                                .child(text),
+                        )
+                    }),
+            )
+            // Power profile row
+            .child(
+                div()
+                    .id("power-profile")
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(rgba(0x333333ff))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgba(0x444444ff)))
+                    .child(div().text_size(px(16.)).child(profile_icon))
+                    .child(div().text_size(px(13.)).child(profile_text)),
+            )
     }
 
     fn render_volume_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let volume_icon = if self.volume_muted {
+        let audio = self.services.audio.read(cx);
+        let volume = audio.sink_volume;
+        let muted = audio.sink_muted;
+
+        let volume_icon = if muted {
             "󰝟"
-        } else if self.volume_percent >= 70 {
+        } else if volume >= 70 {
             "󰕾"
-        } else if self.volume_percent >= 30 {
+        } else if volume >= 30 {
             "󰖀"
         } else {
             "󰕿"
         };
-
-        let current = self.volume_percent;
-        let muted = self.volume_muted;
 
         div().flex().flex_col().gap(px(8.)).child(
             div()
@@ -240,7 +252,7 @@ impl InfoPanel {
                         })
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(|this, _, _, _| this.toggle_mute()),
+                            cx.listener(|this, _, _, cx| this.toggle_mute(cx)),
                         )
                         .child(volume_icon),
                 )
@@ -255,7 +267,7 @@ impl InfoPanel {
                         .child(
                             div()
                                 .h_full()
-                                .w(px(current as f32 * 2.0)) // 200px max width
+                                .w(px(volume as f32 * 2.0)) // 200px max width
                                 .bg(rgba(0x3b82f6ff))
                                 .rounded(px(4.)),
                         ),
@@ -266,7 +278,7 @@ impl InfoPanel {
                         .w(px(40.))
                         .text_size(px(12.))
                         .text_color(rgba(0x888888ff))
-                        .child(format!("{}%", current)),
+                        .child(format!("{}%", volume)),
                 ),
         )
     }
@@ -307,46 +319,5 @@ impl InfoPanel {
                     .child(div().text_size(px(16.)).child("󰤨"))
                     .child(div().text_size(px(13.)).child("Wi-Fi")),
             )
-    }
-}
-
-struct BatteryInfo {
-    percent: Option<u8>,
-    charging: bool,
-    time_to_full: Option<String>,
-    time_to_empty: Option<String>,
-}
-
-fn read_battery_info() -> BatteryInfo {
-    #[cfg(target_os = "linux")]
-    {
-        use std::fs;
-
-        let percent = fs::read_to_string("/sys/class/power_supply/BAT0/capacity")
-            .ok()
-            .and_then(|s| s.trim().parse::<u8>().ok());
-
-        let charging = fs::read_to_string("/sys/class/power_supply/BAT0/status")
-            .map(|s| s.trim() == "Charging")
-            .unwrap_or(false);
-
-        // Try to get time estimates from upower
-        let time_to_full = None; // Would need upower D-Bus
-        let time_to_empty = None;
-
-        return BatteryInfo {
-            percent,
-            charging,
-            time_to_full,
-            time_to_empty,
-        };
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    BatteryInfo {
-        percent: None,
-        charging: false,
-        time_to_full: None,
-        time_to_empty: None,
     }
 }
