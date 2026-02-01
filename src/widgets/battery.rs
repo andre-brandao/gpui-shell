@@ -1,6 +1,6 @@
 use gpui::{div, prelude::*};
 
-pub fn get_battery_percentage() -> Option<u8> {
+fn get_battery_percentage() -> Option<u8> {
     #[cfg(target_os = "linux")]
     {
         use std::fs;
@@ -15,8 +15,8 @@ pub fn get_battery_percentage() -> Option<u8> {
     None
 }
 
-pub fn battery(percentage: Option<u8>) -> impl IntoElement {
-    let text = percentage.map_or("N/A".to_string(), |p| format!("{}%", p));
+pub fn battery() -> impl IntoElement {
+    let text = get_battery_percentage().map_or("N/A".to_string(), |p| format!("{}%", p));
     div()
         .flex()
         .items_center()

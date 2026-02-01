@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use gpui::{
     App, Application, Bounds, Context, FontWeight, Size, Window, WindowBackgroundAppearance,
@@ -6,21 +6,15 @@ use gpui::{
     rgba, white,
 };
 
-use crate::widgets::{self, WorkspaceInfo};
+use crate::widgets;
 
-struct LayerShellBar {
-    workspaces: Vec<WorkspaceInfo>,
-}
+struct LayerShellBar;
 
 impl LayerShellBar {
     fn new(cx: &mut Context<Self>) -> Self {
         cx.spawn(async move |this, cx| {
             loop {
-                let workspaces = widgets::fetch_workspaces();
-                let _ = this.update(cx, |this, cx| {
-                    this.workspaces = workspaces;
-                    cx.notify();
-                });
+                let _ = this.update(cx, |_, cx| cx.notify());
                 cx.background_executor()
                     .timer(Duration::from_millis(500))
                     .await;
@@ -28,30 +22,12 @@ impl LayerShellBar {
         })
         .detach();
 
-        LayerShellBar {
-            workspaces: widgets::fetch_workspaces(),
-        }
-    }
-
-    fn get_time(&self) -> (u64, u64, u64) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        let hours = (now / 3600) % 24;
-        let minutes = (now / 60) % 60;
-        let seconds = now % 60;
-
-        (hours, minutes, seconds)
+        LayerShellBar
     }
 }
 
 impl Render for LayerShellBar {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let (hours, minutes, seconds) = self.get_time();
-        let battery = widgets::get_battery_percentage();
-
         div()
             .size_full()
             .flex()
@@ -63,21 +39,11 @@ impl Render for LayerShellBar {
             .text_color(white())
             .bg(rgba(0x1a1a1aff))
             // Start section
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .child(widgets::workspaces(&self.workspaces)),
-            )
+            .child(div().flex().items_center().child(widgets::workspaces()))
             // Center section
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .child(widgets::clock(hours, minutes, seconds)),
-            )
+            .child(div().flex().items_center().child(widgets::clock()))
             // End section
-            .child(div().flex().items_center().child(widgets::battery(battery)))
+            .child(div().flex().items_center().child(widgets::battery()))
     }
 }
 
