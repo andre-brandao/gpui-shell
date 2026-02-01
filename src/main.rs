@@ -1,5 +1,4 @@
 mod bar;
-mod examples;
 mod widgets;
 
 fn main() {

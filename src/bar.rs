@@ -32,7 +32,7 @@ impl Render for LayerShellBar {
             .items_center()
             .justify_between()
             .px(px(16.))
-            .text_size(rems(0.875))
+            .text_size(rems(0.67))
             .font_weight(FontWeight::MEDIUM)
             .text_color(white())
             .bg(rgba(0x1a1a1aff))

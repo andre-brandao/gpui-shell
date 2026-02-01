@@ -1,5 +1,6 @@
-use gpui::{Context, Window, div, prelude::*, px, rgba};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px, rgba};
 use hyprland::data::{Workspace, Workspaces};
+use hyprland::dispatch::{Dispatch, DispatchType, WorkspaceIdentifierWithSpecial};
 use hyprland::event_listener::EventListener;
 use hyprland::prelude::*;
 use std::sync::mpsc;
@@ -38,6 +39,7 @@ impl HyprlandWorkspaces {
                 let _ = tx_deleted.send(());
             });
 
+            println!("Hyprland workspace listener started.");
             let _ = listener.start_listener();
         });
 
@@ -90,14 +92,25 @@ impl HyprlandWorkspaces {
     }
 }
 
+impl HyprlandWorkspaces {
+    fn switch_to_workspace(id: i32) {
+        let _ = Dispatch::call(DispatchType::Workspace(WorkspaceIdentifierWithSpecial::Id(
+            id,
+        )));
+    }
+}
+
 impl Render for HyprlandWorkspaces {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div().flex().items_center().gap(px(4.)).children(
             self.workspaces
                 .iter()
                 .filter(|ws| !ws.name.starts_with("special"))
                 .map(|ws| {
+                    let workspace_id = ws.id;
                     div()
+                        .id(format!("workspace-{}", ws.id))
+                        // .cursor_pointer()
                         .px(if ws.is_active { px(16.) } else { px(8.) })
                         .py(px(2.))
                         .rounded(px(25.))
@@ -106,6 +119,12 @@ impl Render for HyprlandWorkspaces {
                         } else {
                             rgba(0x333333ff)
                         })
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |_this, _event, _window, _cx| {
+                                Self::switch_to_workspace(workspace_id);
+                            }),
+                        )
                         .child(ws.name.clone())
                 }),
         )

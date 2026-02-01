@@ -54,7 +54,12 @@
             vulkan-loader
             freetype
             libpulseaudio
-
+            glib
+            atk
+            gtk3
+            cairo
+            pango
+            gdk-pixbuf
           ];
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (

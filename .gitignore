@@ -6,3 +6,7 @@ result-*
 
 # Misc
 .direnv
+
+
+crates
+testing
