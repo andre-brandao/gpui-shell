@@ -1,128 +1,62 @@
-use gpui::{Context, MouseButton, Window, div, prelude::*, px, rgba};
-use hyprland::data::{Workspace, Workspaces};
-use hyprland::dispatch::{Dispatch, DispatchType, WorkspaceIdentifierWithSpecial};
-use hyprland::event_listener::EventListener;
-use hyprland::prelude::*;
-use std::sync::mpsc;
+use crate::services::compositor::{Compositor, CompositorCommand};
+use gpui::{Context, Entity, MouseButton, Window, div, prelude::*, px, rgba};
 
-#[derive(Clone, Debug)]
-struct WorkspaceInfo {
-    id: i32,
-    name: String,
-    is_active: bool,
+pub struct Workspaces {
+    compositor: Entity<Compositor>,
 }
 
-pub struct HyprlandWorkspaces {
-    workspaces: Vec<WorkspaceInfo>,
-}
-
-impl HyprlandWorkspaces {
+impl Workspaces {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let (tx, rx) = mpsc::channel::<()>();
+        let compositor = cx.new(Compositor::new);
 
-        // Spawn the blocking listener in a separate thread
-        std::thread::spawn(move || {
-            let mut listener = EventListener::new();
+        // Observe the compositor entity to re-render when it changes
+        cx.observe(&compositor, |_, _, cx| cx.notify()).detach();
 
-            let tx_changed = tx.clone();
-            listener.add_workspace_changed_handler(move |_| {
-                let _ = tx_changed.send(());
-            });
-
-            let tx_added = tx.clone();
-            listener.add_workspace_added_handler(move |_| {
-                let _ = tx_added.send(());
-            });
-
-            let tx_deleted = tx.clone();
-            listener.add_workspace_deleted_handler(move |_| {
-                let _ = tx_deleted.send(());
-            });
-
-            println!("Hyprland workspace listener started.");
-            let _ = listener.start_listener();
-        });
-
-        // Poll the channel for updates
-        cx.spawn(async move |this, cx| {
-            loop {
-                // Check if there are any events (non-blocking)
-                let has_update = rx.try_recv().is_ok();
-
-                if has_update {
-                    // Drain any additional queued events
-                    while rx.try_recv().is_ok() {}
-
-                    let workspaces = Self::fetch_workspaces();
-                    let _ = this.update(cx, |this, cx| {
-                        this.workspaces = workspaces;
-                        cx.notify();
-                    });
-                }
-
-                cx.background_executor()
-                    .timer(std::time::Duration::from_millis(50))
-                    .await;
-            }
-        })
-        .detach();
-
-        HyprlandWorkspaces {
-            workspaces: Self::fetch_workspaces(),
-        }
+        Workspaces { compositor }
     }
 
-    fn fetch_workspaces() -> Vec<WorkspaceInfo> {
-        let active_id = Workspace::get_active().map(|ws| ws.id).unwrap_or(-1);
-
-        Workspaces::get()
-            .map(|workspaces| {
-                let mut ws_list: Vec<WorkspaceInfo> = workspaces
-                    .iter()
-                    .map(|ws| WorkspaceInfo {
-                        id: ws.id,
-                        name: ws.name.clone(),
-                        is_active: ws.id == active_id,
-                    })
-                    .collect();
-                ws_list.sort_by_key(|ws| ws.id);
-                ws_list
-            })
-            .unwrap_or_default()
+    /// Create workspaces widget with a shared compositor entity.
+    /// Use this when you want multiple widgets to share the same compositor state.
+    pub fn with_compositor(compositor: Entity<Compositor>, cx: &mut Context<Self>) -> Self {
+        cx.observe(&compositor, |_, _, cx| cx.notify()).detach();
+        Workspaces { compositor }
     }
 }
 
-impl HyprlandWorkspaces {
-    fn switch_to_workspace(id: i32) {
-        let _ = Dispatch::call(DispatchType::Workspace(WorkspaceIdentifierWithSpecial::Id(
-            id,
-        )));
-    }
-}
-
-impl Render for HyprlandWorkspaces {
+impl Render for Workspaces {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let compositor = self.compositor.read(cx);
+        let active_workspace_id = compositor.active_workspace_id;
+
         div().flex().items_center().gap(px(4.)).children(
-            self.workspaces
+            compositor
+                .workspaces
                 .iter()
-                .filter(|ws| !ws.name.starts_with("special"))
+                .filter(|ws| !ws.is_special)
                 .map(|ws| {
                     let workspace_id = ws.id;
+                    let is_active = active_workspace_id == Some(ws.id);
+                    let compositor = self.compositor.clone();
+
                     div()
                         .id(format!("workspace-{}", ws.id))
-                        // .cursor_pointer()
-                        .px(if ws.is_active { px(16.) } else { px(8.) })
+                        .px(if is_active { px(16.) } else { px(8.) })
                         .py(px(2.))
                         .rounded(px(25.))
-                        .bg(if ws.is_active {
+                        .bg(if is_active {
                             rgba(0x3b82f6ff)
                         } else {
                             rgba(0x333333ff)
                         })
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(move |_this, _event, _window, _cx| {
-                                Self::switch_to_workspace(workspace_id);
+                            cx.listener(move |_this, _event, _window, cx| {
+                                compositor.update(cx, |compositor, cx| {
+                                    compositor.dispatch(
+                                        CompositorCommand::FocusWorkspace(workspace_id),
+                                        cx,
+                                    );
+                                });
                             }),
                         )
                         .child(ws.name.clone())

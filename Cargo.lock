@@ -3854,6 +3854,8 @@ dependencies = [
  "gpui",
  "gpui-macros",
  "hyprland",
+ "itertools 0.14.0",
+ "log",
  "lyon",
  "schemars",
  "serde",

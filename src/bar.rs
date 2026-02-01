@@ -1,13 +1,15 @@
 use gpui::{
-    App, Application, Bounds, Context, Entity, FontWeight, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
-    point, prelude::*, px, rems, rgba, white,
+    App, Bounds, Context, Entity, FontWeight, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
+    rgba, white,
 };
 
-use crate::widgets::{Battery, Clock, HyprlandWorkspaces, Systray};
+use crate::widgets::{Battery, Clock, Systray, Workspaces};
+
+pub const BAR_HEIGHT: f32 = 32.0;
 
 struct LayerShellBar {
-    workspaces: Entity<HyprlandWorkspaces>,
+    workspaces: Entity<Workspaces>,
     clock: Entity<Clock>,
     systray: Entity<Systray>,
     battery: Entity<Battery>,
@@ -16,7 +18,7 @@ struct LayerShellBar {
 impl LayerShellBar {
     fn new(cx: &mut Context<Self>) -> Self {
         LayerShellBar {
-            workspaces: cx.new(HyprlandWorkspaces::new),
+            workspaces: cx.new(Workspaces::new),
             clock: cx.new(Clock::new),
             systray: cx.new(Systray::new),
             battery: cx.new(Battery::new),
@@ -52,32 +54,32 @@ impl Render for LayerShellBar {
     }
 }
 
-pub fn init() {
-    const BAR_HEIGHT: f32 = 32.0;
+/// Returns the window options for the bar.
+/// This is decoupled from window creation so you can customize or reuse the pattern.
+pub fn window_options() -> WindowOptions {
+    WindowOptions {
+        titlebar: None,
+        window_bounds: Some(WindowBounds::Windowed(Bounds {
+            origin: point(px(0.), px(0.)),
+            size: Size::new(px(1920.), px(BAR_HEIGHT)),
+        })),
+        app_id: Some("gpui-topbar".to_string()),
+        window_background: WindowBackgroundAppearance::Transparent,
+        kind: WindowKind::LayerShell(LayerShellOptions {
+            namespace: "topbar".to_string(),
+            layer: Layer::Top,
+            anchor: Anchor::LEFT | Anchor::RIGHT | Anchor::TOP,
+            exclusive_zone: Some(px(BAR_HEIGHT)),
+            margin: None,
+            keyboard_interactivity: KeyboardInteractivity::None,
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
 
-    Application::new().run(|cx: &mut App| {
-        cx.open_window(
-            WindowOptions {
-                titlebar: None,
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: point(px(0.), px(0.)),
-                    size: Size::new(px(1920.), px(BAR_HEIGHT)),
-                })),
-                app_id: Some("gpui-topbar".to_string()),
-                window_background: WindowBackgroundAppearance::Transparent,
-                kind: WindowKind::LayerShell(LayerShellOptions {
-                    namespace: "topbar".to_string(),
-                    layer: Layer::Top,
-                    anchor: Anchor::LEFT | Anchor::RIGHT | Anchor::TOP,
-                    exclusive_zone: Some(px(BAR_HEIGHT)),
-                    margin: None,
-                    keyboard_interactivity: KeyboardInteractivity::None,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            |_, cx| cx.new(LayerShellBar::new),
-        )
+/// Opens the bar window. Call this from within Application::new().run().
+pub fn open(cx: &mut App) {
+    cx.open_window(window_options(), |_, cx| cx.new(LayerShellBar::new))
         .unwrap();
-    });
 }
