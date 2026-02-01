@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, MouseButton, Point, Size, Window, WindowBounds, WindowKind,
-    WindowOptions, div, prelude::*, px, rgba, white,
+    AnyElement, App, Bounds, Context, MouseButton, Point, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px, rgba, white,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, mpsc};
@@ -143,26 +143,44 @@ impl Systray {
         let menu_path = item.menu_path.clone().unwrap_or_default();
         let client = self.client.clone();
 
-        let menu_height = (menu.submenus.len() * 32).min(400) as f32;
+        // Calculate menu height based on visible items
+        let visible_items = count_visible_items(&menu.submenus);
+        let menu_height = (visible_items * 32).min(500) as f32 + 16.0;
+        let menu_width = 250.0;
 
         cx.open_window(
             WindowOptions {
                 titlebar: None,
                 window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point::new(px(1600.), px(32.)),
-                    size: Size::new(px(220.), px(menu_height)),
+                    origin: Point::new(px(0.), px(0.)),
+                    size: Size::new(px(menu_width), px(menu_height)),
                 })),
-                kind: WindowKind::PopUp,
-                is_movable: false,
+                window_background: WindowBackgroundAppearance::Transparent,
+                kind: WindowKind::LayerShell(LayerShellOptions {
+                    namespace: "systray-menu".to_string(),
+                    layer: Layer::Overlay,
+                    anchor: Anchor::TOP | Anchor::RIGHT,
+                    exclusive_zone: None,
+                    margin: Some((px(36.), px(16.), px(0.), px(0.))),
+                    keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                    ..Default::default()
+                }),
                 focus: true,
                 ..Default::default()
             },
-            |_, cx| {
-                cx.new(|_| SystrayMenu {
-                    menu,
-                    address,
-                    menu_path,
-                    client,
+            |window, cx| {
+                cx.new(|cx| {
+                    let focus_subscription =
+                        cx.on_focus_lost(window, |this: &mut SystrayMenu, window, _cx| {
+                            this.close_window(window);
+                        });
+                    SystrayMenu {
+                        menu,
+                        address,
+                        menu_path,
+                        client,
+                        focus_subscription,
+                    }
                 })
             },
         )
@@ -197,6 +215,14 @@ impl Systray {
     }
 }
 
+fn count_visible_items(items: &[MenuItem]) -> usize {
+    items
+        .iter()
+        .filter(|i| i.visible)
+        .map(|i| 1 + count_visible_items(&i.submenu))
+        .sum()
+}
+
 enum SystrayEvent {
     Add(String, StatusNotifierItem, Option<TrayMenu>),
     Update(String, UpdateEvent),
@@ -226,10 +252,16 @@ struct SystrayMenu {
     address: String,
     menu_path: String,
     client: Arc<Mutex<Option<Client>>>,
+    #[allow(dead_code)]
+    focus_subscription: gpui::Subscription,
 }
 
 impl SystrayMenu {
-    fn activate_menu_item(&self, submenu_id: i32, cx: &mut Context<Self>) {
+    fn close_window(&mut self, window: &mut Window) {
+        window.remove_window();
+    }
+
+    fn activate_menu_item(&mut self, submenu_id: i32, window: &mut Window) {
         let client = self.client.clone();
         let address = self.address.clone();
         let menu_path = self.menu_path.clone();
@@ -254,72 +286,99 @@ impl SystrayMenu {
             });
         });
 
-        // Close the menu window by notifying (window will close on click outside)
-        cx.notify();
+        // Close the menu window
+        self.close_window(window);
     }
 
-    fn render_menu_item(&self, item: &MenuItem, cx: &mut Context<Self>) -> AnyElement {
-        if !item.visible {
-            return div().into_any_element();
+    fn render_menu_items(
+        &self,
+        items: &[MenuItem],
+        depth: usize,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let mut elements = Vec::new();
+
+        for item in items {
+            if !item.visible {
+                continue;
+            }
+
+            let label = item
+                .label
+                .as_ref()
+                .map(|l| l.replace('_', ""))
+                .unwrap_or_default();
+
+            if label.is_empty() && item.submenu.is_empty() {
+                // Separator
+                elements.push(
+                    div()
+                        .h(px(1.))
+                        .w_full()
+                        .bg(rgba(0x444444ff))
+                        .my(px(4.))
+                        .into_any_element(),
+                );
+                continue;
+            }
+
+            let submenu_id = item.id;
+            let enabled = item.enabled;
+            let has_submenu = !item.submenu.is_empty();
+            let indent = depth * 16;
+
+            // Render the item
+            elements.push(
+                div()
+                    .id(format!("menu-item-{}", submenu_id))
+                    .w_full()
+                    .pl(px(12.0 + indent as f32))
+                    .pr(px(12.))
+                    .py(px(6.))
+                    .cursor_pointer()
+                    .when(!enabled, |s| s.opacity(0.5))
+                    .hover(|s| s.bg(rgba(0x3b82f6ff)))
+                    .when(enabled && !has_submenu, |el| {
+                        el.on_click(cx.listener(move |this, _, window, _cx| {
+                            this.activate_menu_item(submenu_id, window);
+                        }))
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .w_full()
+                            .justify_between()
+                            .child(label)
+                            .when(has_submenu, |el| el.child("▸")),
+                    )
+                    .into_any_element(),
+            );
+
+            // Render submenu items inline (expanded)
+            if has_submenu {
+                let submenu_elements = self.render_menu_items(&item.submenu, depth + 1, cx);
+                elements.extend(submenu_elements);
+            }
         }
 
-        let label = item
-            .label
-            .as_ref()
-            .map(|l| l.replace('_', ""))
-            .unwrap_or_default();
-
-        if label.is_empty() {
-            // Separator
-            return div()
-                .h(px(1.))
-                .w_full()
-                .bg(rgba(0x444444ff))
-                .my(px(4.))
-                .into_any_element();
-        }
-
-        let submenu_id = item.id;
-        let enabled = item.enabled;
-
-        div()
-            .id(format!("menu-item-{}", submenu_id))
-            .w_full()
-            .px(px(12.))
-            .py(px(8.))
-            .cursor_pointer()
-            .when(!enabled, |s| s.opacity(0.5))
-            .hover(|s| s.bg(rgba(0x3b82f6ff)))
-            .when(enabled, |el| {
-                el.on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, _, _, cx| {
-                        this.activate_menu_item(submenu_id, cx);
-                    }),
-                )
-            })
-            .child(label)
-            .into_any_element()
+        elements
     }
 }
 
 impl Render for SystrayMenu {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let menu_items: Vec<AnyElement> = self
-            .menu
-            .submenus
-            .iter()
-            .map(|item| self.render_menu_item(item, cx))
-            .collect();
+        let menu_items = self.render_menu_items(&self.menu.submenus, 0, cx);
 
         div()
+            .id("systray-menu")
             .size_full()
             .bg(rgba(0x1a1a1aff))
             .border_1()
             .border_color(rgba(0x333333ff))
             .rounded(px(8.))
+            .py(px(8.))
             .text_color(white())
-            // .overflow_scroll()
+            .overflow_scroll()
             .children(menu_items)
     }
 }
