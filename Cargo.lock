@@ -3821,6 +3821,8 @@ dependencies = [
  "gpui-macros",
  "hyprland",
  "lyon",
+ "system-tray",
+ "tokio",
  "wayland-backend",
  "wayland-client",
  "wayland-cursor",
@@ -4983,6 +4985,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "system-tray"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34c949a4724f23683f03ea22043c905a450635e45b21b10c11110c9016c995ce"
+dependencies = [
+ "cfg-if",
+ "futures-lite 2.6.1",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "taffy"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5178,8 +5195,10 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
+ "tracing",
  "windows-sys 0.61.2",
 ]
 
@@ -6551,6 +6570,7 @@ dependencies = [
  "rustix 1.1.3",
  "serde",
  "serde_repr",
+ "tokio",
  "tracing",
  "uds_windows",
  "uuid",

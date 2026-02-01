@@ -98,9 +98,9 @@ impl Render for HyprlandWorkspaces {
                 .filter(|ws| !ws.name.starts_with("special"))
                 .map(|ws| {
                     div()
-                        .px(px(8.))
+                        .px(if ws.is_active { px(16.) } else { px(8.) })
                         .py(px(2.))
-                        .rounded(px(4.))
+                        .rounded(px(25.))
                         .bg(if ws.is_active {
                             rgba(0x3b82f6ff)
                         } else {

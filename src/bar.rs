@@ -4,11 +4,12 @@ use gpui::{
     point, prelude::*, px, rems, rgba, white,
 };
 
-use crate::widgets::{Battery, Clock, HyprlandWorkspaces};
+use crate::widgets::{Battery, Clock, HyprlandWorkspaces, Systray};
 
 struct LayerShellBar {
     workspaces: Entity<HyprlandWorkspaces>,
     clock: Entity<Clock>,
+    systray: Entity<Systray>,
     battery: Entity<Battery>,
 }
 
@@ -17,6 +18,7 @@ impl LayerShellBar {
         LayerShellBar {
             workspaces: cx.new(HyprlandWorkspaces::new),
             clock: cx.new(Clock::new),
+            systray: cx.new(Systray::new),
             battery: cx.new(Battery::new),
         }
     }
@@ -39,7 +41,14 @@ impl Render for LayerShellBar {
             // Center section
             .child(div().flex().items_center().child(self.clock.clone()))
             // End section
-            .child(div().flex().items_center().child(self.battery.clone()))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .child(self.systray.clone())
+                    .child(self.battery.clone()),
+            )
     }
 }
 
