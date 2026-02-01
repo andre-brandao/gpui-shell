@@ -1,23 +1,21 @@
 use crate::launcher;
 use crate::services::Services;
-use gpui::{Context, Entity, MouseButton, Window, div, prelude::*, px, rgba};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px, rgba};
 
 /// A button widget that opens the application launcher.
 pub struct LauncherBtn {
-    applications: Entity<crate::services::applications::Applications>,
+    services: Services,
 }
 
 impl LauncherBtn {
     pub fn with_services(services: Services, _cx: &mut Context<Self>) -> Self {
-        LauncherBtn {
-            applications: services.applications,
-        }
+        LauncherBtn { services }
     }
 }
 
 impl Render for LauncherBtn {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let applications = self.applications.clone();
+        let services = self.services.clone();
 
         div()
             .id("launcher-btn")
@@ -29,7 +27,7 @@ impl Render for LauncherBtn {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |_this, _, _, cx| {
-                    launcher::toggle(applications.clone(), cx);
+                    launcher::toggle(services.clone(), cx);
                 }),
             )
             .child(div().text_size(px(14.)).child(""))

@@ -22,6 +22,6 @@ fn main() {
         bar::open(services.clone(), cx);
 
         // Open the launcher on startup
-        launcher::open(services.applications.clone(), cx);
+        launcher::open(services.clone(), cx);
     });
 }
