@@ -283,16 +283,6 @@ impl Render for Launcher {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            // View badge
-                            .child(
-                                div()
-                                    .px(px(6.))
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .bg(rgba(0x3b82f6ff))
-                                    .text_size(px(10.))
-                                    .child(view_name),
-                            )
                             // Search text
                             .child(
                                 div()
@@ -304,6 +294,16 @@ impl Render for Launcher {
                                     } else {
                                         rgba(0xffffffff)
                                     }),
+                            )
+                            // View badge (right side)
+                            .child(
+                                div()
+                                    .px(px(6.))
+                                    .py(px(2.))
+                                    .rounded(px(4.))
+                                    .bg(rgba(0x3b82f6ff))
+                                    .text_size(px(10.))
+                                    .child(view_name),
                             ),
                     ),
             )
