@@ -34,6 +34,7 @@
             alejandra
             rust-analyzer
             pkg-config
+            llvmPackages.libclang
 
             (pkgs.fenix.stable.withComponents [
               "cargo"
@@ -60,6 +61,7 @@
             cairo
             pango
             gdk-pixbuf
+            pipewire
           ];
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (
@@ -74,8 +76,12 @@
               vulkan-loader
               freetype
               libpulseaudio
+              pipewire
             ]
           );
+
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          BINDGEN_EXTRA_CLANG_ARGS = "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include -isystem ${pkgs.glibc.dev}/include";
         };
       }
     );

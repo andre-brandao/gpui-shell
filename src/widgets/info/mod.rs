@@ -22,6 +22,8 @@ impl Info {
         cx.observe(&services.upower, |_, _, cx| cx.notify())
             .detach();
         cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
+        cx.observe(&services.privacy, |_, _, cx| cx.notify())
+            .detach();
 
         Info { services }
     }
@@ -100,6 +102,23 @@ impl Info {
             "󰤯" // disconnected
         }
     }
+
+    fn privacy_icons(&self, cx: &Context<Self>) -> Vec<(&'static str, &'static str)> {
+        let privacy = self.services.privacy.read(cx);
+        let mut icons = Vec::new();
+
+        if privacy.microphone_access() {
+            icons.push(("", "#ef4444")); // FontAwesome microphone
+        }
+        if privacy.webcam_access() {
+            icons.push(("", "#ef4444")); // FontAwesome camera
+        }
+        if privacy.screenshare_access() {
+            icons.push(("󰍹", "#ef4444")); // red screen
+        }
+
+        icons
+    }
 }
 
 impl Render for Info {
@@ -107,6 +126,7 @@ impl Render for Info {
         let battery_icon = self.battery_icon(cx);
         let volume_icon = self.volume_icon(cx);
         let wifi_icon = self.wifi_icon(cx);
+        let privacy_icons = self.privacy_icons(cx);
         let battery_text = self
             .battery_percent(cx)
             .map(|p| format!("{}%", p))
@@ -128,6 +148,13 @@ impl Render for Info {
                     this.toggle_panel(cx);
                 }),
             )
+            // Privacy icons (only shown when active)
+            .children(privacy_icons.into_iter().map(|(icon, color)| {
+                div()
+                    .text_size(px(14.))
+                    .text_color(gpui::Hsla::from(gpui::rgb(0xef4444)))
+                    .child(icon)
+            }))
             // Volume icon
             .child(div().text_size(px(14.)).child(volume_icon))
             // WiFi icon
