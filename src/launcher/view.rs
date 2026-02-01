@@ -1,7 +1,38 @@
 use crate::services::Services;
-use gpui::App;
+use gpui::{AnyElement, App, MouseButton, div, prelude::*, px, rgba};
 
-/// A launcher view that provides items for a specific category.
+/// Input event passed to views for handling.
+#[derive(Clone, Debug)]
+pub enum ViewInput {
+    /// Character typed.
+    Char(String),
+    /// Backspace pressed.
+    Backspace,
+    /// Up arrow pressed.
+    Up,
+    /// Down arrow pressed.
+    Down,
+    /// Enter pressed.
+    Enter,
+}
+
+/// Result of handling input.
+pub enum InputResult {
+    /// Input was handled, update the query to this value.
+    Handled { query: String, close: bool },
+    /// Input was not handled, use default behavior.
+    Unhandled,
+}
+
+/// Context passed to views for rendering.
+pub struct ViewContext<'a> {
+    pub services: &'a Services,
+    pub query: &'a str,
+    pub selected_index: usize,
+    pub prefix_char: char,
+}
+
+/// A launcher view that provides custom rendering and input handling.
 pub trait LauncherView: Send + Sync {
     /// The prefix command to activate this view (e.g., "apps", "ws").
     fn prefix(&self) -> &'static str;
@@ -15,23 +46,24 @@ pub trait LauncherView: Send + Sync {
     /// Description shown in help.
     fn description(&self) -> &'static str;
 
-    /// Get items matching the query.
-    fn items(&self, query: &str, services: &Services, cx: &App) -> Vec<ViewItem>;
-
     /// Whether this view is the default when no prefix is given.
     fn is_default(&self) -> bool {
         false
     }
-}
 
-/// A single item in a launcher view.
-#[derive(Clone)]
-pub struct ViewItem {
-    pub id: String,
-    pub title: String,
-    pub subtitle: Option<String>,
-    pub icon: String,
-    pub action: ViewAction,
+    /// Render the view content. Returns the element and number of selectable items.
+    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize);
+
+    /// Handle input. Return InputResult::Handled to consume the input.
+    fn handle_input(&self, _input: &ViewInput, _vx: &ViewContext, _cx: &mut App) -> InputResult {
+        InputResult::Unhandled
+    }
+
+    /// Handle item selection (Enter pressed or clicked).
+    fn on_select(&self, _index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
+        // Return true to close the launcher
+        false
+    }
 }
 
 /// Action to perform when an item is selected.
@@ -53,44 +85,6 @@ pub enum ViewAction {
     SwitchView(String),
     /// No action (for display only).
     None,
-}
-
-impl ViewItem {
-    pub fn new(id: impl Into<String>, title: impl Into<String>, icon: impl Into<String>) -> Self {
-        ViewItem {
-            id: id.into(),
-            title: title.into(),
-            subtitle: None,
-            icon: icon.into(),
-            action: ViewAction::None,
-        }
-    }
-
-    pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
-        self.subtitle = Some(subtitle.into());
-        self
-    }
-
-    pub fn with_action(mut self, action: ViewAction) -> Self {
-        self.action = action;
-        self
-    }
-
-    pub fn matches(&self, query: &str) -> bool {
-        if query.is_empty() {
-            return true;
-        }
-        let query_lower = query.to_lowercase();
-        if self.title.to_lowercase().contains(&query_lower) {
-            return true;
-        }
-        if let Some(ref subtitle) = self.subtitle {
-            if subtitle.to_lowercase().contains(&query_lower) {
-                return true;
-            }
-        }
-        false
-    }
 }
 
 /// Execute a view action.
@@ -147,4 +141,98 @@ pub fn execute_action(action: &ViewAction, services: &Services, cx: &mut App) {
         }
         ViewAction::SwitchView(_) | ViewAction::None => {}
     }
+}
+
+/// Helper to render a standard list item.
+pub fn render_list_item(
+    id: impl Into<String>,
+    icon: &str,
+    title: &str,
+    subtitle: Option<&str>,
+    is_selected: bool,
+    on_click: impl Fn(&mut App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id.into())
+        .w_full()
+        .px(px(12.))
+        .py(px(8.))
+        .rounded(px(6.))
+        .cursor_pointer()
+        .when(is_selected, |el| el.bg(rgba(0x3b82f6ff)))
+        .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x333333ff))))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            on_click(cx);
+        })
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .w(px(32.))
+                        .h(px(32.))
+                        .rounded(px(6.))
+                        .bg(rgba(0x444444ff))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(16.))
+                        .child(icon.to_string()),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(title.to_string()),
+                        )
+                        .when_some(subtitle, |el, sub| {
+                            el.child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(rgba(0x888888ff))
+                                    .child(sub.to_string()),
+                            )
+                        }),
+                ),
+        )
+        .into_any_element()
+}
+
+/// Helper to render a standard list of items.
+pub fn render_item_list(
+    items: Vec<(
+        String,
+        String,
+        String,
+        Option<String>,
+        Box<dyn Fn(&mut App) + 'static>,
+    )>,
+    selected_index: usize,
+) -> AnyElement {
+    div()
+        .flex_1()
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .children(items.into_iter().enumerate().map(
+            |(i, (id, icon, title, subtitle, on_click))| {
+                render_list_item(
+                    id,
+                    &icon,
+                    &title,
+                    subtitle.as_deref(),
+                    i == selected_index,
+                    on_click,
+                )
+            },
+        ))
+        .into_any_element()
 }

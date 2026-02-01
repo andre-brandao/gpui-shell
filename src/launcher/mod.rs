@@ -3,11 +3,11 @@ mod views;
 
 use crate::services::Services;
 use gpui::{
-    App, AppContext, Bounds, Context, FocusHandle, Focusable, KeyBinding, MouseButton, Point, Size,
-    Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions,
-    actions, div, layer_shell::*, prelude::*, px, rgba,
+    App, AppContext, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
+    div, layer_shell::*, prelude::*, px, rgba,
 };
-use view::{LauncherView, ViewAction, ViewItem, execute_action};
+use view::{InputResult, LauncherView, ViewContext, ViewInput};
 use views::{HelpView, all_views};
 
 actions!(launcher, [Escape, Enter]);
@@ -33,6 +33,7 @@ pub struct Launcher {
     config: LauncherConfig,
     search_query: String,
     selected_index: usize,
+    item_count: usize,
     focus_handle: FocusHandle,
     views: Vec<Box<dyn LauncherView>>,
     help_view: HelpView,
@@ -50,6 +51,8 @@ impl Launcher {
         cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
         cx.observe(&services.network, |_, _, cx| cx.notify())
             .detach();
+        cx.observe(&services.upower, |_, _, cx| cx.notify())
+            .detach();
 
         let views = all_views();
         let help_view = HelpView::new(config.prefix_char, &views);
@@ -59,6 +62,7 @@ impl Launcher {
             config,
             search_query: String::new(),
             selected_index: 0,
+            item_count: 0,
             focus_handle,
             views,
             help_view,
@@ -70,20 +74,16 @@ impl Launcher {
         let query = self.search_query.trim();
 
         if query.starts_with(self.config.prefix_char) {
-            // Has prefix char, extract the command
             let rest = &query[self.config.prefix_char.len_utf8()..];
 
-            // Find the first space to separate prefix from search
             if let Some(space_idx) = rest.find(' ') {
                 let prefix = &rest[..space_idx];
                 let search = rest[space_idx..].trim();
                 (Some(prefix), search)
             } else {
-                // No space yet, the whole thing is the prefix (partial)
                 (Some(rest), "")
             }
         } else {
-            // No prefix, use default view
             (None, query)
         }
     }
@@ -104,100 +104,104 @@ impl Launcher {
             .map(|v| v.as_ref())
     }
 
-    /// Get items for the current query.
-    fn get_items(&self, cx: &App) -> Vec<ViewItem> {
-        let (prefix, search) = self.parse_query();
-
-        match prefix {
-            Some(p) => {
-                // Check if prefix matches a view exactly
-                if let Some(view) = self.find_view(p) {
-                    return view.items(search, &self.services, cx);
-                }
-
-                // Check if prefix is partial match (user still typing)
-                let partial_matches: Vec<_> = self
-                    .views
-                    .iter()
-                    .filter(|v| v.prefix().starts_with(p))
-                    .collect();
-
-                if partial_matches.len() == 1 && partial_matches[0].prefix() == p {
-                    // Exact match
-                    return partial_matches[0].items(search, &self.services, cx);
-                }
-
-                // Show help with matching prefixes
-                self.help_view.items(p, &self.services, cx)
-            }
-            None => {
-                // Use default view (apps)
-                if let Some(view) = self.default_view() {
-                    view.items(search, &self.services, cx)
-                } else {
-                    Vec::new()
-                }
-            }
-        }
-    }
-
-    /// Get the current view name for display.
-    fn current_view_name(&self) -> &str {
+    /// Get the current active view.
+    fn current_view(&self) -> &dyn LauncherView {
         let (prefix, _) = self.parse_query();
 
         match prefix {
             Some(p) => {
                 if let Some(view) = self.find_view(p) {
-                    return view.name();
+                    return view;
                 }
-                "Help"
+                &self.help_view
             }
-            None => self.default_view().map(|v| v.name()).unwrap_or("Search"),
+            None => self.default_view().unwrap_or(&self.help_view),
         }
     }
 
-    fn execute_selected(&mut self, cx: &mut Context<Self>, window: &mut Window) {
-        let items = self.get_items(cx);
-        if let Some(item) = items.get(self.selected_index) {
-            match &item.action {
-                ViewAction::SwitchView(prefix) => {
-                    // Switch to the new view
-                    self.search_query = format!("{}{} ", self.config.prefix_char, prefix);
-                    self.selected_index = 0;
-                    cx.notify();
-                }
-                action => {
-                    execute_action(action, &self.services, cx);
-                    window.remove_window();
-                }
-            }
+    /// Get the current view name for display.
+    fn current_view_name(&self) -> &str {
+        self.current_view().name()
+    }
+
+    /// Create view context for rendering.
+    fn view_context(&self) -> ViewContext<'_> {
+        let (_, search) = self.parse_query();
+        ViewContext {
+            services: &self.services,
+            query: search,
+            selected_index: self.selected_index,
+            prefix_char: self.config.prefix_char,
         }
     }
 
-    fn execute_item(&mut self, item: &ViewItem, cx: &mut Context<Self>, window: &mut Window) {
-        match &item.action {
-            ViewAction::SwitchView(prefix) => {
-                self.search_query = format!("{}{} ", self.config.prefix_char, prefix);
+    fn handle_input(&mut self, input: ViewInput, cx: &mut App) -> bool {
+        let vx = self.view_context();
+        let view = self.current_view();
+
+        match view.handle_input(&input, &vx, cx) {
+            InputResult::Handled { query, close } => {
+                // Update search query based on prefix
+                let (prefix, _) = self.parse_query();
+                if let Some(p) = prefix {
+                    self.search_query = format!("{}{} {}", self.config.prefix_char, p, query);
+                } else {
+                    self.search_query = query;
+                }
                 self.selected_index = 0;
-                cx.notify();
+                close
             }
-            action => {
-                execute_action(action, &self.services, cx);
-                window.remove_window();
+            InputResult::Unhandled => {
+                // Default handling
+                match input {
+                    ViewInput::Char(c) => {
+                        self.search_query.push_str(&c);
+                        self.selected_index = 0;
+                    }
+                    ViewInput::Backspace => {
+                        self.search_query.pop();
+                        self.selected_index = 0;
+                    }
+                    ViewInput::Up => {
+                        if self.item_count > 0 {
+                            self.selected_index = if self.selected_index == 0 {
+                                self.item_count - 1
+                            } else {
+                                self.selected_index - 1
+                            };
+                        }
+                    }
+                    ViewInput::Down => {
+                        if self.item_count > 0 {
+                            self.selected_index = (self.selected_index + 1) % self.item_count;
+                        }
+                    }
+                    ViewInput::Enter => {
+                        return self.execute_selected(cx);
+                    }
+                }
+                false
             }
         }
     }
 
-    fn move_selection(&mut self, delta: i32, cx: &App) {
-        let items = self.get_items(cx);
-        if items.is_empty() {
-            self.selected_index = 0;
-            return;
+    fn execute_selected(&mut self, cx: &mut App) -> bool {
+        let vx = self.view_context();
+        let (prefix, _) = self.parse_query();
+
+        // Check if we're in help view and selected a command
+        if prefix.is_some() && self.find_view(prefix.unwrap()).is_none() {
+            // In help view, switch to selected view
+            let entries: Vec<_> = self.views.iter().collect();
+            if let Some(view) = entries.get(self.selected_index) {
+                self.search_query = format!("{}{} ", self.config.prefix_char, view.prefix());
+                self.selected_index = 0;
+                return false;
+            }
         }
 
-        let len = items.len() as i32;
-        let new_index = (self.selected_index as i32 + delta).rem_euclid(len);
-        self.selected_index = new_index as usize;
+        let view = self.current_view();
+        view.on_select(self.selected_index, &vx, cx)
     }
 
     fn placeholder(&self) -> String {
@@ -213,11 +217,20 @@ impl Focusable for Launcher {
 
 impl Render for Launcher {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let items = self.get_items(cx);
-        let selected_index = self.selected_index;
         let query = self.search_query.clone();
         let view_name = self.current_view_name().to_string();
         let placeholder = self.placeholder();
+        let is_empty = self.search_query.is_empty();
+
+        // Render current view
+        let vx = self.view_context();
+        let (view_content, item_count) = self.current_view().render(&vx, cx);
+        self.item_count = item_count;
+
+        // Clamp selected index
+        if self.selected_index >= item_count && item_count > 0 {
+            self.selected_index = item_count - 1;
+        }
 
         div()
             .id("launcher")
@@ -227,39 +240,36 @@ impl Render for Launcher {
                 window.remove_window();
             }))
             .on_action(cx.listener(|this, _: &Enter, window, cx| {
-                this.execute_selected(cx, window);
-            }))
-            .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, _, cx| {
-                match event.keystroke.key.as_str() {
-                    "up" => {
-                        this.move_selection(-1, cx);
-                        cx.notify();
-                    }
-                    "down" => {
-                        this.move_selection(1, cx);
-                        cx.notify();
-                    }
-                    "backspace" => {
-                        this.search_query.pop();
-                        this.selected_index = 0;
-                        cx.notify();
-                    }
-                    _ => {
-                        if let Some(key_char) = &event.keystroke.key_char {
-                            this.search_query.push_str(key_char);
-                            this.selected_index = 0;
-                            cx.notify();
-                        } else if event.keystroke.key.len() == 1
-                            && !event.keystroke.modifiers.control
-                            && !event.keystroke.modifiers.alt
-                        {
-                            this.search_query.push_str(&event.keystroke.key);
-                            this.selected_index = 0;
-                            cx.notify();
-                        }
-                    }
+                if this.handle_input(ViewInput::Enter, cx) {
+                    window.remove_window();
                 }
+                cx.notify();
             }))
+            .on_key_down(
+                cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
+                    let should_close = match event.keystroke.key.as_str() {
+                        "up" => this.handle_input(ViewInput::Up, cx),
+                        "down" => this.handle_input(ViewInput::Down, cx),
+                        "backspace" => this.handle_input(ViewInput::Backspace, cx),
+                        _ => {
+                            if let Some(key_char) = &event.keystroke.key_char {
+                                this.handle_input(ViewInput::Char(key_char.clone()), cx)
+                            } else if event.keystroke.key.len() == 1
+                                && !event.keystroke.modifiers.control
+                                && !event.keystroke.modifiers.alt
+                            {
+                                this.handle_input(ViewInput::Char(event.keystroke.key.clone()), cx)
+                            } else {
+                                false
+                            }
+                        }
+                    };
+                    if should_close {
+                        window.remove_window();
+                    }
+                    cx.notify();
+                }),
+            )
             .size_full()
             .bg(rgba(0x1a1a1aee))
             .border_1()
@@ -289,7 +299,7 @@ impl Render for Launcher {
                                     .flex_1()
                                     .text_size(px(14.))
                                     .child(if query.is_empty() { placeholder } else { query })
-                                    .text_color(if self.search_query.is_empty() {
+                                    .text_color(if is_empty {
                                         rgba(0x888888ff)
                                     } else {
                                         rgba(0xffffffff)
@@ -307,75 +317,8 @@ impl Render for Launcher {
                             ),
                     ),
             )
-            // Items list
-            .child(
-                div()
-                    .flex_1()
-                    .overflow_hidden()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .children(items.into_iter().enumerate().map(|(i, item)| {
-                        let is_selected = i == selected_index;
-                        let item_for_click = item.clone();
-
-                        div()
-                            .id(item.id.clone())
-                            .w_full()
-                            .px(px(12.))
-                            .py(px(8.))
-                            .rounded(px(6.))
-                            .cursor_pointer()
-                            .when(is_selected, |el| el.bg(rgba(0x3b82f6ff)))
-                            .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x333333ff))))
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, _, window, cx| {
-                                    this.execute_item(&item_for_click, cx, window);
-                                }),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(12.))
-                                    // Icon
-                                    .child(
-                                        div()
-                                            .w(px(32.))
-                                            .h(px(32.))
-                                            .rounded(px(6.))
-                                            .bg(rgba(0x444444ff))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .text_size(px(16.))
-                                            .child(item.icon.clone()),
-                                    )
-                                    // Title and subtitle
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .gap(px(2.))
-                                            .child(
-                                                div()
-                                                    .text_size(px(14.))
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .child(item.title.clone()),
-                                            )
-                                            .when_some(item.subtitle.clone(), |el, subtitle| {
-                                                el.child(
-                                                    div()
-                                                        .text_size(px(12.))
-                                                        .text_color(rgba(0x888888ff))
-                                                        .child(subtitle),
-                                                )
-                                            }),
-                                    ),
-                            )
-                    })),
-            )
+            // View content
+            .child(view_content)
     }
 }
 
