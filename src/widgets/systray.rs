@@ -1,6 +1,7 @@
 use gpui::{
     AnyElement, App, Bounds, Context, MouseButton, Point, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px, rgba, white,
+    WindowBounds, WindowHandle, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px,
+    rgba, white,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, mpsc};
@@ -21,6 +22,7 @@ struct TrayItem {
 pub struct Systray {
     items: HashMap<String, TrayItem>,
     client: Arc<Mutex<Option<Client>>>,
+    open_menu: Option<(String, WindowHandle<SystrayMenu>)>,
 }
 
 impl Systray {
@@ -131,10 +133,25 @@ impl Systray {
         Systray {
             items: HashMap::new(),
             client: client_holder,
+            open_menu: None,
         }
     }
 
-    fn open_menu(&self, item: &TrayItem, cx: &mut App) {
+    fn toggle_menu(&mut self, item: &TrayItem, cx: &mut App) {
+        // Check if a menu is already open
+        if let Some((open_id, handle)) = self.open_menu.take() {
+            // Close the existing menu
+            let _ = handle.update(cx, |_, window, _| {
+                window.remove_window();
+            });
+
+            // If it was the same item, just close and return
+            if open_id == item.address {
+                return;
+            }
+        }
+
+        // Open new menu
         let Some(menu) = item.menu.clone() else {
             return;
         };
@@ -148,7 +165,7 @@ impl Systray {
         let menu_height = (visible_items * 32).min(500) as f32 + 16.0;
         let menu_width = 250.0;
 
-        cx.open_window(
+        if let Ok(handle) = cx.open_window(
             WindowOptions {
                 titlebar: None,
                 window_bounds: Some(WindowBounds::Windowed(Bounds {
@@ -161,8 +178,8 @@ impl Systray {
                     layer: Layer::Overlay,
                     anchor: Anchor::TOP | Anchor::RIGHT,
                     exclusive_zone: None,
-                    margin: Some((px(36.), px(16.), px(0.), px(0.))),
-                    keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                    margin: Some((px(0.), px(8.), px(0.), px(0.))),
+                    keyboard_interactivity: KeyboardInteractivity::OnDemand,
                     ..Default::default()
                 }),
                 focus: true,
@@ -171,13 +188,14 @@ impl Systray {
             |_window, cx| {
                 cx.new(|_cx| SystrayMenu {
                     menu,
-                    address,
+                    address: address.clone(),
                     menu_path,
                     client,
                 })
             },
-        )
-        .ok();
+        ) {
+            self.open_menu = Some((address, handle));
+        }
     }
 
     fn render_tray_item(&self, item: TrayItem, cx: &mut Context<Self>) -> AnyElement {
@@ -193,7 +211,7 @@ impl Systray {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.open_menu(&item_clone, cx);
+                    this.toggle_menu(&item_clone, cx);
                 }),
             )
             .child(
@@ -240,7 +258,7 @@ impl Render for Systray {
 }
 
 // Separate menu window component
-struct SystrayMenu {
+pub struct SystrayMenu {
     menu: TrayMenu,
     address: String,
     menu_path: String,
@@ -374,10 +392,10 @@ impl Render for SystrayMenu {
         div()
             .id("systray-menu")
             .size_full()
-            .bg(rgba(0x1a1a1aff))
+            .bg(rgba(0x1a1a1aee))
             .border_1()
             .border_color(rgba(0x333333ff))
-            .rounded(px(8.))
+            .rounded(px(12.))
             .py(px(8.))
             .text_color(white())
             .overflow_scroll()

@@ -55,7 +55,7 @@ impl Info {
                         layer: Layer::Overlay,
                         anchor: Anchor::TOP | Anchor::RIGHT,
                         exclusive_zone: None,
-                        margin: Some((px(36.), px(8.), px(0.), px(0.))),
+                        margin: Some((px(0.), px(8.), px(0.), px(0.))),
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
                         ..Default::default()
                     }),
