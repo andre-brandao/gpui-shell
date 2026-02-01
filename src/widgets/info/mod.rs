@@ -2,18 +2,16 @@ mod panel;
 
 use crate::services::Services;
 use crate::services::upower::BatteryStatus;
-use gpui::{
-    App, AppContext, Bounds, Context, MouseButton, Point, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowHandle, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px,
-    rgba,
-};
-use panel::InfoPanel;
+use crate::ui::{PanelConfig, toggle_panel};
+use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px, rgba};
+use panel::InfoPanelContent;
+
+pub use panel::InfoPanelContent as InfoPanel;
 
 /// Info widget showing battery, volume, and network status icons.
 /// Clicking opens a detailed settings panel.
 pub struct Info {
     services: Services,
-    panel_window: Option<WindowHandle<InfoPanel>>,
 }
 
 impl Info {
@@ -25,48 +23,22 @@ impl Info {
             .detach();
         cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
 
-        Info {
-            services,
-            panel_window: None,
-        }
+        Info { services }
     }
 
-    fn toggle_panel(&mut self, cx: &mut App) {
-        if let Some(handle) = self.panel_window.take() {
-            // Close the panel
-            let _ = handle.update(cx, |_, window, _| {
-                window.remove_window();
-            });
-        } else {
-            // Open the panel
-            let services = self.services.clone();
+    fn toggle_panel(&mut self, cx: &mut gpui::App) {
+        let services = self.services.clone();
+        let config = PanelConfig {
+            width: 320.0,
+            height: 400.0,
+            anchor: Anchor::TOP | Anchor::RIGHT,
+            margin: (0.0, 8.0, 0.0, 0.0),
+            namespace: "info-panel".to_string(),
+        };
 
-            if let Ok(window) = cx.open_window(
-                WindowOptions {
-                    titlebar: None,
-                    window_bounds: Some(WindowBounds::Windowed(Bounds {
-                        origin: Point::new(px(0.), px(0.)),
-                        size: Size::new(px(320.), px(400.)),
-                    })),
-                    app_id: Some("gpui-info-panel".to_string()),
-                    window_background: WindowBackgroundAppearance::Transparent,
-                    kind: WindowKind::LayerShell(LayerShellOptions {
-                        namespace: "info-panel".to_string(),
-                        layer: Layer::Overlay,
-                        anchor: Anchor::TOP | Anchor::RIGHT,
-                        exclusive_zone: None,
-                        margin: Some((px(0.), px(8.), px(0.), px(0.))),
-                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        ..Default::default()
-                    }),
-                    focus: true,
-                    ..Default::default()
-                },
-                move |_, cx| cx.new(|cx| InfoPanel::with_services(services, cx)),
-            ) {
-                self.panel_window = Some(window);
-            }
-        }
+        toggle_panel("info", config, cx, move |cx| {
+            InfoPanelContent::new(services, cx)
+        });
     }
 
     fn battery_icon(&self, cx: &Context<Self>) -> &'static str {

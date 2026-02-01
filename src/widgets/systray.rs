@@ -1,7 +1,7 @@
+use crate::ui::{PanelConfig, toggle_panel};
 use gpui::{
-    AnyElement, App, Bounds, Context, MouseButton, Point, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowHandle, WindowKind, WindowOptions, div, layer_shell::*, prelude::*, px,
-    rgba, white,
+    AnyElement, App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px, rgba,
+    white,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, mpsc};
@@ -22,7 +22,6 @@ struct TrayItem {
 pub struct Systray {
     items: HashMap<String, TrayItem>,
     client: Arc<Mutex<Option<Client>>>,
-    open_menu: Option<(String, WindowHandle<SystrayMenu>)>,
 }
 
 impl Systray {
@@ -133,25 +132,10 @@ impl Systray {
         Systray {
             items: HashMap::new(),
             client: client_holder,
-            open_menu: None,
         }
     }
 
     fn toggle_menu(&mut self, item: &TrayItem, cx: &mut App) {
-        // Check if a menu is already open
-        if let Some((open_id, handle)) = self.open_menu.take() {
-            // Close the existing menu
-            let _ = handle.update(cx, |_, window, _| {
-                window.remove_window();
-            });
-
-            // If it was the same item, just close and return
-            if open_id == item.address {
-                return;
-            }
-        }
-
-        // Open new menu
         let Some(menu) = item.menu.clone() else {
             return;
         };
@@ -159,43 +143,26 @@ impl Systray {
         let address = item.address.clone();
         let menu_path = item.menu_path.clone().unwrap_or_default();
         let client = self.client.clone();
+        let panel_id = format!("systray-{}", address);
 
         // Calculate menu height based on visible items
         let visible_items = count_visible_items(&menu.submenus);
         let menu_height = (visible_items * 32).min(500) as f32 + 16.0;
-        let menu_width = 250.0;
 
-        if let Ok(handle) = cx.open_window(
-            WindowOptions {
-                titlebar: None,
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point::new(px(0.), px(0.)),
-                    size: Size::new(px(menu_width), px(menu_height)),
-                })),
-                window_background: WindowBackgroundAppearance::Transparent,
-                kind: WindowKind::LayerShell(LayerShellOptions {
-                    namespace: "systray-menu".to_string(),
-                    layer: Layer::Overlay,
-                    anchor: Anchor::TOP | Anchor::RIGHT,
-                    exclusive_zone: None,
-                    margin: Some((px(0.), px(8.), px(0.), px(0.))),
-                    keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                    ..Default::default()
-                }),
-                focus: true,
-                ..Default::default()
-            },
-            |_window, cx| {
-                cx.new(|_cx| SystrayMenu {
-                    menu,
-                    address: address.clone(),
-                    menu_path,
-                    client,
-                })
-            },
-        ) {
-            self.open_menu = Some((address, handle));
-        }
+        let config = PanelConfig {
+            width: 250.0,
+            height: menu_height,
+            anchor: Anchor::TOP | Anchor::RIGHT,
+            margin: (0.0, 8.0, 0.0, 0.0),
+            namespace: "systray-menu".to_string(),
+        };
+
+        toggle_panel(&panel_id, config, cx, move |_cx| SystrayMenuContent {
+            menu,
+            address,
+            menu_path,
+            client,
+        });
     }
 
     fn render_tray_item(&self, item: TrayItem, cx: &mut Context<Self>) -> AnyElement {
@@ -257,15 +224,15 @@ impl Render for Systray {
     }
 }
 
-// Separate menu window component
-pub struct SystrayMenu {
+/// Systray menu content widget - displays the menu items.
+pub struct SystrayMenuContent {
     menu: TrayMenu,
     address: String,
     menu_path: String,
     client: Arc<Mutex<Option<Client>>>,
 }
 
-impl SystrayMenu {
+impl SystrayMenuContent {
     fn close_window(&mut self, window: &mut Window) {
         window.remove_window();
     }
@@ -274,11 +241,6 @@ impl SystrayMenu {
         let client = self.client.clone();
         let address = self.address.clone();
         let menu_path = self.menu_path.clone();
-
-        eprintln!(
-            "Activating menu item: {} (address: {}, path: {})",
-            submenu_id, address, menu_path
-        );
 
         std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -294,14 +256,8 @@ impl SystrayMenu {
                             menu_path,
                             submenu_id,
                         };
-                        eprintln!("Sending activate request: {:?}", request);
-                        let result = client.activate(request).await;
-                        eprintln!("Activate result: {:?}", result);
-                    } else {
-                        eprintln!("No client available");
+                        let _ = client.activate(request).await;
                     }
-                } else {
-                    eprintln!("Failed to lock client");
                 }
             });
         });
@@ -385,7 +341,7 @@ impl SystrayMenu {
     }
 }
 
-impl Render for SystrayMenu {
+impl Render for SystrayMenuContent {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let menu_items = self.render_menu_items(&self.menu.submenus, 0, cx);
 
@@ -398,7 +354,7 @@ impl Render for SystrayMenu {
             .rounded(px(12.))
             .py(px(8.))
             .text_color(white())
-            .overflow_scroll()
+            .overflow_hidden()
             .children(menu_items)
     }
 }

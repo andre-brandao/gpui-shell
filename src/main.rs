@@ -3,6 +3,7 @@ use gpui::Application;
 mod bar;
 mod launcher;
 mod services;
+mod ui;
 mod widgets;
 
 fn main() {

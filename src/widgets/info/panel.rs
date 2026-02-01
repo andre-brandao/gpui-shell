@@ -2,16 +2,18 @@ use crate::services::Services;
 use crate::services::audio::AudioCommand;
 use crate::services::network::NetworkCommand;
 use crate::services::upower::{BatteryStatus, PowerProfile, UPowerCommand};
-use gpui::{Context, FocusHandle, Focusable, MouseButton, Window, div, prelude::*, px, rgba};
+use gpui::{
+    AnyElement, Context, FocusHandle, Focusable, MouseButton, Window, div, prelude::*, px, rgba,
+};
 
-/// Info panel showing detailed battery, volume, and network settings.
-pub struct InfoPanel {
+/// Info panel content - can be used standalone or in a panel window.
+pub struct InfoPanelContent {
     services: Services,
     focus_handle: FocusHandle,
 }
 
-impl InfoPanel {
-    pub fn with_services(services: Services, cx: &mut Context<Self>) -> Self {
+impl InfoPanelContent {
+    pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
         // Observe all services for updates
@@ -21,7 +23,7 @@ impl InfoPanel {
             .detach();
         cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
 
-        InfoPanel {
+        InfoPanelContent {
             services,
             focus_handle,
         }
@@ -52,18 +54,18 @@ impl InfoPanel {
     }
 }
 
-impl Focusable for InfoPanel {
+impl Focusable for InfoPanelContent {
     fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for InfoPanel {
+impl Render for InfoPanelContent {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let wifi_enabled = self.services.network.read(cx).wifi_enabled;
 
         div()
-            .id("info-panel")
+            .id("info-panel-content")
             .track_focus(&self.focus_handle)
             .key_context("InfoPanel")
             .size_full()
@@ -87,7 +89,7 @@ impl Render for InfoPanel {
     }
 }
 
-impl InfoPanel {
+impl InfoPanelContent {
     fn render_battery_section(&self, cx: &Context<Self>) -> impl IntoElement {
         let upower = self.services.upower.read(cx);
 
