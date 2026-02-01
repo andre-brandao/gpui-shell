@@ -1,11 +1,11 @@
 use gpui::{
-    AnyElement, App, AppContext, Bounds, Context, Entity, FontWeight, Size, Window,
+    AnyElement, App, AppContext, Bounds, Context, FontWeight, Size, Window,
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     point, prelude::*, px, rems, rgba, white,
 };
 
 use crate::services::Services;
-use crate::widgets::{Clock, Info, LauncherBtn, Systray, Workspaces};
+use crate::widgets::Widget;
 
 pub const BAR_HEIGHT: f32 = 32.0;
 
@@ -27,27 +27,6 @@ impl Default for BarConfig {
     }
 }
 
-/// Wrapper enum for all possible widget types.
-enum Widget {
-    LauncherBtn(Entity<LauncherBtn>),
-    Workspaces(Entity<Workspaces>),
-    Clock(Entity<Clock>),
-    Systray(Entity<Systray>),
-    Info(Entity<Info>),
-}
-
-impl Widget {
-    fn render(&self) -> AnyElement {
-        match self {
-            Widget::LauncherBtn(e) => e.clone().into_any_element(),
-            Widget::Workspaces(e) => e.clone().into_any_element(),
-            Widget::Clock(e) => e.clone().into_any_element(),
-            Widget::Systray(e) => e.clone().into_any_element(),
-            Widget::Info(e) => e.clone().into_any_element(),
-        }
-    }
-}
-
 struct LayerShellBar {
     left_widgets: Vec<Widget>,
     center_widgets: Vec<Widget>,
@@ -57,49 +36,10 @@ struct LayerShellBar {
 impl LayerShellBar {
     /// Create a bar with services and configuration.
     fn new(services: Services, config: BarConfig, cx: &mut Context<Self>) -> Self {
-        let create_widget =
-            |name: &str, services: &Services, cx: &mut Context<Self>| -> Option<Widget> {
-                match name {
-                    "LauncherBtn" => Some(Widget::LauncherBtn(
-                        cx.new(|cx| LauncherBtn::with_services(services.clone(), cx)),
-                    )),
-                    "Workspaces" => Some(Widget::Workspaces(
-                        cx.new(|cx| Workspaces::with_services(services.clone(), cx)),
-                    )),
-                    "Clock" => Some(Widget::Clock(cx.new(Clock::new))),
-                    "Systray" => Some(Widget::Systray(cx.new(Systray::new))),
-                    "Info" => Some(Widget::Info(
-                        cx.new(|cx| Info::with_services(services.clone(), cx)),
-                    )),
-                    _ => {
-                        eprintln!("Unknown widget: {}", name);
-                        None
-                    }
-                }
-            };
-
-        let left_widgets: Vec<Widget> = config
-            .left
-            .iter()
-            .filter_map(|name| create_widget(name, &services, cx))
-            .collect();
-
-        let center_widgets: Vec<Widget> = config
-            .center
-            .iter()
-            .filter_map(|name| create_widget(name, &services, cx))
-            .collect();
-
-        let right_widgets: Vec<Widget> = config
-            .right
-            .iter()
-            .filter_map(|name| create_widget(name, &services, cx))
-            .collect();
-
         LayerShellBar {
-            left_widgets,
-            center_widgets,
-            right_widgets,
+            left_widgets: Widget::create_many(&config.left, &services, cx),
+            center_widgets: Widget::create_many(&config.center, &services, cx),
+            right_widgets: Widget::create_many(&config.right, &services, cx),
         }
     }
 }
