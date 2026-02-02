@@ -3,19 +3,36 @@
 //! This crate provides reactive services for monitoring and controlling
 //! system components like battery, power profiles, compositor, audio, network, etc.
 
+pub mod applications;
 pub mod audio;
+pub mod bluetooth;
 pub mod brightness;
 pub mod compositor;
+pub mod network;
 pub mod privacy;
+pub mod sysinfo;
+pub mod tray;
 pub mod upower;
 
+pub use applications::{Application, ApplicationsService};
 pub use audio::{AudioCommand, AudioData, AudioSubscriber};
+pub use bluetooth::{
+    BluetoothCommand, BluetoothData, BluetoothDevice, BluetoothState, BluetoothSubscriber,
+};
 pub use brightness::{BrightnessCommand, BrightnessData, BrightnessSubscriber};
 pub use compositor::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
     Monitor, Workspace,
 };
+pub use network::{
+    AccessPoint, ActiveConnectionInfo, ConnectivityState, DeviceState, DeviceType, NetworkCommand,
+    NetworkData, NetworkStatistics, NetworkSubscriber,
+};
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
+pub use sysinfo::{DiskInfo, NetworkInfo, SysInfoData, SysInfoSubscriber};
+pub use tray::{
+    MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,
+};
 pub use upower::{
     BatteryData, BatteryLevel, BatteryState, PowerProfile, UPowerCommand, UPowerData,
     UPowerSubscriber, WarningLevel,
@@ -28,14 +45,16 @@ pub use upower::{
 /// that need access to system information.
 #[derive(Clone)]
 pub struct Services {
+    pub applications: ApplicationsService,
     pub audio: AudioSubscriber,
+    pub bluetooth: BluetoothSubscriber,
     pub brightness: BrightnessSubscriber,
     pub compositor: CompositorSubscriber,
+    pub network: NetworkSubscriber,
     pub privacy: PrivacySubscriber,
+    pub sysinfo: SysInfoSubscriber,
+    pub tray: TraySubscriber,
     pub upower: UPowerSubscriber,
-    // Future services:
-    // pub network: NetworkSubscriber,
-    // pub bluetooth: BluetoothSubscriber,
 }
 
 impl Services {
@@ -44,17 +63,27 @@ impl Services {
     /// This should be called once during application startup.
     /// Services will begin monitoring system state immediately.
     pub async fn new() -> anyhow::Result<Self> {
+        let applications = ApplicationsService::new();
         let audio = AudioSubscriber::new();
+        let bluetooth = BluetoothSubscriber::new().await?;
         let brightness = BrightnessSubscriber::new().await?;
         let compositor = CompositorSubscriber::new().await?;
+        let network = NetworkSubscriber::new().await?;
         let privacy = PrivacySubscriber::new();
+        let sysinfo = SysInfoSubscriber::new();
+        let tray = TraySubscriber::new().await?;
         let upower = UPowerSubscriber::new().await?;
 
         Ok(Self {
+            applications,
             audio,
+            bluetooth,
             brightness,
             compositor,
+            network,
             privacy,
+            sysinfo,
+            tray,
             upower,
         })
     }

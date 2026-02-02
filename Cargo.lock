@@ -4777,6 +4777,7 @@ dependencies = [
  "inotify",
  "itertools 0.14.0",
  "pipewire",
+ "serde",
  "sysinfo 0.35.2",
  "tokio",
  "tracing",
