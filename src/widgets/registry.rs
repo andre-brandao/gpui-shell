@@ -1,7 +1,7 @@
 use crate::services::Services;
 use gpui::{AnyElement, Context, Entity, prelude::*};
 
-use super::{Clock, Info, LauncherBtn, Systray, Workspaces};
+use super::{Clock, Info, LauncherBtn, SysInfoWidget, Systray, Workspaces};
 
 /// Wrapper enum for all possible widget types.
 pub enum Widget {
@@ -10,6 +10,7 @@ pub enum Widget {
     Clock(Entity<Clock>),
     Systray(Entity<Systray>),
     Info(Entity<Info>),
+    SysInfo(Entity<SysInfoWidget>),
 }
 
 impl Widget {
@@ -21,6 +22,7 @@ impl Widget {
             Widget::Clock(e) => e.clone().into_any_element(),
             Widget::Systray(e) => e.clone().into_any_element(),
             Widget::Info(e) => e.clone().into_any_element(),
+            Widget::SysInfo(e) => e.clone().into_any_element(),
         }
     }
 
@@ -43,6 +45,11 @@ impl Widget {
             "Info" => Some(Widget::Info(
                 cx.new(|cx| Info::with_services(services.clone(), cx)),
             )),
+            "SysInfo" => {
+                Some(Widget::SysInfo(cx.new(|cx| {
+                    SysInfoWidget::with_services(services.clone(), cx)
+                })))
+            }
             _ => {
                 eprintln!("Unknown widget: {}", name);
                 None

@@ -53,6 +53,8 @@ impl Launcher {
             .detach();
         cx.observe(&services.upower, |_, _, cx| cx.notify())
             .detach();
+        cx.observe(&services.sysinfo, |_, _, cx| cx.notify())
+            .detach();
 
         let views = all_views();
         let help_view = HelpView::new(config.prefix_char, &views);

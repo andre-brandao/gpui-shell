@@ -1,4 +1,5 @@
 use crate::launcher::view::{InputResult, LauncherView, ViewContext, ViewInput};
+use crate::widgets::sysinfo::icons;
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
 
 pub struct HelpView {
@@ -29,14 +30,24 @@ impl HelpView {
         }
     }
 
+    fn usage_color(usage: u32) -> gpui::Hsla {
+        if usage >= 90 {
+            gpui::rgb(0xef4444).into() // red - critical
+        } else if usage >= 70 {
+            gpui::rgb(0xf59e0b).into() // amber - warning
+        } else {
+            gpui::rgb(0x22c55e).into() // green - normal
+        }
+    }
+
     fn render_system_info(&self, vx: &ViewContext, cx: &App) -> AnyElement {
         let upower = vx.services.upower.read(cx);
         let audio = vx.services.audio.read(cx);
         let network = vx.services.network.read(cx);
-        let compositor = vx.services.compositor.read(cx);
+        let sysinfo = vx.services.sysinfo.read(cx);
 
-        let (battery_percent, battery_icon) = if let Some(ref battery) = upower.data.battery {
-            let icon = match battery.status {
+        let battery_icon = if let Some(ref battery) = upower.data.battery {
+            match battery.status {
                 crate::services::upower::BatteryStatus::Charging => "󰂄",
                 _ => match battery.percentage {
                     0..=10 => "󰁺",
@@ -50,10 +61,9 @@ impl HelpView {
                     81..=90 => "󰂂",
                     _ => "󰁹",
                 },
-            };
-            (battery.percentage, icon)
+            }
         } else {
-            (0, "󰂃")
+            "󰂃"
         };
 
         let volume_icon = if audio.sink_muted {
@@ -68,73 +78,109 @@ impl HelpView {
 
         let wifi_icon = if network.wifi_enabled { "󰤨" } else { "󰤭" };
 
+        let cpu_usage = sysinfo.cpu_usage;
+        let memory_usage = sysinfo.memory_usage;
+        let cpu_color = Self::usage_color(cpu_usage);
+        let memory_color = Self::usage_color(memory_usage);
+
+        let cpu_icon = if cpu_usage >= 90 {
+            icons::CPU_HIGH
+        } else {
+            icons::CPU
+        };
+
+        let temp_text = sysinfo
+            .temperature
+            .map(|t| format!("{}°C", t))
+            .unwrap_or_else(|| "—".to_string());
+
+        // Single compact row with all info
         div()
             .w_full()
-            .p(px(16.))
+            .px(px(12.))
+            .py(px(8.))
             .bg(rgba(0x2a2a2aff))
             .rounded(px(8.))
             .flex()
+            .items_center()
             .justify_between()
+            // CPU
             .child(
-                // Battery
                 div()
                     .flex()
-                    .flex_col()
                     .items_center()
                     .gap(px(4.))
-                    .child(div().text_size(px(24.)).child(battery_icon))
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .text_color(cpu_color)
+                            .child(cpu_icon),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(cpu_color)
+                            .child(format!("{}%", cpu_usage)),
+                    ),
+            )
+            // RAM
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .text_color(memory_color)
+                            .child(icons::MEMORY),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(memory_color)
+                            .child(format!("{}%", memory_usage)),
+                    ),
+            )
+            // Temp
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .text_color(rgba(0x888888ff))
+                            .child(icons::TEMP),
+                    )
                     .child(
                         div()
                             .text_size(px(12.))
                             .text_color(rgba(0x888888ff))
-                            .child(format!("{}%", battery_percent)),
+                            .child(temp_text),
                     ),
             )
+            // Battery
             .child(
-                // Volume
                 div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(div().text_size(px(24.)).child(volume_icon))
-                    .child(div().text_size(px(12.)).text_color(rgba(0x888888ff)).child(
-                        if audio.sink_muted {
-                            "Muted".to_string()
-                        } else {
-                            format!("{}%", audio.sink_volume)
-                        },
-                    )),
+                    .text_size(px(14.))
+                    .text_color(rgba(0x888888ff))
+                    .child(battery_icon),
             )
+            // Volume
             .child(
-                // WiFi
                 div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(div().text_size(px(24.)).child(wifi_icon))
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(rgba(0x888888ff))
-                            .child(if network.wifi_enabled { "On" } else { "Off" }),
-                    ),
+                    .text_size(px(14.))
+                    .text_color(rgba(0x888888ff))
+                    .child(volume_icon),
             )
+            // WiFi
             .child(
-                // Workspaces
                 div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(div().text_size(px(24.)).child(""))
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(rgba(0x888888ff))
-                            .child(format!("{} ws", compositor.workspaces.len())),
-                    ),
+                    .text_size(px(14.))
+                    .text_color(rgba(0x888888ff))
+                    .child(wifi_icon),
             )
             .into_any_element()
     }

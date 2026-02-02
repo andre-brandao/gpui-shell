@@ -3,6 +3,7 @@ pub mod audio;
 pub mod compositor;
 pub mod network;
 pub mod privacy;
+pub mod sysinfo;
 pub mod upower;
 
 use applications::Applications;
@@ -11,6 +12,7 @@ use compositor::Compositor;
 use gpui::{App, AppContext, Entity};
 use network::Network;
 use privacy::Privacy;
+use sysinfo::SysInfo;
 use upower::UPower;
 
 /// Event wrapper for service state changes.
@@ -54,6 +56,7 @@ pub struct Services {
     pub audio: Entity<Audio>,
     pub applications: Entity<Applications>,
     pub privacy: Entity<Privacy>,
+    pub sysinfo: Entity<SysInfo>,
 }
 
 impl Services {
@@ -66,6 +69,7 @@ impl Services {
             audio: cx.new(Audio::new),
             applications: cx.new(Applications::new),
             privacy: cx.new(Privacy::new),
+            sysinfo: cx.new(SysInfo::new),
         }
     }
 }

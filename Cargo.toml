@@ -53,3 +53,4 @@ zbus = { version = "5", default-features = false, features = ["tokio"] }
 futures-lite = "2"
 inotify = "0.11"
 pipewire = "0.8"
+sysinfo = "0.32"

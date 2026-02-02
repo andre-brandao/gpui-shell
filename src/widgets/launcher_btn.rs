@@ -30,6 +30,6 @@ impl Render for LauncherBtn {
                     launcher::toggle(services.clone(), cx);
                 }),
             )
-            .child(div().text_size(px(14.)).child(""))
+            .child(div().text_size(px(14.)).child("<>"))
     }
 }
