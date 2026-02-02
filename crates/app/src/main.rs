@@ -6,6 +6,7 @@ use services::Services;
 use tracing_subscriber::EnvFilter;
 
 mod bar;
+pub mod control_center;
 pub mod launcher;
 mod panel;
 pub mod widgets;

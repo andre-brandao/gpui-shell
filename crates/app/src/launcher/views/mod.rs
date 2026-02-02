@@ -16,6 +16,7 @@ pub use web::WebSearchView;
 pub use workspaces::WorkspacesView;
 
 use super::view::LauncherView;
+use crate::control_center::ControlCenterView;
 
 /// Create all available views.
 ///
@@ -23,9 +24,10 @@ use super::view::LauncherView;
 /// The order matters for prefix matching - more specific prefixes should come first.
 pub fn all_views() -> Vec<Box<dyn LauncherView>> {
     vec![
-        Box::new(AppsView),       // @ prefix (default view)
-        Box::new(ShellView),      // $ prefix
-        Box::new(WebSearchView),  // ! prefix
-        Box::new(WorkspacesView), // ;ws prefix
+        Box::new(AppsView),          // @ prefix (default view)
+        Box::new(ShellView),         // $ prefix
+        Box::new(WebSearchView),     // ! prefix
+        Box::new(WorkspacesView),    // ;ws prefix
+        Box::new(ControlCenterView), // ~ prefix
     ]
 }

@@ -7,7 +7,7 @@
 //! - Switching workspaces (;ws prefix)
 //! - Viewing help and available commands (? prefix)
 
-mod view;
+pub mod view;
 mod views;
 
 use futures_signals::signal::SignalExt;

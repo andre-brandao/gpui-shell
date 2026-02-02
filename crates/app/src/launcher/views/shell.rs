@@ -2,9 +2,9 @@
 
 use crate::launcher::view::{LauncherView, ViewContext};
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
-use ui::{bg, font_size, interactive, radius, spacing, text};
+use ui::{bg, font_size, radius, spacing, text};
 
-/// Shell view - executes shell commands directly.
+/// Shell view - executes shell commands in a terminal.
 pub struct ShellView;
 
 impl LauncherView for ShellView {
@@ -21,7 +21,7 @@ impl LauncherView for ShellView {
     }
 
     fn description(&self) -> &'static str {
-        "Run shell commands"
+        "Run shell commands in terminal"
     }
 
     fn render(&self, vx: &ViewContext, _cx: &App) -> (AnyElement, usize) {
@@ -44,24 +44,80 @@ impl LauncherView for ShellView {
                     .flex()
                     .flex_col()
                     .gap(px(spacing::SM))
-                    // Header
+                    // Header with run action
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .justify_between()
                             .child(
                                 div()
-                                    .text_size(px(font_size::LG))
-                                    .text_color(text::muted())
-                                    .child(""),
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(spacing::SM))
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::XL))
+                                            .text_color(text::primary())
+                                            .child(""),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::BASE))
+                                            .text_color(text::primary())
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child("Terminal"),
+                                    )
+                                    .child(
+                                        div()
+                                            .px(px(6.))
+                                            .py(px(2.))
+                                            .rounded(px(4.))
+                                            .bg(rgba(0x555555ff))
+                                            .text_size(px(font_size::XS))
+                                            .child("$"),
+                                    ),
                             )
+                            // Run hint (always visible, changes appearance when command exists)
                             .child(
                                 div()
-                                    .text_size(px(font_size::SM))
-                                    .text_color(text::muted())
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child("COMMAND"),
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(spacing::SM))
+                                    .px(px(spacing::SM))
+                                    .py(px(4.))
+                                    .rounded(px(radius::SM))
+                                    .when(has_command && vx.selected_index == 0, |el| {
+                                        el.bg(rgba(0x3b82f6ff))
+                                    })
+                                    .when(has_command && vx.selected_index != 0, |el| {
+                                        el.bg(rgba(0x333333ff))
+                                    })
+                                    .when(!has_command, |el| el.bg(rgba(0x00000033)))
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::SM))
+                                            .text_color(if has_command {
+                                                text::primary()
+                                            } else {
+                                                text::disabled()
+                                            })
+                                            .child("Run"),
+                                    )
+                                    .child(
+                                        div()
+                                            .px(px(4.))
+                                            .py(px(2.))
+                                            .rounded(px(3.))
+                                            .bg(rgba(0x00000044))
+                                            .text_size(px(font_size::XS))
+                                            .text_color(if has_command {
+                                                text::muted()
+                                            } else {
+                                                text::disabled()
+                                            })
+                                            .child("Enter"),
+                                    ),
                             ),
                     )
                     // Command display
@@ -85,41 +141,6 @@ impl LauncherView for ShellView {
                             }),
                     ),
             )
-            // Run button (visual indicator)
-            .when(has_command, |el| {
-                el.child(
-                    div()
-                        .id("run-command")
-                        .w_full()
-                        .h(px(48.))
-                        .px(px(spacing::MD))
-                        .rounded(px(radius::MD))
-                        .cursor_pointer()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(spacing::SM))
-                        .bg(interactive::default())
-                        .hover(|s| s.bg(interactive::hover()))
-                        .when(vx.selected_index == 0, |el| el.bg(rgba(0x3b82f6ff)))
-                        .child(div().text_size(px(font_size::LG)).child(""))
-                        .child(
-                            div()
-                                .text_size(px(font_size::BASE))
-                                .font_weight(FontWeight::MEDIUM)
-                                .child("Run Command"),
-                        )
-                        .child(
-                            div()
-                                .px(px(spacing::SM))
-                                .py(px(2.))
-                                .rounded(px(radius::SM))
-                                .bg(rgba(0x00000033))
-                                .text_size(px(font_size::XS))
-                                .child("Enter"),
-                        ),
-                )
-            })
             // Help text
             .child(
                 div()
@@ -139,21 +160,19 @@ impl LauncherView for ShellView {
                         div()
                             .text_size(px(font_size::SM))
                             .text_color(text::muted())
-                            .child("• Commands run in a detached shell process"),
+                            .child("• Commands run in your default terminal emulator"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
                             .text_color(text::muted())
-                            .child(
-                                "• Output is not captured (use terminal for interactive commands)",
-                            ),
+                            .child("• Interactive commands and output are fully supported"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
                             .text_color(text::muted())
-                            .child("• Example: $firefox, $code ., $systemctl restart ..."),
+                            .child("• Example: $htop, $vim ~/.config, $cargo build"),
                     ),
             )
             .into_any_element();
@@ -169,7 +188,7 @@ impl LauncherView for ShellView {
             return false;
         }
 
-        run_shell_command(command);
+        run_in_terminal(command);
         true // Close launcher
     }
 
@@ -182,12 +201,45 @@ impl LauncherView for ShellView {
     }
 }
 
-/// Run a shell command in a detached process.
-fn run_shell_command(command: &str) {
+/// Run a command in the default terminal emulator.
+fn run_in_terminal(command: &str) {
     let command = command.to_string();
     std::thread::spawn(move || {
-        let _ = std::process::Command::new("sh")
-            .args(["-c", &command])
+        // Try common terminal emulators in order of preference
+        let terminals: &[(&str, &[&str])] = &[
+            // Modern terminals
+            ("ghostty", &["-e", "sh", "-c"]),
+            ("kitty", &["--", "sh", "-c"]),
+            ("alacritty", &["-e", "sh", "-c"]),
+            ("wezterm", &["start", "--", "sh", "-c"]),
+            ("foot", &["sh", "-c"]),
+            // Classic terminals
+            ("gnome-terminal", &["--", "sh", "-c"]),
+            ("konsole", &["-e", "sh", "-c"]),
+            ("xfce4-terminal", &["-e", "sh", "-c"]),
+            ("xterm", &["-e", "sh", "-c"]),
+        ];
+
+        // Build command that keeps terminal open after command finishes
+        // This allows seeing output and interacting if needed
+        let full_command = format!("{}; echo ''; echo 'Press Enter to close...'; read", command);
+
+        for (terminal, args) in terminals {
+            let mut cmd_args: Vec<&str> = args.to_vec();
+            cmd_args.push(&full_command);
+
+            if std::process::Command::new(terminal)
+                .args(&cmd_args)
+                .spawn()
+                .is_ok()
+            {
+                return;
+            }
+        }
+
+        // Fallback: try x-terminal-emulator (Debian/Ubuntu alternative system)
+        let _ = std::process::Command::new("x-terminal-emulator")
+            .args(["-e", "sh", "-c", &full_command])
             .spawn();
     });
 }
