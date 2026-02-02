@@ -35,7 +35,7 @@ impl Default for BarConfig {
             ],
             center: vec!["Clock".to_string()],
             right: vec![
-                // "Systray".to_string(),
+                "Systray".to_string(),
                 "KeyboardLayout".to_string(),
                 "Battery".to_string(),
             ],

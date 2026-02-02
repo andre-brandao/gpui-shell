@@ -5,6 +5,7 @@ use gpui::Application;
 use services::Services;
 
 mod bar;
+mod panel;
 mod widgets;
 
 #[tokio::main]
