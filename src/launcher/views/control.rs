@@ -615,4 +615,8 @@ impl LauncherView for ControlView {
             false
         }
     }
+
+    fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
+        vec![("Toggle/Adjust", "Enter"), ("Close", "Esc")]
+    }
 }

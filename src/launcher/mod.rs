@@ -270,7 +270,9 @@ impl Render for Launcher {
 
         // Render current view
         let vx = self.view_context();
-        let (view_content, item_count) = self.current_view().render(&vx, cx);
+        let current_view = self.current_view();
+        let (view_content, item_count) = current_view.render(&vx, cx);
+        let footer_actions = current_view.footer_actions(&vx);
         self.item_count = item_count;
 
         // Clamp selected index
@@ -319,52 +321,56 @@ impl Render for Launcher {
                 }),
             )
             .size_full()
-            .bg(rgba(0x1a1a1aee))
+            .bg(rgba(0x1e1e1eff))
             .border_1()
-            .border_color(rgba(0x333333ff))
-            .rounded(px(12.))
-            .p(px(16.))
+            .border_color(rgba(0x3c3c3cff))
+            .rounded(px(8.))
             .text_color(rgba(0xffffffff))
             .flex()
             .flex_col()
-            .gap(px(12.))
-            // Search input with view indicator
+            .overflow_hidden()
+            // Search input area - merges with top border
             .child(
                 div()
                     .w_full()
-                    .px(px(12.))
-                    .py(px(10.))
-                    .bg(rgba(0x333333ff))
-                    .rounded(px(8.))
+                    .px(px(16.))
+                    .py(px(12.))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    // Search icon
                     .child(
                         div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            // Search text
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .text_size(px(14.))
-                                    .child(if query.is_empty() { placeholder } else { query })
-                                    .text_color(if is_empty {
-                                        rgba(0x888888ff)
-                                    } else {
-                                        rgba(0xffffffff)
-                                    }),
-                            )
-                            // View badge (right side)
-                            .child(
-                                div()
-                                    .px(px(6.))
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .bg(rgba(0x3b82f6ff))
-                                    .text_size(px(10.))
-                                    .child(view_name),
-                            ),
+                            .text_size(px(16.))
+                            .text_color(rgba(0x888888ff))
+                            .child(""),
+                    )
+                    // Search text
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(14.))
+                            .child(if query.is_empty() { placeholder } else { query })
+                            .text_color(if is_empty {
+                                rgba(0x6e6e6eff)
+                            } else {
+                                rgba(0xffffffff)
+                            }),
+                    )
+                    // View badge (right side)
+                    .child(
+                        div()
+                            .px(px(8.))
+                            .py(px(3.))
+                            .rounded(px(4.))
+                            .bg(rgba(0x3b3b3bff))
+                            .text_size(px(11.))
+                            .text_color(rgba(0xaaaaaaff))
+                            .child(view_name),
                     ),
             )
+            // Divider line
+            .child(div().w_full().h(px(1.)).bg(rgba(0x3c3c3cff)))
             // View content with scroll support
             .child(
                 div()
@@ -372,7 +378,49 @@ impl Render for Launcher {
                     .flex_1()
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll_handle)
+                    .py(px(4.))
                     .child(view_content),
+            )
+            // Bottom footer bar
+            .child(div().w_full().h(px(1.)).bg(rgba(0x3c3c3cff)))
+            .child(
+                div()
+                    .w_full()
+                    .px(px(16.))
+                    .py(px(8.))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    // Left side - can hold widgets
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .text_size(px(12.))
+                            .text_color(rgba(0x6e6e6eff))
+                            .child(""),
+                    )
+                    // Right side - action hints from view
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(16.))
+                            .text_size(px(12.))
+                            .text_color(rgba(0x888888ff))
+                            .children(footer_actions.into_iter().map(|(action, key)| {
+                                div().flex().items_center().gap(px(6.)).child(action).child(
+                                    div()
+                                        .px(px(6.))
+                                        .py(px(2.))
+                                        .rounded(px(3.))
+                                        .bg(rgba(0x3b3b3bff))
+                                        .text_size(px(10.))
+                                        .child(key),
+                                )
+                            })),
+                    ),
             )
     }
 }

@@ -87,6 +87,12 @@ pub trait LauncherView: Send + Sync {
     fn on_select(&self, _index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
         false
     }
+
+    /// Return action hints to display in the footer bar.
+    /// Each tuple is (action_name, keybinding).
+    fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
+        vec![("Open", "Enter"), ("Close", "Esc")]
+    }
 }
 
 /// Trait for registering service observers on the launcher entity.
@@ -112,13 +118,14 @@ pub fn render_list_item(
         .id(id.into())
         .w_full()
         .h(px(LIST_ITEM_HEIGHT))
-        .px(px(12.))
-        .rounded(px(6.))
+        .mx(px(8.))
+        .px(px(8.))
+        .rounded(px(4.))
         .cursor_pointer()
         .flex()
         .items_center()
-        .when(is_selected, |el| el.bg(rgba(0x3b82f6ff)))
-        .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x333333ff))))
+        .when(is_selected, |el| el.bg(rgba(0x094771ff)))
+        .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x2a2a2aff))))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
@@ -126,35 +133,35 @@ pub fn render_list_item(
             div()
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(px(10.))
                 .child(
                     div()
-                        .w(px(32.))
-                        .h(px(32.))
-                        .rounded(px(6.))
-                        .bg(rgba(0x444444ff))
+                        .w(px(28.))
+                        .h(px(28.))
+                        .rounded(px(4.))
+                        .bg(rgba(0x3b3b3bff))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(px(16.))
+                        .text_size(px(14.))
                         .child(icon.to_string()),
                 )
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(2.))
+                        .gap(px(1.))
                         .child(
                             div()
-                                .text_size(px(14.))
+                                .text_size(px(13.))
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .child(title.to_string()),
                         )
                         .when_some(subtitle, |el, sub| {
                             el.child(
                                 div()
-                                    .text_size(px(12.))
-                                    .text_color(rgba(0x888888ff))
+                                    .text_size(px(11.))
+                                    .text_color(rgba(0x6e6e6eff))
                                     .child(sub.to_string()),
                             )
                         }),
