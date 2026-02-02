@@ -3,13 +3,19 @@
 //! This crate provides reactive services for monitoring and controlling
 //! system components like battery, power profiles, compositor, audio, network, etc.
 
+pub mod audio;
+pub mod brightness;
 pub mod compositor;
+pub mod privacy;
 pub mod upower;
 
+pub use audio::{AudioCommand, AudioData, AudioSubscriber};
+pub use brightness::{BrightnessCommand, BrightnessData, BrightnessSubscriber};
 pub use compositor::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
     Monitor, Workspace,
 };
+pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
 pub use upower::{
     BatteryData, BatteryLevel, BatteryState, PowerProfile, UPowerCommand, UPowerData,
     UPowerSubscriber, WarningLevel,
@@ -22,10 +28,12 @@ pub use upower::{
 /// that need access to system information.
 #[derive(Clone)]
 pub struct Services {
-    pub upower: UPowerSubscriber,
+    pub audio: AudioSubscriber,
+    pub brightness: BrightnessSubscriber,
     pub compositor: CompositorSubscriber,
+    pub privacy: PrivacySubscriber,
+    pub upower: UPowerSubscriber,
     // Future services:
-    // pub audio: AudioSubscriber,
     // pub network: NetworkSubscriber,
     // pub bluetooth: BluetoothSubscriber,
 }
@@ -36,9 +44,18 @@ impl Services {
     /// This should be called once during application startup.
     /// Services will begin monitoring system state immediately.
     pub async fn new() -> anyhow::Result<Self> {
-        let upower = UPowerSubscriber::new().await?;
+        let audio = AudioSubscriber::new();
+        let brightness = BrightnessSubscriber::new().await?;
         let compositor = CompositorSubscriber::new().await?;
+        let privacy = PrivacySubscriber::new();
+        let upower = UPowerSubscriber::new().await?;
 
-        Ok(Self { upower, compositor })
+        Ok(Self {
+            audio,
+            brightness,
+            compositor,
+            privacy,
+            upower,
+        })
     }
 }

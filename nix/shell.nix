@@ -5,6 +5,9 @@
   nixfmt-rfc-style,
   nixd,
 
+  llvmPackages,
+  glibc,
+
   freetype,
   fontconfig,
   libpulseaudio,
@@ -35,6 +38,7 @@ mkShell rec {
 
   nativeBuildInputs = [
     pkg-config
+    llvmPackages.libclang
   ];
 
   buildInputs = [
@@ -62,5 +66,7 @@ mkShell rec {
   env = {
     LD_LIBRARY_PATH = "${lib.makeLibraryPath buildInputs}";
     RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+    LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
+    BINDGEN_EXTRA_CLANG_ARGS = "-isystem ${llvmPackages.libclang.lib}/lib/clang/${lib.versions.major llvmPackages.libclang.version}/include -isystem ${glibc.dev}/include";
   };
 }

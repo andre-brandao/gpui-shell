@@ -14,4 +14,7 @@ chrono.workspace = true
 hyprland.workspace = true
 tokio.workspace = true
 
+inotify = "0.11"
+pipewire = "0.8"
 sysinfo = "0.35.1"
+udev = "0.9"
