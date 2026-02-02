@@ -7,7 +7,7 @@ use gpui::{AnyElement, Context, Entity, prelude::*};
 
 use services::Services;
 
-use super::{Battery, Clock};
+use super::{Battery, Clock, KeyboardLayout, Workspaces};
 
 /// Wrapper enum for all possible widget types.
 ///
@@ -17,9 +17,10 @@ use super::{Battery, Clock};
 pub enum Widget {
     Clock(Entity<Clock>),
     Battery(Entity<Battery>),
+    Workspaces(Entity<Workspaces>),
+    KeyboardLayout(Entity<KeyboardLayout>),
     // Future widgets:
     // LauncherBtn(Entity<LauncherBtn>),
-    // Workspaces(Entity<Workspaces>),
     // Systray(Entity<Systray>),
     // Info(Entity<Info>),
     // SysInfo(Entity<SysInfo>),
@@ -33,6 +34,8 @@ impl Widget {
         match self {
             Widget::Clock(e) => e.clone().into_any_element(),
             Widget::Battery(e) => e.clone().into_any_element(),
+            Widget::Workspaces(e) => e.clone().into_any_element(),
+            Widget::KeyboardLayout(e) => e.clone().into_any_element(),
         }
     }
 
@@ -54,12 +57,17 @@ impl Widget {
             "Battery" => Some(Widget::Battery(
                 cx.new(|cx| Battery::new(services.upower.clone(), cx)),
             )),
+            "Workspaces" => Some(Widget::Workspaces(
+                cx.new(|cx| Workspaces::new(services.compositor.clone(), cx)),
+            )),
+            "KeyboardLayout" => {
+                Some(Widget::KeyboardLayout(cx.new(|cx| {
+                    KeyboardLayout::new(services.compositor.clone(), cx)
+                })))
+            }
             // Future widgets:
             // "LauncherBtn" => Some(Widget::LauncherBtn(
             //     cx.new(|cx| LauncherBtn::new(services.clone(), cx)),
-            // )),
-            // "Workspaces" => Some(Widget::Workspaces(
-            //     cx.new(|cx| Workspaces::new(services.clone(), cx)),
             // )),
             // "Systray" => Some(Widget::Systray(cx.new(Systray::new))),
             // "Info" => Some(Widget::Info(

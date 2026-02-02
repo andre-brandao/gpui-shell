@@ -30,12 +30,13 @@ impl Default for BarConfig {
         BarConfig {
             left: vec![
                 // "LauncherBtn".to_string(),
-                // "Workspaces".to_string(),
+                "Workspaces".to_string(),
                 // "SysInfo".to_string(),
             ],
             center: vec!["Clock".to_string()],
             right: vec![
                 // "Systray".to_string(),
+                "KeyboardLayout".to_string(),
                 "Battery".to_string(),
             ],
         }

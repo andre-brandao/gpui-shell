@@ -1,10 +1,15 @@
 //! Services for system integration via D-Bus and other interfaces.
 //!
 //! This crate provides reactive services for monitoring and controlling
-//! system components like battery, power profiles, audio, network, etc.
+//! system components like battery, power profiles, compositor, audio, network, etc.
 
+pub mod compositor;
 pub mod upower;
 
+pub use compositor::{
+    ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
+    Monitor, Workspace,
+};
 pub use upower::{
     BatteryData, BatteryLevel, BatteryState, PowerProfile, UPowerCommand, UPowerData,
     UPowerSubscriber, WarningLevel,
@@ -18,6 +23,7 @@ pub use upower::{
 #[derive(Clone)]
 pub struct Services {
     pub upower: UPowerSubscriber,
+    pub compositor: CompositorSubscriber,
     // Future services:
     // pub audio: AudioSubscriber,
     // pub network: NetworkSubscriber,
@@ -31,7 +37,8 @@ impl Services {
     /// Services will begin monitoring system state immediately.
     pub async fn new() -> anyhow::Result<Self> {
         let upower = UPowerSubscriber::new().await?;
+        let compositor = CompositorSubscriber::new().await?;
 
-        Ok(Self { upower })
+        Ok(Self { upower, compositor })
     }
 }
