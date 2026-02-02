@@ -1,0 +1,24 @@
+[package]
+name = "gpuishell"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "gpuishell"
+path = "src/main.rs"
+
+[dependencies]
+gpui.workspace = true
+ui.workspace = true
+assets.workspace = true
+services.workspace = true
+zbus.workspace = true
+futures.workspace = true
+anyhow.workspace = true
+futures-util.workspace = true
+futures-signals.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+hyprland.workspace = true
+tokio.workspace = true
