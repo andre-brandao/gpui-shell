@@ -7,7 +7,7 @@ use gpui::{AnyElement, Context, Entity, prelude::*};
 
 use services::Services;
 
-use super::{Battery, Clock, KeyboardLayout, SysInfo, Tray, Workspaces};
+use super::{Battery, Clock, KeyboardLayout, LauncherBtn, SysInfo, Tray, Workspaces};
 
 /// Wrapper enum for all possible widget types.
 ///
@@ -21,8 +21,8 @@ pub enum Widget {
     KeyboardLayout(Entity<KeyboardLayout>),
     Tray(Entity<Tray>),
     SysInfo(Entity<SysInfo>),
+    LauncherBtn(Entity<LauncherBtn>),
     // Future widgets:
-    // LauncherBtn(Entity<LauncherBtn>),
     // Info(Entity<Info>),
 }
 
@@ -38,6 +38,7 @@ impl Widget {
             Widget::KeyboardLayout(e) => e.clone().into_any_element(),
             Widget::Tray(e) => e.clone().into_any_element(),
             Widget::SysInfo(e) => e.clone().into_any_element(),
+            Widget::LauncherBtn(e) => e.clone().into_any_element(),
         }
     }
 
@@ -73,10 +74,10 @@ impl Widget {
             "SysInfo" => Some(Widget::SysInfo(
                 cx.new(|cx| SysInfo::new(services.sysinfo.clone(), cx)),
             )),
+            "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(
+                cx.new(|cx| LauncherBtn::new(services.clone(), cx)),
+            )),
             // Future widgets:
-            // "LauncherBtn" => Some(Widget::LauncherBtn(
-            //     cx.new(|cx| LauncherBtn::new(services.clone(), cx)),
-            // )),
             // "Info" => Some(Widget::Info(
             //     cx.new(|cx| Info::new(services.clone(), cx)),
             // )),

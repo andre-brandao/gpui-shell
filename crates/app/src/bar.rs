@@ -29,7 +29,7 @@ impl Default for BarConfig {
     fn default() -> Self {
         BarConfig {
             left: vec![
-                // "LauncherBtn".to_string(),
+                "LauncherBtn".to_string(),
                 "Workspaces".to_string(),
                 "SysInfo".to_string(),
             ],

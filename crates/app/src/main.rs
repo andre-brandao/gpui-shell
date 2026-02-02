@@ -6,8 +6,9 @@ use services::Services;
 use tracing_subscriber::EnvFilter;
 
 mod bar;
+pub mod launcher;
 mod panel;
-mod widgets;
+pub mod widgets;
 
 #[tokio::main]
 async fn main() {
@@ -26,6 +27,10 @@ async fn main() {
 
     // Create and run the GPUI application
     Application::new().with_assets(Assets {}).run(|cx| {
+        // Register launcher keybindings
+        launcher::register_keybindings(cx);
+
+        // Open the status bar
         bar::open(services, cx);
     });
 }
