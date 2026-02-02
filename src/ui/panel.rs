@@ -1,3 +1,4 @@
+use crate::theme::{bg, border, radius, spacing, text};
 use gpui::{
     AnyElement, AnyWindowHandle, App, Bounds, Point, Render, Size, WindowBackgroundAppearance,
     WindowBounds, WindowKind, WindowOptions, layer_shell::*, prelude::*, px,
@@ -123,18 +124,18 @@ pub fn active_panel_id() -> Option<String> {
 /// Helper to create a panel with default styling.
 /// Use this in your panel content widget's render method.
 pub fn panel_container(children: Vec<AnyElement>) -> impl IntoElement {
-    use gpui::{div, rgba};
+    use gpui::div;
 
     div()
         .size_full()
-        .bg(rgba(0x1a1a1aee))
+        .bg(bg::primary())
         .border_1()
-        .border_color(rgba(0x333333ff))
-        .rounded(px(12.))
-        .p(px(16.))
-        .text_color(rgba(0xffffffff))
+        .border_color(border::default())
+        .rounded(px(radius::LG))
+        .p(px(spacing::LG))
+        .text_color(text::primary())
         .flex()
         .flex_col()
-        .gap(px(16.))
+        .gap(px(spacing::LG))
         .children(children)
 }

@@ -14,7 +14,8 @@ use crate::services::bluetooth::{BluetoothCommand, BluetoothState};
 use crate::services::brightness::BrightnessCommand;
 use crate::services::network::NetworkCommand;
 use crate::services::upower::{BatteryStatus, PowerProfile, UPowerCommand};
-use gpui::{Context, FontWeight, MouseButton, ScrollHandle, Window, div, prelude::*, px, rgba};
+use crate::theme::{accent, bg, font_size, icon_size, interactive, radius, spacing, status, text};
+use gpui::{Context, FontWeight, MouseButton, ScrollHandle, Window, div, prelude::*, px};
 
 /// Nerd Font icons for control center
 pub mod icons {
@@ -84,19 +85,19 @@ impl ControlCenter {
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
-            .mb(px(8.))
+            .gap(px(spacing::SM))
+            .mb(px(spacing::SM))
             .child(
                 div()
-                    .text_size(px(14.))
-                    .text_color(rgba(0x888888ff))
+                    .text_size(px(icon_size::MD))
+                    .text_color(text::muted())
                     .child(icon.to_string()),
             )
             .child(
                 div()
-                    .text_size(px(12.))
+                    .text_size(px(font_size::SM))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgba(0x888888ff))
+                    .text_color(text::muted())
                     .child(title.to_string()),
             )
     }
@@ -110,9 +111,9 @@ impl ControlCenter {
         on_click: impl Fn(&mut gpui::App) + 'static,
     ) -> impl IntoElement {
         let bg_color = if is_active {
-            rgba(0x3b82f6ff) // blue when active
+            interactive::toggle_on()
         } else {
-            rgba(0x333333ff) // dark when inactive
+            interactive::default()
         };
 
         div()
@@ -123,27 +124,32 @@ impl ControlCenter {
             .justify_center()
             .w(px(72.))
             .h(px(72.))
-            .rounded(px(12.))
+            .rounded(px(radius::MD))
             .bg(bg_color)
             .cursor_pointer()
             .hover(|s| {
                 if is_active {
-                    s.bg(rgba(0x2563ebff))
+                    s.bg(interactive::toggle_on_hover())
                 } else {
-                    s.bg(rgba(0x444444ff))
+                    s.bg(interactive::hover())
                 }
             })
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 on_click(cx);
             })
-            .child(div().text_size(px(20.)).mb(px(4.)).child(icon.to_string()))
             .child(
                 div()
-                    .text_size(px(10.))
+                    .text_size(px(20.))
+                    .mb(px(spacing::XS))
+                    .child(icon.to_string()),
+            )
+            .child(
+                div()
+                    .text_size(px(font_size::XS))
                     .text_color(if is_active {
-                        rgba(0xffffffff)
+                        text::primary()
                     } else {
-                        rgba(0xaaaaaaff)
+                        text::secondary()
                     })
                     .child(label.to_string()),
             )
@@ -164,16 +170,21 @@ impl ControlCenter {
         div()
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap(px(spacing::MD))
             .w_full()
-            .child(div().w(px(24.)).text_size(px(16.)).child(icon.to_string()))
+            .child(
+                div()
+                    .w(px(24.))
+                    .text_size(px(icon_size::LG))
+                    .child(icon.to_string()),
+            )
             .child(
                 div()
                     .id(id_str.clone())
                     .flex_1()
                     .h(px(32.))
-                    .bg(rgba(0x333333ff))
-                    .rounded(px(8.))
+                    .bg(bg::tertiary())
+                    .rounded(px(radius::MD))
                     .cursor_pointer()
                     .overflow_hidden()
                     .relative()
@@ -184,8 +195,8 @@ impl ControlCenter {
                             .left_0()
                             .h_full()
                             .w(gpui::relative(width_fraction))
-                            .bg(rgba(0x3b82f6ff))
-                            .rounded(px(8.)),
+                            .bg(accent::primary())
+                            .rounded(px(radius::MD)),
                     )
                     .child(
                         div()
@@ -194,7 +205,7 @@ impl ControlCenter {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_size(px(12.))
+                            .text_size(px(font_size::SM))
                             .font_weight(FontWeight::MEDIUM)
                             .child(format!("{}%", percentage)),
                     ), // Note: Click-to-set position would require bounds tracking
@@ -203,8 +214,8 @@ impl ControlCenter {
             .child(
                 div()
                     .w(px(36.))
-                    .text_size(px(12.))
-                    .text_color(rgba(0x888888ff))
+                    .text_size(px(font_size::SM))
+                    .text_color(text::muted())
                     .text_right()
                     .child(format!("{}%", percentage)),
             )
@@ -236,12 +247,12 @@ impl ControlCenter {
 
         div()
             .w_full()
-            .p(px(12.))
-            .bg(rgba(0x2a2a2aff))
-            .rounded(px(12.))
+            .p(px(spacing::MD))
+            .bg(bg::secondary())
+            .rounded(px(radius::MD))
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap(px(spacing::SM))
             .child(Self::render_section_header(icons::VOLUME_HIGH, "Audio"))
             // Volume slider
             .child({
@@ -256,8 +267,8 @@ impl ControlCenter {
             .child(
                 div()
                     .flex()
-                    .gap(px(8.))
-                    .mt(px(4.))
+                    .gap(px(spacing::SM))
+                    .mt(px(spacing::XS))
                     .child({
                         let services_clone = services.clone();
                         Self::render_toggle("mute-toggle", volume_icon, "Mute", muted, move |cx| {
@@ -299,12 +310,12 @@ impl ControlCenter {
 
         div()
             .w_full()
-            .p(px(12.))
-            .bg(rgba(0x2a2a2aff))
-            .rounded(px(12.))
+            .p(px(spacing::MD))
+            .bg(bg::secondary())
+            .rounded(px(radius::MD))
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap(px(spacing::SM))
             .child(Self::render_section_header(
                 icons::BRIGHTNESS_HIGH,
                 "Display",
@@ -345,12 +356,12 @@ impl ControlCenter {
 
         div()
             .w_full()
-            .p(px(12.))
-            .bg(rgba(0x2a2a2aff))
-            .rounded(px(12.))
+            .p(px(spacing::MD))
+            .bg(bg::secondary())
+            .rounded(px(radius::MD))
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap(px(spacing::SM))
             .child(Self::render_section_header(
                 icons::SETTINGS,
                 "Quick Settings",
@@ -359,7 +370,7 @@ impl ControlCenter {
                 div()
                     .flex()
                     .flex_wrap()
-                    .gap(px(8.))
+                    .gap(px(spacing::SM))
                     .child({
                         let services_clone = services.clone();
                         Self::render_toggle(
@@ -406,12 +417,12 @@ impl ControlCenter {
 
         div()
             .w_full()
-            .p(px(12.))
-            .bg(rgba(0x2a2a2aff))
-            .rounded(px(12.))
+            .p(px(spacing::MD))
+            .bg(bg::secondary())
+            .rounded(px(radius::MD))
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap(px(spacing::SM))
             .child(Self::render_section_header(
                 icons::BLUETOOTH,
                 "Bluetooth Devices",
@@ -429,11 +440,11 @@ impl ControlCenter {
                     .items_center()
                     .justify_between()
                     .w_full()
-                    .px(px(8.))
-                    .py(px(6.))
-                    .rounded(px(6.))
+                    .px(px(spacing::SM))
+                    .py(px(spacing::SM - 2.0))
+                    .rounded(px(radius::SM))
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgba(0x444444ff)))
+                    .hover(|s| s.bg(interactive::hover()))
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         services_clone.bluetooth.update(cx, |bt, cx| {
                             if connected {
@@ -447,14 +458,14 @@ impl ControlCenter {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(8.))
+                            .gap(px(spacing::SM))
                             .child(
                                 div()
-                                    .text_size(px(14.))
+                                    .text_size(px(icon_size::MD))
                                     .text_color(if connected {
-                                        rgba(0x3b82f6ff)
+                                        accent::primary()
                                     } else {
-                                        rgba(0x888888ff)
+                                        text::muted()
                                     })
                                     .child(if connected {
                                         icons::BLUETOOTH_CONNECTED
@@ -466,11 +477,11 @@ impl ControlCenter {
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .child(div().text_size(px(12.)).child(name.clone()))
+                                    .child(div().text_size(px(font_size::SM)).child(name.clone()))
                                     .child(
                                         div()
-                                            .text_size(px(10.))
-                                            .text_color(rgba(0x666666ff))
+                                            .text_size(px(font_size::XS))
+                                            .text_color(text::disabled())
                                             .child(if connected { "Connected" } else { "Paired" }),
                                     ),
                             ),
@@ -478,8 +489,8 @@ impl ControlCenter {
                     .when_some(battery, |el, bat| {
                         el.child(
                             div()
-                                .text_size(px(10.))
-                                .text_color(rgba(0x888888ff))
+                                .text_size(px(font_size::XS))
+                                .text_color(text::muted())
                                 .child(format!("{}%", bat)),
                         )
                     })
@@ -531,28 +542,28 @@ impl ControlCenter {
 
         div()
             .w_full()
-            .p(px(12.))
-            .bg(rgba(0x2a2a2aff))
-            .rounded(px(12.))
+            .p(px(spacing::MD))
+            .bg(bg::secondary())
+            .rounded(px(radius::MD))
             .flex()
             .flex_col()
-            .gap(px(12.))
+            .gap(px(spacing::MD))
             .child(Self::render_section_header(icons::BATTERY_FULL, "Power"))
             // Battery info
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(12.))
+                    .gap(px(spacing::MD))
                     .child(
                         div()
                             .text_size(px(24.))
                             .text_color(if battery.percentage <= 20 {
-                                rgba(0xef4444ff)
+                                status::error()
                             } else if battery.status == BatteryStatus::Charging {
-                                rgba(0x22c55eff)
+                                status::success()
                             } else {
-                                rgba(0xffffffff)
+                                text::primary()
                             })
                             .child(bat_icon),
                     )
@@ -562,14 +573,14 @@ impl ControlCenter {
                             .flex_col()
                             .child(
                                 div()
-                                    .text_size(px(16.))
+                                    .text_size(px(font_size::LG))
                                     .font_weight(FontWeight::BOLD)
                                     .child(format!("{}%", battery.percentage)),
                             )
                             .child(
                                 div()
-                                    .text_size(px(11.))
-                                    .text_color(rgba(0x888888ff))
+                                    .text_size(px(font_size::SM))
+                                    .text_color(text::muted())
                                     .child(status_text),
                             ),
                     ),
@@ -584,19 +595,23 @@ impl ControlCenter {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(8.))
-                            .child(div().text_size(px(14.)).child(icons::POWER_PROFILE))
-                            .child(div().text_size(px(12.)).child("Power Profile")),
+                            .gap(px(spacing::SM))
+                            .child(
+                                div()
+                                    .text_size(px(icon_size::MD))
+                                    .child(icons::POWER_PROFILE),
+                            )
+                            .child(div().text_size(px(font_size::SM)).child("Power Profile")),
                     )
                     .child(
                         div()
                             .id("power-profile-btn")
                             .px(px(10.))
-                            .py(px(4.))
-                            .bg(rgba(0x444444ff))
-                            .rounded(px(6.))
+                            .py(px(spacing::XS))
+                            .bg(interactive::default())
+                            .rounded(px(radius::SM))
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgba(0x555555ff)))
+                            .hover(|s| s.bg(interactive::hover()))
                             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                                 services.upower.update(cx, |upower, cx| {
                                     upower.dispatch(UPowerCommand::CyclePowerProfile, cx);
@@ -604,7 +619,7 @@ impl ControlCenter {
                             })
                             .child(
                                 div()
-                                    .text_size(px(11.))
+                                    .text_size(px(font_size::SM))
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(profile_name),
                             ),
@@ -620,10 +635,10 @@ impl Render for ControlCenter {
             .id("control-center")
             .w_full()
             .h_full()
-            .p(px(12.))
+            .p(px(spacing::MD))
             .flex()
             .flex_col()
-            .gap(px(12.))
+            .gap(px(spacing::MD))
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
             // Header
@@ -631,12 +646,18 @@ impl Render for ControlCenter {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .mb(px(4.))
-                    .child(div().text_size(px(18.)).child(icons::SETTINGS))
+                    .gap(px(spacing::SM))
+                    .mb(px(spacing::XS))
                     .child(
                         div()
-                            .text_size(px(16.))
+                            .text_size(px(icon_size::XL))
+                            .text_color(text::primary())
+                            .child(icons::SETTINGS),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(font_size::LG))
+                            .text_color(text::primary())
                             .font_weight(FontWeight::BOLD)
                             .child("Control Center"),
                     ),

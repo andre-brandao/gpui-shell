@@ -1,8 +1,9 @@
 //! Info panel that wraps the shared ControlCenter component.
 
 use crate::services::Services;
+use crate::theme::{bg, border, radius, text};
 use crate::ui::ControlCenter;
-use gpui::{Context, Entity, FocusHandle, Focusable, Window, div, prelude::*, px, rgba};
+use gpui::{Context, Entity, FocusHandle, Focusable, Window, div, prelude::*, px};
 
 /// Info panel content - wraps the shared ControlCenter component.
 pub struct InfoPanelContent {
@@ -32,17 +33,17 @@ impl Focusable for InfoPanelContent {
 }
 
 impl Render for InfoPanelContent {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("info-panel-content")
             .track_focus(&self.focus_handle)
             .key_context("InfoPanel")
             .size_full()
-            .bg(rgba(0x1a1a1aee))
+            .bg(bg::primary())
             .border_1()
-            .border_color(rgba(0x333333ff))
-            .rounded(px(12.))
-            .text_color(rgba(0xffffffff))
+            .border_color(border::default())
+            .rounded(px(radius::LG))
+            .text_color(text::primary())
             .child(self.control_center.clone())
     }
 }

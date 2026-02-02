@@ -1,10 +1,11 @@
 use gpui::{
     AnyElement, App, AppContext, Bounds, Context, FontWeight, Size, Window,
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
-    point, prelude::*, px, rems, rgba, white,
+    point, prelude::*, px, rems,
 };
 
 use crate::services::Services;
+use crate::theme::{bg, border, spacing, text};
 use crate::widgets::Widget;
 
 pub const BAR_HEIGHT: f32 = 32.0;
@@ -61,17 +62,19 @@ impl Render for LayerShellBar {
             .flex()
             .items_center()
             .justify_between()
-            .px(px(16.))
+            .px(px(spacing::LG))
             .text_size(rems(0.67))
             .font_weight(FontWeight::MEDIUM)
-            .text_color(white())
-            .bg(rgba(0x1a1a1aff))
+            .text_color(text::primary())
+            .bg(bg::primary())
+            .border_b_1()
+            .border_color(border::default())
             // Left section
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(spacing::SM))
                     .children(left_elements),
             )
             // Center section
@@ -79,7 +82,7 @@ impl Render for LayerShellBar {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(spacing::SM))
                     .children(center_elements),
             )
             // Right section
@@ -87,7 +90,7 @@ impl Render for LayerShellBar {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(12.))
+                    .gap(px(spacing::MD))
                     .children(right_elements),
             )
     }

@@ -2,8 +2,9 @@ mod panel;
 
 use crate::services::Services;
 use crate::services::upower::{BatteryStatus, PowerProfile};
+use crate::theme::{icon_size, interactive, radius, spacing, status, text};
 use crate::ui::{PanelConfig, toggle_panel};
-use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px, rgba};
+use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
 use panel::InfoPanelContent;
 
 pub use panel::InfoPanelContent as InfoPanel;
@@ -103,18 +104,18 @@ impl Info {
         }
     }
 
-    fn privacy_icons(&self, cx: &Context<Self>) -> Vec<(&'static str, &'static str)> {
+    fn privacy_icons(&self, cx: &Context<Self>) -> Vec<&'static str> {
         let privacy = self.services.privacy.read(cx);
         let mut icons = Vec::new();
 
         if privacy.microphone_access() {
-            icons.push(("", "#ef4444")); // FontAwesome microphone
+            icons.push(""); // FontAwesome microphone
         }
         if privacy.webcam_access() {
-            icons.push(("", "#ef4444")); // FontAwesome camera
+            icons.push(""); // FontAwesome camera
         }
         if privacy.screenshare_access() {
-            icons.push(("󰍹", "#ef4444")); // red screen
+            icons.push("󰍹"); // screen
         }
 
         icons
@@ -147,12 +148,13 @@ impl Render for Info {
             .id("info-widget")
             .flex()
             .items_center()
-            .gap(px(8.))
-            .px(px(8.))
-            .py(px(4.))
-            .rounded(px(4.))
+            .gap(px(spacing::SM))
+            .px(px(spacing::SM))
+            .py(px(spacing::XS))
+            .rounded(px(radius::SM))
             .cursor_pointer()
-            .hover(|s| s.bg(rgba(0x333333ff)))
+            .hover(|s| s.bg(interactive::hover()))
+            .active(|s| s.bg(interactive::active()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
@@ -160,26 +162,53 @@ impl Render for Info {
                 }),
             )
             // Privacy icons (only shown when active)
-            .children(privacy_icons.into_iter().map(|(icon, color)| {
+            .children(privacy_icons.into_iter().map(|icon| {
                 div()
-                    .text_size(px(14.))
-                    .text_color(gpui::Hsla::from(gpui::rgb(0xef4444)))
+                    .text_size(px(icon_size::MD))
+                    .text_color(status::error())
                     .child(icon)
             }))
             // Volume icon
-            .child(div().text_size(px(14.)).child(volume_icon))
+            .child(
+                div()
+                    .text_size(px(icon_size::MD))
+                    .text_color(text::primary())
+                    .child(volume_icon),
+            )
             // WiFi icon
-            .child(div().text_size(px(14.)).child(wifi_icon))
+            .child(
+                div()
+                    .text_size(px(icon_size::MD))
+                    .text_color(text::primary())
+                    .child(wifi_icon),
+            )
             // Power profile icon
-            .child(div().text_size(px(14.)).child(self.power_profile_icon(cx)))
+            .child(
+                div()
+                    .text_size(px(icon_size::MD))
+                    .text_color(text::primary())
+                    .child(self.power_profile_icon(cx)),
+            )
             // Battery icon and percentage
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(2.))
-                    .child(div().text_size(px(14.)).child(battery_icon))
-                    .child(battery_text),
+                    .child(
+                        div()
+                            .text_size(px(icon_size::MD))
+                            .text_color(text::primary())
+                            .child(battery_icon),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(font_size::SM))
+                            .text_color(text::secondary())
+                            .child(battery_text),
+                    ),
             )
     }
 }
+
+use crate::theme::font_size;

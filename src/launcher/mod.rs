@@ -2,10 +2,11 @@ mod view;
 mod views;
 
 use crate::services::Services;
+use crate::theme::{bg, border, font_size, icon_size, interactive, radius, spacing, text};
 use gpui::{
     App, AppContext, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, ScrollHandle,
     Size, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
-    WindowOptions, actions, div, layer_shell::*, prelude::*, px, rgba,
+    WindowOptions, actions, div, layer_shell::*, prelude::*, px,
 };
 use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput};
 use views::{HelpView, all_views, register_all_observers};
@@ -321,11 +322,11 @@ impl Render for Launcher {
                 }),
             )
             .size_full()
-            .bg(rgba(0x1e1e1eff))
+            .bg(bg::primary())
             .border_1()
-            .border_color(rgba(0x3c3c3cff))
-            .rounded(px(8.))
-            .text_color(rgba(0xffffffff))
+            .border_color(border::default())
+            .rounded(px(radius::LG))
+            .text_color(text::primary())
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -333,44 +334,44 @@ impl Render for Launcher {
             .child(
                 div()
                     .w_full()
-                    .px(px(16.))
-                    .py(px(12.))
+                    .px(px(spacing::LG))
+                    .py(px(spacing::MD))
                     .flex()
                     .items_center()
-                    .gap(px(12.))
+                    .gap(px(spacing::MD))
                     // Search icon
                     .child(
                         div()
-                            .text_size(px(16.))
-                            .text_color(rgba(0x888888ff))
+                            .text_size(px(icon_size::LG))
+                            .text_color(text::muted())
                             .child(""),
                     )
                     // Search text
                     .child(
                         div()
                             .flex_1()
-                            .text_size(px(14.))
+                            .text_size(px(font_size::MD))
                             .child(if query.is_empty() { placeholder } else { query })
                             .text_color(if is_empty {
-                                rgba(0x6e6e6eff)
+                                text::placeholder()
                             } else {
-                                rgba(0xffffffff)
+                                text::primary()
                             }),
                     )
                     // View badge (right side)
                     .child(
                         div()
-                            .px(px(8.))
+                            .px(px(spacing::SM))
                             .py(px(3.))
-                            .rounded(px(4.))
-                            .bg(rgba(0x3b3b3bff))
-                            .text_size(px(11.))
-                            .text_color(rgba(0xaaaaaaff))
+                            .rounded(px(radius::SM))
+                            .bg(interactive::default())
+                            .text_size(px(font_size::SM))
+                            .text_color(text::secondary())
                             .child(view_name),
                     ),
             )
             // Divider line
-            .child(div().w_full().h(px(1.)).bg(rgba(0x3c3c3cff)))
+            .child(div().w_full().h(px(1.)).bg(border::default()))
             // View content with scroll support
             .child(
                 div()
@@ -378,16 +379,16 @@ impl Render for Launcher {
                     .flex_1()
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll_handle)
-                    .py(px(4.))
+                    .py(px(spacing::XS))
                     .child(view_content),
             )
             // Bottom footer bar
-            .child(div().w_full().h(px(1.)).bg(rgba(0x3c3c3cff)))
+            .child(div().w_full().h(px(1.)).bg(border::default()))
             .child(
                 div()
                     .w_full()
-                    .px(px(16.))
-                    .py(px(8.))
+                    .px(px(spacing::LG))
+                    .py(px(spacing::SM))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -396,9 +397,9 @@ impl Render for Launcher {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(8.))
-                            .text_size(px(12.))
-                            .text_color(rgba(0x6e6e6eff))
+                            .gap(px(spacing::SM))
+                            .text_size(px(font_size::SM))
+                            .text_color(text::disabled())
                             .child(""),
                     )
                     // Right side - action hints from view
@@ -406,19 +407,24 @@ impl Render for Launcher {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(16.))
-                            .text_size(px(12.))
-                            .text_color(rgba(0x888888ff))
+                            .gap(px(spacing::LG))
+                            .text_size(px(font_size::SM))
+                            .text_color(text::muted())
                             .children(footer_actions.into_iter().map(|(action, key)| {
-                                div().flex().items_center().gap(px(6.)).child(action).child(
-                                    div()
-                                        .px(px(6.))
-                                        .py(px(2.))
-                                        .rounded(px(3.))
-                                        .bg(rgba(0x3b3b3bff))
-                                        .text_size(px(10.))
-                                        .child(key),
-                                )
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(spacing::SM - 2.0))
+                                    .child(action)
+                                    .child(
+                                        div()
+                                            .px(px(spacing::SM - 2.0))
+                                            .py(px(2.))
+                                            .rounded(px(radius::SM - 1.0))
+                                            .bg(interactive::default())
+                                            .text_size(px(font_size::XS))
+                                            .child(key),
+                                    )
                             })),
                     ),
             )

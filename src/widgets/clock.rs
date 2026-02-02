@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui::{Context, Window, div, prelude::*};
+use crate::theme::{font_size, text};
+use gpui::{Context, Window, div, prelude::*, px};
 
 pub struct Clock;
 
@@ -79,9 +80,14 @@ impl Render for Clock {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let (hours, minutes, seconds, day, month, year) = self.get_time();
 
-        div().flex().items_center().child(format!(
-            "{:02}/{:02}/{} {:02}:{:02}:{:02}",
-            day, month, year, hours, minutes, seconds
-        ))
+        div()
+            .flex()
+            .items_center()
+            .text_size(px(font_size::BASE))
+            .text_color(text::primary())
+            .child(format!(
+                "{:02}/{:02}/{} {:02}:{:02}:{:02}",
+                day, month, year, hours, minutes, seconds
+            ))
     }
 }

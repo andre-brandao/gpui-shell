@@ -1,6 +1,7 @@
 use crate::services::Services;
+use crate::theme::{font_size, icon_size, interactive, radius, spacing, status};
 use crate::ui::{PanelConfig, toggle_panel};
-use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px, rgba};
+use gpui::{Context, Hsla, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
 
 mod panel;
 pub use panel::SysInfoPanelContent;
@@ -81,30 +82,14 @@ impl SysInfoWidget {
         }
     }
 
-    fn cpu_color(&self, cx: &Context<Self>) -> gpui::Hsla {
+    fn cpu_color(&self, cx: &Context<Self>) -> Hsla {
         let sysinfo = self.services.sysinfo.read(cx);
-        let usage = sysinfo.cpu_usage;
-
-        if usage >= 90 {
-            gpui::rgb(0xef4444).into() // red - critical
-        } else if usage >= 70 {
-            gpui::rgb(0xf59e0b).into() // amber - warning
-        } else {
-            gpui::rgb(0xffffff).into() // white - normal
-        }
+        status::from_percentage(sysinfo.cpu_usage)
     }
 
-    fn memory_color(&self, cx: &Context<Self>) -> gpui::Hsla {
+    fn memory_color(&self, cx: &Context<Self>) -> Hsla {
         let sysinfo = self.services.sysinfo.read(cx);
-        let usage = sysinfo.memory_usage;
-
-        if usage >= 90 {
-            gpui::rgb(0xef4444).into() // red - critical
-        } else if usage >= 70 {
-            gpui::rgb(0xf59e0b).into() // amber - warning
-        } else {
-            gpui::rgb(0xffffff).into() // white - normal
-        }
+        status::from_percentage(sysinfo.memory_usage)
     }
 }
 
@@ -122,12 +107,13 @@ impl Render for SysInfoWidget {
             .id("sysinfo-widget")
             .flex()
             .items_center()
-            .gap(px(8.))
-            .px(px(8.))
-            .py(px(4.))
-            .rounded(px(4.))
+            .gap(px(spacing::SM))
+            .px(px(spacing::SM))
+            .py(px(spacing::XS))
+            .rounded(px(radius::SM))
             .cursor_pointer()
-            .hover(|s| s.bg(rgba(0x333333ff)))
+            .hover(|s| s.bg(interactive::hover()))
+            .active(|s| s.bg(interactive::active()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
@@ -139,16 +125,16 @@ impl Render for SysInfoWidget {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(4.))
+                    .gap(px(spacing::XS))
                     .child(
                         div()
-                            .text_size(px(14.))
+                            .text_size(px(icon_size::MD))
                             .text_color(cpu_color)
                             .child(cpu_icon),
                     )
                     .child(
                         div()
-                            .text_size(px(12.))
+                            .text_size(px(font_size::SM))
                             .text_color(cpu_color)
                             .child(format!("{}%", cpu_usage)),
                     ),
@@ -158,16 +144,16 @@ impl Render for SysInfoWidget {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(4.))
+                    .gap(px(spacing::XS))
                     .child(
                         div()
-                            .text_size(px(14.))
+                            .text_size(px(icon_size::MD))
                             .text_color(memory_color)
                             .child(memory_icon),
                     )
                     .child(
                         div()
-                            .text_size(px(12.))
+                            .text_size(px(font_size::SM))
                             .text_color(memory_color)
                             .child(format!("{}%", memory_usage)),
                     ),

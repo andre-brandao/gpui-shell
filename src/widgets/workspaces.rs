@@ -1,6 +1,7 @@
 use crate::services::Services;
 use crate::services::compositor::{Compositor, CompositorCommand};
-use gpui::{Context, Entity, MouseButton, Window, div, prelude::*, px, rgba};
+use crate::theme::{accent, interactive, radius, spacing, text};
+use gpui::{Context, Entity, MouseButton, Window, div, prelude::*, px};
 
 pub struct Workspaces {
     compositor: Entity<Compositor>,
@@ -22,7 +23,7 @@ impl Render for Workspaces {
         let compositor = self.compositor.read(cx);
         let active_workspace_id = compositor.active_workspace_id;
 
-        div().flex().items_center().gap(px(4.)).children(
+        div().flex().items_center().gap(px(spacing::XS)).children(
             compositor
                 .workspaces
                 .iter()
@@ -34,13 +35,25 @@ impl Render for Workspaces {
 
                     div()
                         .id(format!("workspace-{}", ws.id))
-                        .px(if is_active { px(16.) } else { px(8.) })
-                        .py(px(2.))
-                        .rounded(px(25.))
-                        .bg(if is_active {
-                            rgba(0x3b82f6ff)
+                        .px(if is_active {
+                            px(spacing::MD)
                         } else {
-                            rgba(0x333333ff)
+                            px(spacing::SM)
+                        })
+                        .py(px(2.))
+                        .rounded(px(radius::SM))
+                        .cursor_pointer()
+                        .bg(if is_active {
+                            accent::primary()
+                        } else {
+                            interactive::default()
+                        })
+                        .hover(|s| {
+                            if is_active {
+                                s.bg(accent::hover())
+                            } else {
+                                s.bg(interactive::hover())
+                            }
                         })
                         .on_mouse_down(
                             MouseButton::Left,
@@ -53,7 +66,15 @@ impl Render for Workspaces {
                                 });
                             }),
                         )
-                        .child(ws.name.clone())
+                        .child(
+                            div()
+                                .text_color(if is_active {
+                                    text::primary()
+                                } else {
+                                    text::secondary()
+                                })
+                                .child(ws.name.clone()),
+                        )
                 }),
         )
     }

@@ -1,5 +1,6 @@
 use crate::services::Services;
-use gpui::{AnyElement, App, Context, MouseButton, div, prelude::*, px, rgba};
+use crate::theme::{accent, font_size, interactive, radius, spacing, text};
+use gpui::{AnyElement, App, Context, FontWeight, MouseButton, div, prelude::*, px};
 
 /// Height of each list item in pixels
 pub const LIST_ITEM_HEIGHT: f32 = 48.0;
@@ -118,14 +119,14 @@ pub fn render_list_item(
         .id(id.into())
         .w_full()
         .h(px(LIST_ITEM_HEIGHT))
-        .mx(px(8.))
-        .px(px(8.))
-        .rounded(px(4.))
+        .mx(px(spacing::SM))
+        .px(px(spacing::SM))
+        .rounded(px(radius::SM))
         .cursor_pointer()
         .flex()
         .items_center()
-        .when(is_selected, |el| el.bg(rgba(0x094771ff)))
-        .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x2a2a2aff))))
+        .when(is_selected, |el| el.bg(accent::selection()))
+        .when(!is_selected, |el| el.hover(|s| s.bg(interactive::hover())))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
@@ -133,17 +134,17 @@ pub fn render_list_item(
             div()
                 .flex()
                 .items_center()
-                .gap(px(10.))
+                .gap(px(spacing::SM + 2.0))
                 .child(
                     div()
                         .w(px(28.))
                         .h(px(28.))
-                        .rounded(px(4.))
-                        .bg(rgba(0x3b3b3bff))
+                        .rounded(px(radius::SM))
+                        .bg(interactive::default())
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(px(14.))
+                        .text_size(px(font_size::MD))
                         .child(icon.to_string()),
                 )
                 .child(
@@ -153,15 +154,16 @@ pub fn render_list_item(
                         .gap(px(1.))
                         .child(
                             div()
-                                .text_size(px(13.))
-                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_size(px(font_size::BASE))
+                                .text_color(text::primary())
+                                .font_weight(FontWeight::MEDIUM)
                                 .child(title.to_string()),
                         )
                         .when_some(subtitle, |el, sub| {
                             el.child(
                                 div()
-                                    .text_size(px(11.))
-                                    .text_color(rgba(0x6e6e6eff))
+                                    .text_size(px(font_size::SM))
+                                    .text_color(text::disabled())
                                     .child(sub.to_string()),
                             )
                         }),

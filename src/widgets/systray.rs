@@ -1,7 +1,7 @@
+use crate::theme::{bg, border, interactive, radius, spacing, text};
 use crate::ui::{PanelConfig, toggle_panel};
 use gpui::{
     AnyElement, App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px, rgba,
-    white,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, mpsc};
@@ -170,11 +170,12 @@ impl Systray {
 
         div()
             .id(item.id.clone())
-            .px(px(6.))
-            .py(px(4.))
-            .rounded(px(4.))
+            .px(px(spacing::SM - 2.0))
+            .py(px(spacing::XS))
+            .rounded(px(radius::SM))
             .cursor_pointer()
-            .hover(|s| s.bg(rgba(0x333333ff)))
+            .hover(|s| s.bg(interactive::hover()))
+            .active(|s| s.bg(interactive::active()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
@@ -291,8 +292,8 @@ impl SystrayMenuContent {
                     div()
                         .h(px(1.))
                         .w_full()
-                        .bg(rgba(0x444444ff))
-                        .my(px(4.))
+                        .bg(border::default())
+                        .my(px(spacing::XS))
                         .into_any_element(),
                 );
                 continue;
@@ -308,12 +309,12 @@ impl SystrayMenuContent {
                 div()
                     .id(format!("menu-item-{}", submenu_id))
                     .w_full()
-                    .pl(px(12.0 + indent as f32))
-                    .pr(px(12.))
-                    .py(px(6.))
+                    .pl(px(spacing::MD + indent as f32))
+                    .pr(px(spacing::MD))
+                    .py(px(spacing::SM - 2.0))
                     .cursor_pointer()
                     .when(!enabled, |s| s.opacity(0.5))
-                    .hover(|s| s.bg(rgba(0x3b82f6ff)))
+                    .hover(|s| s.bg(interactive::hover()))
                     .when(enabled && !has_submenu, |el| {
                         el.on_click(cx.listener(move |this, _, window, _cx| {
                             this.activate_menu_item(submenu_id, window);
@@ -348,12 +349,12 @@ impl Render for SystrayMenuContent {
         div()
             .id("systray-menu")
             .size_full()
-            .bg(rgba(0x1a1a1aee))
+            .bg(rgba(bg::PRIMARY))
             .border_1()
-            .border_color(rgba(0x333333ff))
-            .rounded(px(12.))
-            .py(px(8.))
-            .text_color(white())
+            .border_color(border::default())
+            .rounded(px(radius::LG))
+            .py(px(spacing::SM))
+            .text_color(text::primary())
             .overflow_hidden()
             .children(menu_items)
     }
