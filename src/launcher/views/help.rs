@@ -1,4 +1,4 @@
-use crate::launcher::view::{InputResult, LauncherView, ViewContext, ViewInput};
+use crate::launcher::view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput};
 use crate::widgets::sysinfo::icons;
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
 
@@ -211,6 +211,7 @@ impl HelpView {
                 div()
                     .id(format!("cmd-{}", entry.prefix))
                     .w_full()
+                    .h(px(LIST_ITEM_HEIGHT))
                     .px(px(12.))
                     .py(px(8.))
                     .rounded(px(6.))
@@ -298,7 +299,6 @@ impl LauncherView for HelpView {
 
         let element = div()
             .flex_1()
-            .overflow_hidden()
             .flex()
             .flex_col()
             .gap(px(16.))

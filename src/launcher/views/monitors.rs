@@ -42,7 +42,6 @@ impl LauncherView for MonitorsView {
 
         let element = div()
             .flex_1()
-            .overflow_hidden()
             .flex()
             .flex_col()
             .gap(px(4.))

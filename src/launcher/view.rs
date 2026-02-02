@@ -12,6 +12,10 @@ pub enum ViewInput {
     Up,
     /// Down arrow pressed.
     Down,
+    /// Page up pressed.
+    PageUp,
+    /// Page down pressed.
+    PageDown,
     /// Enter pressed.
     Enter,
 }
@@ -143,6 +147,9 @@ pub fn execute_action(action: &ViewAction, services: &Services, cx: &mut App) {
     }
 }
 
+/// Height of each list item in pixels (must match ITEM_HEIGHT in launcher/mod.rs)
+pub const LIST_ITEM_HEIGHT: f32 = 48.0;
+
 /// Helper to render a standard list item.
 pub fn render_list_item(
     id: impl Into<String>,
@@ -155,6 +162,7 @@ pub fn render_list_item(
     div()
         .id(id.into())
         .w_full()
+        .h(px(LIST_ITEM_HEIGHT))
         .px(px(12.))
         .py(px(8.))
         .rounded(px(6.))

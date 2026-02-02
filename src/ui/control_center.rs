@@ -14,7 +14,7 @@ use crate::services::bluetooth::{BluetoothCommand, BluetoothState};
 use crate::services::brightness::BrightnessCommand;
 use crate::services::network::NetworkCommand;
 use crate::services::upower::{BatteryStatus, PowerProfile, UPowerCommand};
-use gpui::{Context, FontWeight, MouseButton, Window, div, prelude::*, px, rgba};
+use gpui::{Context, FontWeight, MouseButton, ScrollHandle, Window, div, prelude::*, px, rgba};
 
 /// Nerd Font icons for control center
 pub mod icons {
@@ -57,6 +57,7 @@ pub mod icons {
 /// Control Center panel content.
 pub struct ControlCenter {
     services: Services,
+    scroll_handle: ScrollHandle,
 }
 
 impl ControlCenter {
@@ -72,7 +73,10 @@ impl ControlCenter {
         cx.observe(&services.upower, |_, _, cx| cx.notify())
             .detach();
 
-        ControlCenter { services }
+        ControlCenter {
+            services,
+            scroll_handle: ScrollHandle::new(),
+        }
     }
 
     /// Render a section header
@@ -613,13 +617,15 @@ impl ControlCenter {
 impl Render for ControlCenter {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .id("control-center")
             .w_full()
             .h_full()
             .p(px(12.))
             .flex()
             .flex_col()
             .gap(px(12.))
-            .overflow_hidden()
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll_handle)
             // Header
             .child(
                 div()
@@ -644,7 +650,7 @@ impl Render for ControlCenter {
             // Brightness (only on laptops with backlight)
             .when(
                 self.services.brightness.read(cx).max > 0,
-                |el: gpui::Div| el.child(self.render_brightness_section(cx)),
+                |el: gpui::Stateful<gpui::Div>| el.child(self.render_brightness_section(cx)),
             )
             // Power/Battery section
             .child(self.render_power_section(cx))

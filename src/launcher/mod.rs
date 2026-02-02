@@ -3,11 +3,11 @@ mod views;
 
 use crate::services::Services;
 use gpui::{
-    App, AppContext, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
-    div, layer_shell::*, prelude::*, px, rgba,
+    App, AppContext, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, ScrollHandle,
+    Size, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
+    WindowOptions, actions, div, layer_shell::*, prelude::*, px, rgba,
 };
-use view::{InputResult, LauncherView, ViewContext, ViewInput};
+use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput};
 use views::{HelpView, all_views};
 
 actions!(launcher, [Escape, Enter]);
@@ -28,6 +28,11 @@ impl Default for LauncherConfig {
     }
 }
 
+/// Visible height of the content area (approximate)
+const VISIBLE_HEIGHT: f32 = 350.0;
+/// Number of items to jump when using Page Up/Down
+const ITEMS_PER_PAGE: usize = 7;
+
 pub struct Launcher {
     services: Services,
     config: LauncherConfig,
@@ -35,6 +40,7 @@ pub struct Launcher {
     selected_index: usize,
     item_count: usize,
     focus_handle: FocusHandle,
+    scroll_handle: ScrollHandle,
     views: Vec<Box<dyn LauncherView>>,
     help_view: HelpView,
 }
@@ -62,6 +68,7 @@ impl Launcher {
 
         let views = all_views();
         let help_view = HelpView::new(config.prefix_char, &views);
+        let scroll_handle = ScrollHandle::new();
 
         Launcher {
             services,
@@ -70,9 +77,39 @@ impl Launcher {
             selected_index: 0,
             item_count: 0,
             focus_handle,
+            scroll_handle,
             views,
             help_view,
         }
+    }
+
+    /// Reset scroll to top
+    fn reset_scroll(&self) {
+        self.scroll_handle.set_offset(gpui::point(px(0.), px(0.)));
+    }
+
+    /// Scroll to keep the selected item visible
+    fn scroll_to_selected(&self) {
+        let selected_top = px(self.selected_index as f32 * LIST_ITEM_HEIGHT);
+        let selected_bottom = selected_top + px(LIST_ITEM_HEIGHT);
+
+        let current_offset = self.scroll_handle.offset();
+        let scroll_top = -current_offset.y;
+        let scroll_bottom = scroll_top + px(VISIBLE_HEIGHT);
+
+        let new_offset_y = if selected_top < scroll_top {
+            // Item is above visible area, scroll up
+            -selected_top
+        } else if selected_bottom > scroll_bottom {
+            // Item is below visible area, scroll down
+            -(selected_bottom - px(VISIBLE_HEIGHT))
+        } else {
+            // Item is already visible
+            return;
+        };
+
+        self.scroll_handle
+            .set_offset(gpui::point(px(0.), new_offset_y));
     }
 
     /// Parse the search query to extract prefix and search term.
@@ -163,10 +200,12 @@ impl Launcher {
                     ViewInput::Char(c) => {
                         self.search_query.push_str(&c);
                         self.selected_index = 0;
+                        self.reset_scroll();
                     }
                     ViewInput::Backspace => {
                         self.search_query.pop();
                         self.selected_index = 0;
+                        self.reset_scroll();
                     }
                     ViewInput::Up => {
                         if self.item_count > 0 {
@@ -175,11 +214,27 @@ impl Launcher {
                             } else {
                                 self.selected_index - 1
                             };
+                            self.scroll_to_selected();
                         }
                     }
                     ViewInput::Down => {
                         if self.item_count > 0 {
                             self.selected_index = (self.selected_index + 1) % self.item_count;
+                            self.scroll_to_selected();
+                        }
+                    }
+                    ViewInput::PageUp => {
+                        if self.item_count > 0 {
+                            self.selected_index =
+                                self.selected_index.saturating_sub(ITEMS_PER_PAGE);
+                            self.scroll_to_selected();
+                        }
+                    }
+                    ViewInput::PageDown => {
+                        if self.item_count > 0 {
+                            self.selected_index = (self.selected_index + ITEMS_PER_PAGE)
+                                .min(self.item_count.saturating_sub(1));
+                            self.scroll_to_selected();
                         }
                     }
                     ViewInput::Enter => {
@@ -256,6 +311,8 @@ impl Render for Launcher {
                     let should_close = match event.keystroke.key.as_str() {
                         "up" => this.handle_input(ViewInput::Up, cx),
                         "down" => this.handle_input(ViewInput::Down, cx),
+                        "pageup" => this.handle_input(ViewInput::PageUp, cx),
+                        "pagedown" => this.handle_input(ViewInput::PageDown, cx),
                         "backspace" => this.handle_input(ViewInput::Backspace, cx),
                         _ => {
                             if let Some(key_char) = &event.keystroke.key_char {
@@ -323,8 +380,15 @@ impl Render for Launcher {
                             ),
                     ),
             )
-            // View content
-            .child(view_content)
+            // View content with scroll support
+            .child(
+                div()
+                    .id("view-content")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.scroll_handle)
+                    .child(view_content),
+            )
     }
 }
 
