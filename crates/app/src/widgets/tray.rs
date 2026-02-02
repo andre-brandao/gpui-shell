@@ -56,7 +56,7 @@ impl Tray {
             width: 250.0,
             height: menu_height,
             anchor: Anchor::TOP | Anchor::RIGHT,
-            margin: (32.0, 8.0, 0.0, 0.0), // Below bar
+            margin: (0.0, 8.0, 0.0, 0.0), // Compositor handles top margin
             namespace: "systray-menu".to_string(),
         };
 
@@ -316,6 +316,8 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
         "udiskie" => "󰋊",
         "flameshot" => "󰹑",
         "kdeconnect" => "󰄜",
+        "tailscale" => "󰖂",
+        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => "󰢹",
         "network" | "network-wireless" => "󰖩",
         "bluetooth" | "bluetooth-active" => "󰂯",
         "audio" | "audio-volume-high" => "󰕾",
@@ -329,7 +331,14 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
     // Try the app id as fallback
     if let Some(id) = app_id {
-        let icon = match id.to_lowercase().as_str() {
+        let id_lower = id.to_lowercase();
+
+        // Handle generic systray_XXXX pattern (often used by Go apps like Tailscale)
+        if id_lower.starts_with("systray_") {
+            return "󰖂"; // Assume Tailscale for now
+        }
+
+        let icon = match id_lower.as_str() {
             "discord" | "vesktop" => "󰙯",
             "spotify" => "󰓇",
             "steam" => "󰓓",
@@ -349,6 +358,8 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
             "udiskie" => "󰋊",
             "flameshot" => "󰹑",
             "kdeconnect" | "kdeconnectd" => "󰄜",
+            "tailscale" | "tailscale-systray" => "󰖂",
+            "remmina" | "org.remmina.remmina" | "remmina-icon" => "󰢹",
             _ => "",
         };
 
@@ -357,6 +368,7 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
         }
     }
 
-    // Fallback icon
+    // Fallback icon - log for easier icon mapping
+    tracing::debug!("No icon mapping for name='{}' app_id={:?}", name, app_id);
     "󰀻"
 }
