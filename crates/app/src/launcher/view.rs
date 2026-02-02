@@ -10,6 +10,10 @@ use ui::{accent, font_size, interactive, radius, spacing, text};
 /// Height of each list item in pixels.
 pub const LIST_ITEM_HEIGHT: f32 = 48.0;
 
+/// Special characters that trigger view matching.
+/// When a query starts with one of these, we look for a matching view.
+pub const SPECIAL_CHARS: &[char] = &['@', '$', '!', '?', ';', '~', '#', ':'];
+
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]
 pub enum ViewInput {
@@ -53,11 +57,19 @@ pub struct ViewContext<'a> {
 /// A launcher view that provides custom rendering and input handling.
 ///
 /// Views are responsible for:
+/// - Declaring their prefix pattern (e.g., "@", "$", "!", ";ws")
 /// - Rendering their content
 /// - Handling selection and input
 /// - Executing their own actions directly
 pub trait LauncherView: Send + Sync {
-    /// The prefix command to activate this view (e.g., "apps", "ws").
+    /// The prefix pattern that activates this view.
+    ///
+    /// Examples:
+    /// - "@" for apps
+    /// - "$" for shell commands
+    /// - "!" for web search
+    /// - "?" for help
+    /// - ";ws" for workspaces
     fn prefix(&self) -> &'static str;
 
     /// Display name for the view.
@@ -72,6 +84,11 @@ pub trait LauncherView: Send + Sync {
     /// Whether this view is the default when no prefix is given.
     fn is_default(&self) -> bool {
         false
+    }
+
+    /// Whether this view should appear in the help menu.
+    fn show_in_help(&self) -> bool {
+        true
     }
 
     /// Render the view content. Returns the element and number of selectable items.
@@ -93,6 +110,11 @@ pub trait LauncherView: Send + Sync {
     fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
         vec![("Open", "Enter"), ("Close", "Esc")]
     }
+}
+
+/// Check if a character is a special prefix character.
+pub fn is_special_char(c: char) -> bool {
+    SPECIAL_CHARS.contains(&c)
 }
 
 /// Helper to render a standard list item.

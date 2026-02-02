@@ -9,7 +9,7 @@ pub struct WorkspacesView;
 
 impl LauncherView for WorkspacesView {
     fn prefix(&self) -> &'static str {
-        "ws"
+        ";ws"
     }
 
     fn name(&self) -> &'static str {

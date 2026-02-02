@@ -7,32 +7,31 @@ use ui::{bg, font_size, icon_size, spacing, status, text};
 
 /// Help view - shows available commands and system status.
 pub struct HelpView {
-    prefix_char: char,
     entries: Vec<HelpEntry>,
 }
 
 struct HelpEntry {
     prefix: String,
     icon: String,
+    name: String,
     description: String,
 }
 
 impl HelpView {
     /// Create a new help view from the available launcher views.
-    pub fn new(prefix_char: char, views: &[Box<dyn LauncherView>]) -> Self {
+    pub fn new(views: &[Box<dyn LauncherView>]) -> Self {
         let entries = views
             .iter()
+            .filter(|v| v.show_in_help())
             .map(|v| HelpEntry {
                 prefix: v.prefix().to_string(),
                 icon: v.icon().to_string(),
+                name: v.name().to_string(),
                 description: v.description().to_string(),
             })
             .collect();
 
-        HelpView {
-            prefix_char,
-            entries,
-        }
+        HelpView { entries }
     }
 
     fn render_system_info(&self, vx: &ViewContext) -> AnyElement {
@@ -169,6 +168,7 @@ impl HelpView {
                     return true;
                 }
                 entry.prefix.to_lowercase().contains(&query_lower)
+                    || entry.name.to_lowercase().contains(&query_lower)
                     || entry.description.to_lowercase().contains(&query_lower)
             })
             .collect();
@@ -179,7 +179,6 @@ impl HelpView {
             .gap(px(4.))
             .children(filtered.into_iter().enumerate().map(|(i, entry)| {
                 let is_selected = i == vx.selected_index;
-                let prefix_char = self.prefix_char;
 
                 div()
                     .id(format!("cmd-{}", entry.prefix))
@@ -210,28 +209,39 @@ impl HelpView {
                                     .child(entry.icon.clone()),
                             )
                             .child(
-                                div().flex().flex_col().gap(px(2.)).child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(spacing::SM))
-                                        .child(
-                                            div()
-                                                .px(px(6.))
-                                                .py(px(2.))
-                                                .rounded(px(4.))
-                                                .bg(rgba(0x555555ff))
-                                                .text_size(px(font_size::SM))
-                                                .font_weight(FontWeight::MEDIUM)
-                                                .child(format!("{}{}", prefix_char, entry.prefix)),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(font_size::SM))
-                                                .text_color(text::muted())
-                                                .child(entry.description.clone()),
-                                        ),
-                                ),
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(spacing::SM))
+                                            .child(
+                                                div()
+                                                    .px(px(6.))
+                                                    .py(px(2.))
+                                                    .rounded(px(4.))
+                                                    .bg(rgba(0x555555ff))
+                                                    .text_size(px(font_size::SM))
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .child(entry.prefix.clone()),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_size(px(font_size::BASE))
+                                                    .text_color(text::primary())
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .child(entry.name.clone()),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::SM))
+                                            .text_color(text::muted())
+                                            .child(entry.description.clone()),
+                                    ),
                             ),
                     )
             }))
@@ -247,15 +257,32 @@ impl HelpView {
                     return true;
                 }
                 entry.prefix.to_lowercase().contains(&query_lower)
+                    || entry.name.to_lowercase().contains(&query_lower)
                     || entry.description.to_lowercase().contains(&query_lower)
             })
             .count()
+    }
+
+    /// Get a filtered entry by index.
+    fn get_filtered_entry(&self, query: &str, index: usize) -> Option<&HelpEntry> {
+        let query_lower = query.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|entry| {
+                if query.is_empty() {
+                    return true;
+                }
+                entry.prefix.to_lowercase().contains(&query_lower)
+                    || entry.name.to_lowercase().contains(&query_lower)
+                    || entry.description.to_lowercase().contains(&query_lower)
+            })
+            .nth(index)
     }
 }
 
 impl LauncherView for HelpView {
     fn prefix(&self) -> &'static str {
-        "help"
+        "?"
     }
 
     fn name(&self) -> &'static str {
@@ -270,6 +297,11 @@ impl LauncherView for HelpView {
         "Show available commands"
     }
 
+    fn show_in_help(&self) -> bool {
+        // Don't show help in its own list (it would be redundant)
+        false
+    }
+
     fn render(&self, vx: &ViewContext, _cx: &App) -> (AnyElement, usize) {
         let count = self.filtered_count(vx.query);
 
@@ -278,11 +310,13 @@ impl LauncherView for HelpView {
             .flex()
             .flex_col()
             .gap(px(spacing::LG))
+            .p(px(spacing::SM))
             // System info header
             .child(self.render_system_info(vx))
             // Section title
             .child(
                 div()
+                    .px(px(spacing::SM))
                     .text_size(px(font_size::XS))
                     .text_color(text::disabled())
                     .font_weight(FontWeight::MEDIUM)
@@ -290,13 +324,52 @@ impl LauncherView for HelpView {
             )
             // Commands list
             .child(self.render_commands(vx))
+            // Usage hint
+            .child(
+                div()
+                    .px(px(spacing::SM))
+                    .pt(px(spacing::SM))
+                    .flex()
+                    .flex_col()
+                    .gap(px(spacing::XS))
+                    .child(
+                        div()
+                            .text_size(px(font_size::XS))
+                            .text_color(text::disabled())
+                            .font_weight(FontWeight::MEDIUM)
+                            .child("USAGE"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(font_size::SM))
+                            .text_color(text::muted())
+                            .child("• Type a prefix (like @, $, !) to switch to that view"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(font_size::SM))
+                            .text_color(text::muted())
+                            .child("• Type without prefix to search apps directly"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(font_size::SM))
+                            .text_color(text::muted())
+                            .child("• Press ? anytime to return to this help"),
+                    ),
+            )
             .into_any_element();
 
         (element, count)
     }
 
-    fn on_select(&self, _index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
-        // Return false - the launcher will handle switching to the selected view
+    fn on_select(&self, index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
+        // When selecting a command, we don't close - the launcher will handle
+        // switching to the selected view's prefix
+        if let Some(_entry) = self.get_filtered_entry(_vx.query, index) {
+            // Return false to not close; the launcher's execute_selected
+            // will handle switching to the view
+        }
         false
     }
 }

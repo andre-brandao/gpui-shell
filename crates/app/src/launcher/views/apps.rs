@@ -8,7 +8,7 @@ pub struct AppsView;
 
 impl LauncherView for AppsView {
     fn prefix(&self) -> &'static str {
-        "apps"
+        "@"
     }
 
     fn name(&self) -> &'static str {

@@ -1,9 +1,11 @@
 //! Launcher module providing an application launcher overlay.
 //!
 //! The launcher provides a keyboard-driven interface for:
-//! - Searching and launching applications (default view)
+//! - Searching and launching applications (@ prefix, or default)
+//! - Running shell commands ($ prefix)
+//! - Web search with multiple providers (! prefix with shebangs)
 //! - Switching workspaces (;ws prefix)
-//! - Viewing available commands (;help or invalid prefix)
+//! - Viewing help and available commands (? prefix)
 
 mod view;
 mod views;
@@ -16,7 +18,7 @@ use gpui::{
 };
 use services::Services;
 use ui::{bg, border, font_size, icon_size, interactive, radius, spacing, text};
-use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput};
+use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput, is_special_char};
 use views::{HelpView, all_views};
 
 actions!(launcher, [Escape, Enter]);
@@ -29,23 +31,9 @@ const VISIBLE_HEIGHT: f32 = 350.0;
 /// Number of items to jump when using Page Up/Down.
 const ITEMS_PER_PAGE: usize = 7;
 
-/// Launcher configuration.
-#[derive(Clone)]
-pub struct LauncherConfig {
-    /// The character used to prefix commands (default: ';').
-    pub prefix_char: char,
-}
-
-impl Default for LauncherConfig {
-    fn default() -> Self {
-        LauncherConfig { prefix_char: ';' }
-    }
-}
-
 /// The main launcher struct.
 pub struct Launcher {
     services: Services,
-    config: LauncherConfig,
     search_query: String,
     selected_index: usize,
     item_count: usize,
@@ -56,8 +44,8 @@ pub struct Launcher {
 }
 
 impl Launcher {
-    /// Create a new launcher with the given services and configuration.
-    pub fn new(services: Services, config: LauncherConfig, cx: &mut Context<Self>) -> Self {
+    /// Create a new launcher with the given services.
+    pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
 
@@ -105,11 +93,10 @@ impl Launcher {
         .detach();
 
         let views = all_views();
-        let help_view = HelpView::new(config.prefix_char, &views);
+        let help_view = HelpView::new(&views);
 
         Launcher {
             services,
-            config,
             search_query: String::new(),
             selected_index: 0,
             item_count: 0,
@@ -149,31 +136,53 @@ impl Launcher {
             .set_offset(gpui::point(px(0.), new_offset_y));
     }
 
-    /// Parse the search query to extract prefix and search term.
-    fn parse_query(&self) -> (Option<&str>, &str) {
+    /// Parse the search query to find which view should handle it.
+    /// Returns (matched_view_or_none, search_term_for_view).
+    fn parse_query(&self) -> (Option<&dyn LauncherView>, &str) {
         let query = self.search_query.trim();
 
-        if query.starts_with(self.config.prefix_char) {
-            let rest = &query[self.config.prefix_char.len_utf8()..];
-
-            if let Some(space_idx) = rest.find(' ') {
-                let prefix = &rest[..space_idx];
-                let search = rest[space_idx..].trim();
-                (Some(prefix), search)
-            } else {
-                (Some(rest), "")
-            }
-        } else {
-            (None, query)
+        if query.is_empty() {
+            return (self.default_view(), "");
         }
-    }
 
-    /// Find the view matching the given prefix.
-    fn find_view(&self, prefix: &str) -> Option<&dyn LauncherView> {
-        self.views
-            .iter()
-            .find(|v| v.prefix() == prefix)
-            .map(|v| v.as_ref())
+        // Check if query starts with any view's prefix
+        // We need to find the longest matching prefix first
+        let mut best_match: Option<(&dyn LauncherView, usize)> = None;
+
+        for view in &self.views {
+            let prefix = view.prefix();
+            if query.starts_with(prefix) {
+                // Check if this is a better (longer) match
+                if best_match.is_none() || prefix.len() > best_match.unwrap().1 {
+                    best_match = Some((view.as_ref(), prefix.len()));
+                }
+            }
+        }
+
+        // Also check help view
+        if query.starts_with(self.help_view.prefix()) {
+            let prefix_len = self.help_view.prefix().len();
+            if best_match.is_none() || prefix_len > best_match.unwrap().1 {
+                best_match = Some((&self.help_view, prefix_len));
+            }
+        }
+
+        if let Some((view, prefix_len)) = best_match {
+            let rest = query[prefix_len..].trim_start();
+            return (Some(view), rest);
+        }
+
+        // Check if starts with a special char but no matching prefix
+        // In this case, show help view
+        if let Some(first_char) = query.chars().next() {
+            if is_special_char(first_char) {
+                // Unknown special prefix - show help
+                return (Some(&self.help_view), query);
+            }
+        }
+
+        // No prefix, use default view with full query as search
+        (self.default_view(), query)
     }
 
     /// Get the default view.
@@ -186,17 +195,8 @@ impl Launcher {
 
     /// Get the current active view.
     fn current_view(&self) -> &dyn LauncherView {
-        let (prefix, _) = self.parse_query();
-
-        match prefix {
-            Some(p) => {
-                if let Some(view) = self.find_view(p) {
-                    return view;
-                }
-                &self.help_view
-            }
-            None => self.default_view().unwrap_or(&self.help_view),
-        }
+        let (view, _) = self.parse_query();
+        view.unwrap_or(&self.help_view)
     }
 
     /// Get the current view name for display.
@@ -220,10 +220,15 @@ impl Launcher {
 
         match view.handle_input(&input, &vx, cx) {
             InputResult::Handled { query, close } => {
-                // Update search query based on prefix
-                let (prefix, _) = self.parse_query();
-                if let Some(p) = prefix {
-                    self.search_query = format!("{}{} {}", self.config.prefix_char, p, query);
+                // Update search query based on current view prefix
+                let (matched_view, _) = self.parse_query();
+                if let Some(v) = matched_view {
+                    let prefix = v.prefix();
+                    if query.is_empty() {
+                        self.search_query = prefix.to_string();
+                    } else {
+                        self.search_query = format!("{} {}", prefix, query);
+                    }
                 } else {
                     self.search_query = query;
                 }
@@ -283,26 +288,25 @@ impl Launcher {
     }
 
     fn execute_selected(&mut self, cx: &mut App) -> bool {
-        let vx = self.view_context();
-        let (prefix, _) = self.parse_query();
+        let view = self.current_view();
 
         // Check if we're in help view and selected a command
-        if prefix.is_some() && self.find_view(prefix.unwrap()).is_none() {
+        if std::ptr::eq(view, &self.help_view as &dyn LauncherView) {
             // In help view, switch to selected view
-            let entries: Vec<_> = self.views.iter().collect();
-            if let Some(view) = entries.get(self.selected_index) {
-                self.search_query = format!("{}{} ", self.config.prefix_char, view.prefix());
+            if let Some(target_view) = self.views.get(self.selected_index) {
+                let prefix = target_view.prefix();
+                self.search_query = format!("{} ", prefix);
                 self.selected_index = 0;
                 return false;
             }
         }
 
-        let view = self.current_view();
+        let vx = self.view_context();
         view.on_select(self.selected_index, &vx, cx)
     }
 
     fn placeholder(&self) -> String {
-        format!("Search or type {}command...", self.config.prefix_char)
+        "Search apps or type @, $, !, ? for commands...".to_string()
     }
 }
 
@@ -442,15 +446,27 @@ impl Render for Launcher {
                     .flex()
                     .items_center()
                     .justify_between()
-                    // Left side placeholder
+                    // Left side - prefix hints
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap(px(spacing::SM))
-                            .text_size(px(font_size::SM))
+                            .text_size(px(font_size::XS))
                             .text_color(text::disabled())
-                            .child(""),
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(4.))
+                                    .child("@apps")
+                                    .child("·")
+                                    .child("$shell")
+                                    .child("·")
+                                    .child("!web")
+                                    .child("·")
+                                    .child("?help"),
+                            ),
                     )
                     // Right side - action hints from view
                     .child(
@@ -495,11 +511,6 @@ pub fn register_keybindings(cx: &mut App) {
 
 /// Toggle the launcher window.
 pub fn toggle(services: Services, cx: &mut App) {
-    toggle_with_config(services, LauncherConfig::default(), cx);
-}
-
-/// Toggle the launcher window with custom configuration.
-pub fn toggle_with_config(services: Services, config: LauncherConfig, cx: &mut App) {
     let mut guard = LAUNCHER_WINDOW.lock().unwrap();
 
     if let Some(handle) = guard.take() {
@@ -528,14 +539,14 @@ pub fn toggle_with_config(services: Services, config: LauncherConfig, cx: &mut A
                 focus: true,
                 ..Default::default()
             },
-            move |_, cx| cx.new(|cx| Launcher::new(services.clone(), config.clone(), cx)),
+            move |_, cx| cx.new(|cx| Launcher::new(services.clone(), cx)),
         ) {
             *guard = Some(handle);
         }
     }
 }
 
-/// Open the launcher.
+/// Open the launcher (alias for toggle).
 pub fn open(services: Services, cx: &mut App) {
     toggle(services, cx);
 }
