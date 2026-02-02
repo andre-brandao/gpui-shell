@@ -15,6 +15,11 @@ pub struct CompositorMonitor {
     pub name: String,
     pub active_workspace_id: i32,
     pub special_workspace_id: i32,
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+    pub scale: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

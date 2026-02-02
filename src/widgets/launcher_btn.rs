@@ -36,7 +36,7 @@ impl Render for LauncherBtn {
                 div()
                     .text_size(px(icon_size::LG))
                     .text_color(text::primary())
-                    .child(""),
+                    .child(""),
             )
     }
 }

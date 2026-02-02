@@ -2,7 +2,9 @@ pub mod hyprland;
 pub mod niri;
 pub mod types;
 
-pub use self::types::{CompositorChoice, CompositorCommand, CompositorEvent, CompositorState};
+pub use self::types::{
+    CompositorChoice, CompositorCommand, CompositorEvent, CompositorMonitor, CompositorState,
+};
 
 use crate::services::{ReadOnlyService, Service, ServiceEvent};
 use gpui::Context;
