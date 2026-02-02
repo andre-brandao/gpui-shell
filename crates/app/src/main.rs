@@ -1,23 +1,23 @@
+//! GPUi Shell - A Wayland status bar built with GPUI.
+
 use assets::Assets;
 use gpui::Application;
 
-fn main() {
+mod bar;
+mod widgets;
+
+#[tokio::main]
+async fn main() {
     #[cfg(not(target_os = "linux"))]
     compile_error!("This application requires a Linux system with Wayland.");
 
-    let app = Application::new().with_assets(Assets {});
+    // Initialize services before starting GPUI
+    let services = bar::Services::new()
+        .await
+        .expect("Failed to initialize services");
 
-    app.run(|_cx| {
-        // Create all services once at startup
-        // let services = services::Services::new(cx);
-
-        // Register launcher keybindings
-        // launcher::register_keybindings(cx);
-
-        // // Open the bar window with shared services
-        // bar::open(services.clone(), cx);
-
-        // // Open the launcher on startup
-        // launcher::open(services.clone(), cx);
+    // Create and run the GPUI application
+    Application::new().with_assets(Assets {}).run(|cx| {
+        bar::open(services, cx);
     });
 }
