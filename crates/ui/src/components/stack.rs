@@ -1,6 +1,6 @@
-use gpui::{div, Div};
+use gpui::{Div, div};
 
-use crate::StyledExt;
+use super::super::traits::styled_ext::StyledExt;
 
 pub fn h_flex() -> Div {
     div().h_flex()

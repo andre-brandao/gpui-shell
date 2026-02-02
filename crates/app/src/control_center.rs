@@ -12,14 +12,17 @@
 
 use futures_signals::signal::SignalExt;
 use gpui::{
-    AnyElement, App, Context, FocusHandle, Focusable, FontWeight, MouseButton, ScrollHandle,
-    Window, div, prelude::*, px,
+    AnyElement, App, Context, Entity, FocusHandle, Focusable, FontWeight, MouseButton,
+    ScrollHandle, Window, div, prelude::*, px,
 };
 use services::{
     AccessPoint, AudioCommand, BluetoothCommand, BluetoothDevice, BluetoothState,
     BrightnessCommand, NetworkCommand, PowerProfile, Services, UPowerCommand,
 };
-use ui::{accent, bg, border, font_size, icon_size, interactive, radius, spacing, status, text};
+use ui::{
+    Slider, SliderEvent, accent, bg, border, font_size, icon_size, interactive, radius, spacing,
+    status, text,
+};
 use zbus::zvariant::OwnedObjectPath;
 
 /// Nerd Font icons.
@@ -68,6 +71,8 @@ pub struct ControlCenter {
     expanded: ExpandedSection,
     scroll_handle: ScrollHandle,
     focus_handle: FocusHandle,
+    volume_slider: Entity<Slider>,
+    brightness_slider: Entity<Slider>,
 }
 
 impl ControlCenter {
@@ -75,6 +80,58 @@ impl ControlCenter {
     pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
+
+        // Create volume slider
+        let audio = services.audio.get();
+        let volume_slider = cx.new(|_| {
+            Slider::new()
+                .min(0.0)
+                .max(100.0)
+                .step(1.0)
+                .default_value(audio.sink_volume as f32)
+        });
+
+        // Create brightness slider
+        let brightness = services.brightness.get();
+        let brightness_slider = cx.new(|_| {
+            Slider::new()
+                .min(0.0)
+                .max(100.0)
+                .step(1.0)
+                .default_value(brightness.percentage() as f32)
+        });
+
+        // Subscribe to slider events
+        let audio_services = services.clone();
+        cx.subscribe(
+            &volume_slider,
+            move |_this, _slider, event: &SliderEvent, _cx| {
+                let SliderEvent::Change(value) = event;
+                let target = *value as u8;
+                audio_services
+                    .audio
+                    .dispatch(AudioCommand::SetSinkVolume(target));
+            },
+        )
+        .detach();
+
+        let brightness_services = services.clone();
+        cx.subscribe(
+            &brightness_slider,
+            move |_this, _slider, event: &SliderEvent, cx| {
+                let SliderEvent::Change(value) = event;
+                let target = *value as u8;
+                let s = brightness_services.clone();
+                cx.spawn(async move |_, _| {
+                    let _ = s
+                        .brightness
+                        .dispatch(BrightnessCommand::SetPercent(target))
+                        .await;
+                })
+                .detach();
+            },
+        )
+        .detach();
 
         // Subscribe to service updates
         Self::subscribe_to_services(&services, cx);
@@ -84,6 +141,8 @@ impl ControlCenter {
             expanded: ExpandedSection::None,
             scroll_handle,
             focus_handle,
+            volume_slider,
+            brightness_slider,
         }
     }
 
@@ -91,10 +150,21 @@ impl ControlCenter {
         // Audio
         cx.spawn({
             let mut signal = services.audio.subscribe().to_stream();
+            let audio_service = services.audio.clone();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
-                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    let audio = audio_service.get();
+                    let volume = audio.sink_volume as f32;
+                    if this
+                        .update(cx, |control_center, cx| {
+                            control_center.volume_slider.update(cx, |slider, cx| {
+                                slider.set_value(volume, cx);
+                            });
+                            cx.notify();
+                        })
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -119,10 +189,21 @@ impl ControlCenter {
         // Brightness
         cx.spawn({
             let mut signal = services.brightness.subscribe().to_stream();
+            let brightness_service = services.brightness.clone();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
-                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    let brightness = brightness_service.get();
+                    let percent = brightness.percentage() as f32;
+                    if this
+                        .update(cx, |control_center, cx| {
+                            control_center.brightness_slider.update(cx, |slider, cx| {
+                                slider.set_value(percent, cx);
+                            });
+                            cx.notify();
+                        })
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -351,7 +432,7 @@ impl ControlCenter {
     // Sliders
     // ========================================================================
 
-    fn render_volume_slider(&self) -> impl IntoElement {
+    fn render_volume_slider(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let audio = self.services.audio.get();
         let volume = audio.sink_volume;
         let muted = audio.sink_muted;
@@ -367,97 +448,18 @@ impl ControlCenter {
         };
 
         let services = self.services.clone();
-        let services_inc = self.services.clone();
         let services_dec = self.services.clone();
-
-        Self::render_slider(
-            "volume",
-            icon,
-            volume,
-            muted,
-            move |_| services.audio.dispatch(AudioCommand::ToggleSinkMute),
-            move |_| {
-                services_inc
-                    .audio
-                    .dispatch(AudioCommand::AdjustSinkVolume(5))
-            },
-            move |_| {
-                services_dec
-                    .audio
-                    .dispatch(AudioCommand::AdjustSinkVolume(-5))
-            },
-        )
-    }
-
-    fn render_brightness_slider(&self) -> AnyElement {
-        let brightness = self.services.brightness.get();
-
-        if brightness.max == 0 {
-            return div().into_any_element();
-        }
-
-        let percent = brightness.percentage();
-        let services = self.services.clone();
         let services_inc = self.services.clone();
-        let services_dec = self.services.clone();
-
-        Self::render_slider(
-            "brightness",
-            icons::BRIGHTNESS,
-            percent,
-            false,
-            move |cx| {
-                let s = services.clone();
-                cx.spawn(async move |_| {
-                    let _ = s
-                        .brightness
-                        .dispatch(BrightnessCommand::SetPercent(50))
-                        .await;
-                })
-                .detach();
-            },
-            move |cx| {
-                let s = services_inc.clone();
-                cx.spawn(async move |_| {
-                    let _ = s.brightness.dispatch(BrightnessCommand::Increase(5)).await;
-                })
-                .detach();
-            },
-            move |cx| {
-                let s = services_dec.clone();
-                cx.spawn(async move |_| {
-                    let _ = s.brightness.dispatch(BrightnessCommand::Decrease(5)).await;
-                })
-                .detach();
-            },
-        )
-        .into_any_element()
-    }
-
-    fn render_slider(
-        id: &'static str,
-        icon: &'static str,
-        value: u8,
-        muted: bool,
-        on_icon_click: impl Fn(&mut App) + 'static,
-        on_increase: impl Fn(&mut App) + 'static,
-        on_decrease: impl Fn(&mut App) + 'static,
-    ) -> impl IntoElement {
-        let percent = value.min(100);
-        let width_frac = percent as f32 / 100.0;
-        let id_icon = format!("{}-icon", id);
-        let id_dec = format!("{}-dec", id);
-        let id_inc = format!("{}-inc", id);
 
         div()
             .flex()
             .items_center()
             .gap(px(spacing::SM))
             .w_full()
-            // Icon
+            // Icon (click to toggle mute)
             .child(
                 div()
-                    .id(id_icon)
+                    .id("volume-icon")
                     .w(px(28.))
                     .h(px(28.))
                     .rounded(px(radius::SM))
@@ -467,7 +469,9 @@ impl ControlCenter {
                     .cursor_pointer()
                     .bg(interactive::default())
                     .hover(|s| s.bg(interactive::hover()))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| on_icon_click(cx))
+                    .on_mouse_down(MouseButton::Left, move |_, _, _cx| {
+                        services.audio.dispatch(AudioCommand::ToggleSinkMute);
+                    })
                     .child(
                         div()
                             .text_size(px(icon_size::SM))
@@ -479,31 +483,109 @@ impl ControlCenter {
                             .child(icon),
                     ),
             )
-            // Track
+            // Slider
+            .child(div().flex_1().child(self.volume_slider.clone()))
+            // Percent
             .child(
                 div()
-                    .id(id)
-                    .flex_1()
-                    .h(px(6.))
-                    .bg(bg::tertiary())
-                    .rounded(px(3.))
-                    .overflow_hidden()
-                    .relative()
+                    .w(px(32.))
+                    .text_size(px(font_size::XS))
+                    .text_color(text::muted())
+                    .text_right()
+                    .child(format!("{}%", volume)),
+            )
+            // +/- buttons
+            .child(
+                div()
+                    .flex()
+                    .gap(px(2.))
                     .child(
                         div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .h_full()
-                            .w(gpui::relative(width_frac))
-                            .bg(if muted {
-                                text::disabled()
-                            } else {
-                                accent::primary()
+                            .id("volume-dec")
+                            .w(px(20.))
+                            .h(px(20.))
+                            .rounded(px(radius::SM))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(interactive::default())
+                            .hover(|s| s.bg(interactive::hover()))
+                            .on_mouse_down(MouseButton::Left, move |_, _, _cx| {
+                                services_dec
+                                    .audio
+                                    .dispatch(AudioCommand::AdjustSinkVolume(-5));
                             })
-                            .rounded(px(3.)),
+                            .child(
+                                div()
+                                    .text_size(px(font_size::XS))
+                                    .text_color(text::muted())
+                                    .child("−"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("volume-inc")
+                            .w(px(20.))
+                            .h(px(20.))
+                            .rounded(px(radius::SM))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(interactive::default())
+                            .hover(|s| s.bg(interactive::hover()))
+                            .on_mouse_down(MouseButton::Left, move |_, _, _cx| {
+                                services_inc
+                                    .audio
+                                    .dispatch(AudioCommand::AdjustSinkVolume(5));
+                            })
+                            .child(
+                                div()
+                                    .text_size(px(font_size::XS))
+                                    .text_color(text::muted())
+                                    .child("+"),
+                            ),
                     ),
             )
+    }
+
+    fn render_brightness_slider(&self, _cx: &mut Context<Self>) -> AnyElement {
+        let brightness = self.services.brightness.get();
+
+        if brightness.max == 0 {
+            return div().into_any_element();
+        }
+
+        let percent = brightness.percentage();
+        let services_dec = self.services.clone();
+        let services_inc = self.services.clone();
+
+        div()
+            .flex()
+            .items_center()
+            .gap(px(spacing::SM))
+            .w_full()
+            // Icon
+            .child(
+                div()
+                    .id("brightness-icon")
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(radius::SM))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(interactive::default())
+                    .child(
+                        div()
+                            .text_size(px(icon_size::SM))
+                            .text_color(text::primary())
+                            .child(icons::BRIGHTNESS),
+                    ),
+            )
+            // Slider
+            .child(div().flex_1().child(self.brightness_slider.clone()))
             // Percent
             .child(
                 div()
@@ -520,7 +602,7 @@ impl ControlCenter {
                     .gap(px(2.))
                     .child(
                         div()
-                            .id(id_dec)
+                            .id("brightness-dec")
                             .w(px(20.))
                             .h(px(20.))
                             .rounded(px(radius::SM))
@@ -530,7 +612,14 @@ impl ControlCenter {
                             .cursor_pointer()
                             .bg(interactive::default())
                             .hover(|s| s.bg(interactive::hover()))
-                            .on_mouse_down(MouseButton::Left, move |_, _, cx| on_decrease(cx))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                let s = services_dec.clone();
+                                cx.spawn(async move |_| {
+                                    let _ =
+                                        s.brightness.dispatch(BrightnessCommand::Decrease(5)).await;
+                                })
+                                .detach();
+                            })
                             .child(
                                 div()
                                     .text_size(px(font_size::XS))
@@ -540,7 +629,7 @@ impl ControlCenter {
                     )
                     .child(
                         div()
-                            .id(id_inc)
+                            .id("brightness-inc")
                             .w(px(20.))
                             .h(px(20.))
                             .rounded(px(radius::SM))
@@ -550,7 +639,14 @@ impl ControlCenter {
                             .cursor_pointer()
                             .bg(interactive::default())
                             .hover(|s| s.bg(interactive::hover()))
-                            .on_mouse_down(MouseButton::Left, move |_, _, cx| on_increase(cx))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                let s = services_inc.clone();
+                                cx.spawn(async move |_| {
+                                    let _ =
+                                        s.brightness.dispatch(BrightnessCommand::Increase(5)).await;
+                                })
+                                .detach();
+                            })
                             .child(
                                 div()
                                     .text_size(px(font_size::XS))
@@ -559,6 +655,7 @@ impl ControlCenter {
                             ),
                     ),
             )
+            .into_any_element()
     }
 
     // ========================================================================
@@ -1020,9 +1117,9 @@ impl Render for ControlCenter {
             // Quick toggles row
             .child(self.render_quick_toggles(cx))
             // Volume slider
-            .child(self.render_volume_slider())
+            .child(self.render_volume_slider(cx))
             // Brightness slider (if available)
-            .child(self.render_brightness_slider())
+            .child(self.render_brightness_slider(cx))
             // WiFi expanded section
             .child(self.render_wifi_section())
             // Bluetooth expanded section
