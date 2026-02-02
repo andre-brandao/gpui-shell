@@ -2,13 +2,12 @@ use assets::Assets;
 use gpui::Application;
 
 fn main() {
-    #[cfg(not(all(target_os = "linux", feature = "wayland")))]
-    panic!("This example requires the `wayland` feature and a linux system.");
+    #[cfg(not(target_os = "linux"))]
+    compile_error!("This application requires a Linux system with Wayland.");
 
-    #[cfg(all(target_os = "linux", feature = "wayland"))]
     let app = Application::new().with_assets(Assets {});
 
-    app.run(|cx| {
+    app.run(|_cx| {
         // Create all services once at startup
         // let services = services::Services::new(cx);
 

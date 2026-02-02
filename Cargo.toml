@@ -17,7 +17,7 @@ zbus = "5.5.0"
 tracing = { version = "0.1.41", features = ["log"] }
 tracing-subscriber = "0.3.19"
 itertools = "0.14.0"
-# chrono = "0.4.39"
+chrono = "0.4.39"
 hyprland = "0.4.0-beta.2"
 
 [profile.release]
