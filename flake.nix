@@ -62,6 +62,7 @@
             pango
             gdk-pixbuf
             pipewire
+            systemd
           ];
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (
@@ -77,6 +78,7 @@
               freetype
               libpulseaudio
               pipewire
+              systemd
             ]
           );
 

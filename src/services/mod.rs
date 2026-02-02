@@ -1,5 +1,7 @@
 pub mod applications;
 pub mod audio;
+pub mod bluetooth;
+pub mod brightness;
 pub mod compositor;
 pub mod network;
 pub mod privacy;
@@ -8,6 +10,8 @@ pub mod upower;
 
 use applications::Applications;
 use audio::Audio;
+use bluetooth::Bluetooth;
+use brightness::Brightness;
 use compositor::Compositor;
 use gpui::{App, AppContext, Entity};
 use network::Network;
@@ -57,6 +61,8 @@ pub struct Services {
     pub applications: Entity<Applications>,
     pub privacy: Entity<Privacy>,
     pub sysinfo: Entity<SysInfo>,
+    pub bluetooth: Entity<Bluetooth>,
+    pub brightness: Entity<Brightness>,
 }
 
 impl Services {
@@ -70,6 +76,8 @@ impl Services {
             applications: cx.new(Applications::new),
             privacy: cx.new(Privacy::new),
             sysinfo: cx.new(SysInfo::new),
+            bluetooth: cx.new(Bluetooth::new),
+            brightness: cx.new(Brightness::new),
         }
     }
 }

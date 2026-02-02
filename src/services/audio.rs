@@ -117,21 +117,25 @@ impl Audio {
     pub fn dispatch(&mut self, command: AudioCommand, cx: &mut Context<Self>) {
         match command {
             AudioCommand::SetSinkVolume(volume) => {
+                // wpctl uses floating point: 1.0 = 100%
+                let vol_float = volume as f32 / 100.0;
                 let _ = Command::new("wpctl")
                     .args([
                         "set-volume",
                         "@DEFAULT_AUDIO_SINK@",
-                        &format!("{}%", volume),
+                        &format!("{:.2}", vol_float),
                     ])
                     .spawn();
                 self.data.sink_volume = volume;
             }
             AudioCommand::SetSourceVolume(volume) => {
+                // wpctl uses floating point: 1.0 = 100%
+                let vol_float = volume as f32 / 100.0;
                 let _ = Command::new("wpctl")
                     .args([
                         "set-volume",
                         "@DEFAULT_AUDIO_SOURCE@",
-                        &format!("{}%", volume),
+                        &format!("{:.2}", vol_float),
                     ])
                     .spawn();
                 self.data.source_volume = volume;
@@ -149,12 +153,16 @@ impl Audio {
                 self.data.source_muted = !self.data.source_muted;
             }
             AudioCommand::AdjustSinkVolume(delta) => {
-                let sign = if delta >= 0 { "+" } else { "" };
+                // wpctl uses floating point for step: 0.05 = 5%
+                let delta_float = (delta as f32).abs() / 100.0;
+                let sign = if delta >= 0 { "+" } else { "-" };
                 let _ = Command::new("wpctl")
                     .args([
                         "set-volume",
+                        "-l",
+                        "1.0", // Limit to 100%
                         "@DEFAULT_AUDIO_SINK@",
-                        &format!("{}{}%", sign, delta),
+                        &format!("{:.2}{}", delta_float, sign),
                     ])
                     .spawn();
                 self.data.sink_volume =

@@ -55,6 +55,10 @@ impl Launcher {
             .detach();
         cx.observe(&services.sysinfo, |_, _, cx| cx.notify())
             .detach();
+        cx.observe(&services.bluetooth, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.brightness, |_, _, cx| cx.notify())
+            .detach();
 
         let views = all_views();
         let help_view = HelpView::new(config.prefix_char, &views);
