@@ -28,8 +28,9 @@ async fn main() {
 
     // Create and run the GPUI application
     Application::new().with_assets(Assets {}).run(|cx| {
-        // Register launcher keybindings
+        // Register keybindings
         launcher::register_keybindings(cx);
+        control_center::ControlCenter::register_keybindings(cx);
 
         // Open the status bar
         bar::open(services, cx);

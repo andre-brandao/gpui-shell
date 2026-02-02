@@ -135,6 +135,7 @@ pub fn render_wifi_section(
                         let ssid_for_display = ssid.clone();
                         let ssid_for_callback = ssid.clone();
                         let is_secured = !ap.public;
+                        let is_known = ap.known;
                         let on_connect = on_connect.clone();
                         let on_password_change = on_password_change.clone();
                         let on_cancel = on_cancel_password.clone();
@@ -163,6 +164,7 @@ pub fn render_wifi_section(
                                 &ssid_for_display,
                                 ap.strength,
                                 is_secured,
+                                is_known,
                                 is_connected,
                                 move |cx| {
                                     if is_connected {
@@ -172,11 +174,12 @@ pub fn render_wifi_section(
 
                                     let ssid = ssid_for_callback.clone();
 
-                                    if is_secured {
+                                    if is_secured && !is_known {
                                         // Need password - this will be handled by the parent
                                         on_connect(ssid, None, cx);
                                     } else {
-                                        // Open network - connect directly
+                                        // Open network or known network - connect directly
+                                        // For known networks, NM will use saved credentials
                                         on_connect(ssid, Some(String::new()), cx);
                                     }
                                 },
@@ -194,6 +197,7 @@ fn render_network_item(
     ssid: &str,
     strength: u8,
     secured: bool,
+    known: bool,
     connected: bool,
     on_click: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
@@ -237,12 +241,16 @@ fn render_network_item(
                 .overflow_hidden()
                 .child(ssid.to_string()),
         )
-        // Lock icon for secured networks
+        // Lock icon for secured networks (green if known/saved)
         .when(secured, |el| {
             el.child(
                 div()
                     .text_size(px(icon_size::SM))
-                    .text_color(text::muted())
+                    .text_color(if known {
+                        status::success()
+                    } else {
+                        text::muted()
+                    })
                     .child(icons::LOCK),
             )
         })
@@ -317,7 +325,7 @@ fn render_password_input(
                         .child(icons::CLOSE),
                 ),
         )
-        // Password input hint (we can't do real input, so show placeholder)
+        // Password input with keyboard support
         .child(
             div()
                 .flex()
@@ -331,20 +339,27 @@ fn render_password_input(
                         .bg(bg::primary())
                         .rounded(px(radius::SM))
                         .border_1()
-                        .border_color(border::default())
+                        .border_color(accent::primary())
                         .child(
                             div()
-                                .text_size(px(font_size::SM))
-                                .text_color(if password.is_empty() {
-                                    text::placeholder()
-                                } else {
-                                    text::primary()
-                                })
-                                .child(if password.is_empty() {
-                                    "Enter password...".to_string()
-                                } else {
-                                    "•".repeat(password.len())
-                                }),
+                                .flex()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .text_size(px(font_size::SM))
+                                        .text_color(if password.is_empty() {
+                                            text::placeholder()
+                                        } else {
+                                            text::primary()
+                                        })
+                                        .child(if password.is_empty() {
+                                            "Type password...".to_string()
+                                        } else {
+                                            "•".repeat(password.len())
+                                        }),
+                                )
+                                // Blinking cursor indicator
+                                .child(div().w(px(1.)).h(px(14.)).bg(text::primary()).ml(px(1.))),
                         ),
                 )
                 .child(
@@ -373,6 +388,13 @@ fn render_password_input(
                                 }),
                         ),
                 ),
+        )
+        // Keyboard hints
+        .child(
+            div()
+                .text_size(px(font_size::XS))
+                .text_color(text::muted())
+                .child("Press Enter to connect, Escape to cancel"),
         )
         // Error message
         .when_some(error, |el, err| {

@@ -1,6 +1,6 @@
 //! NetworkManager helper for fetching network state.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 
 use anyhow::Result;
@@ -12,6 +12,7 @@ use super::dbus::device::DeviceProxy;
 use super::dbus::device::wired::WiredDeviceProxy;
 use super::dbus::device::wireless::WirelessDeviceProxy;
 use super::dbus::nm::NetworkManagerProxy;
+use super::dbus::settings::{ConnectionProxy, SettingsProxy};
 use super::dbus::statistics::StatisticsProxy;
 use super::types::{AccessPoint, ActiveConnectionInfo, DeviceState, DeviceType, NetworkStatistics};
 
@@ -183,9 +184,41 @@ impl<'a> NetworkManager<'a> {
         Ok(network_statistics)
     }
 
+    /// Get SSIDs of all known/saved WiFi connections.
+    pub async fn known_wifi_ssids(&self) -> Result<HashSet<String>> {
+        let settings_proxy = SettingsProxy::new(self.inner().connection()).await?;
+        let connections = settings_proxy.list_connections().await?;
+        let mut known_ssids = HashSet::new();
+
+        for conn_path in connections {
+            let conn_proxy = ConnectionProxy::builder(self.inner().connection())
+                .path(conn_path)?
+                .build()
+                .await?;
+
+            if let Ok(settings) = conn_proxy.get_settings().await {
+                // Check if this is a WiFi connection
+                if let Some(wifi_settings) = settings.get("802-11-wireless") {
+                    // Get the SSID from the settings
+                    if let Some(ssid_value) = wifi_settings.get("ssid") {
+                        // SSID is stored as an array of bytes
+                        if let Ok(ssid_bytes) = <Vec<u8>>::try_from(ssid_value.clone()) {
+                            if let Ok(ssid) = String::from_utf8(ssid_bytes) {
+                                known_ssids.insert(ssid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(known_ssids)
+    }
+
     /// Get all visible wireless access points.
     pub async fn wireless_access_points(&self) -> Result<Vec<AccessPoint>> {
         let wireless_devices = self.wireless_devices().await?;
+        let known_ssids = self.known_wifi_ssids().await.unwrap_or_default();
         let mut all_access_points = Vec::new();
 
         for path in wireless_devices {
@@ -232,6 +265,8 @@ impl<'a> NetworkManager<'a> {
                     }
                 }
 
+                let known = known_ssids.contains(&ssid);
+
                 aps.insert(
                     ssid.clone(),
                     AccessPoint {
@@ -240,6 +275,7 @@ impl<'a> NetworkManager<'a> {
                         state,
                         public,
                         working: false,
+                        known,
                         path: ap_proxy.inner().path().to_owned(),
                         device_path: device_proxy.inner().path().to_owned(),
                     },

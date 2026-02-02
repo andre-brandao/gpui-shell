@@ -106,6 +106,8 @@ pub struct AccessPoint {
     pub public: bool,
     /// Whether a connection attempt is in progress.
     pub working: bool,
+    /// Whether we have a saved connection profile for this network.
+    pub known: bool,
     /// D-Bus object path for the access point.
     pub path: ObjectPath<'static>,
     /// D-Bus object path for the device.

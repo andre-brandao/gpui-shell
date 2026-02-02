@@ -23,10 +23,14 @@ mod wifi;
 
 use futures_signals::signal::SignalExt;
 use gpui::{
-    App, Context, Entity, FocusHandle, Focusable, ScrollHandle, Window, div, prelude::*, px,
+    App, Context, Entity, FocusHandle, Focusable, KeyBinding, ScrollHandle, Window, actions, div,
+    prelude::*, px,
 };
 use services::{AudioCommand, BrightnessCommand, NetworkCommand, Services};
 use ui::{Slider, SliderEvent, bg, border, radius, spacing, text};
+
+// Keyboard actions for password input
+actions!(control_center, [Backspace, Cancel, Submit, TypeChar]);
 
 pub use quick_toggles::ExpandedSection;
 pub use wifi::WifiPasswordState;
@@ -52,6 +56,15 @@ pub struct ControlCenter {
 }
 
 impl ControlCenter {
+    /// Register keybindings for the control center
+    pub fn register_keybindings(cx: &mut App) {
+        cx.bind_keys([
+            KeyBinding::new("backspace", Backspace, Some("ControlCenter")),
+            KeyBinding::new("escape", Cancel, Some("ControlCenter")),
+            KeyBinding::new("enter", Submit, Some("ControlCenter")),
+        ]);
+    }
+
     /// Create a new control center panel.
     pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
@@ -352,12 +365,123 @@ impl Render for ControlCenter {
             .gap(px(spacing::MD))
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
+            // Keyboard event handling for password input
+            .on_action({
+                let entity = entity.clone();
+                move |_: &Backspace, _window, cx| {
+                    let _ = entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.password.pop();
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &Cancel, _window, cx| {
+                    let _ = entity.update(cx, |this, cx| {
+                        this.wifi_password.clear();
+                        cx.notify();
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                let services = services.clone();
+                move |_: &Submit, _window, cx| {
+                    let entity = entity.clone();
+                    let services = services.clone();
+                    let _ = entity.update(cx, |this, cx| {
+                        if let Some(ssid) = this.wifi_password.ssid.clone() {
+                            let password = this.wifi_password.password.clone();
+                            let network = services.network.get();
+                            if let Some(ap) = network
+                                .wireless_access_points
+                                .iter()
+                                .find(|a| a.ssid == ssid)
+                            {
+                                let ap_path: zbus::zvariant::OwnedObjectPath =
+                                    ap.path.clone().into();
+                                let device_path: zbus::zvariant::OwnedObjectPath =
+                                    ap.device_path.clone().into();
+                                let password = if password.is_empty() {
+                                    None
+                                } else {
+                                    Some(password)
+                                };
+
+                                this.wifi_password.connecting = true;
+                                cx.notify();
+
+                                cx.spawn({
+                                    let entity = cx.entity().clone();
+                                    async move |_, cx| {
+                                        let result = services
+                                            .network
+                                            .dispatch(NetworkCommand::ConnectToAccessPoint {
+                                                device_path,
+                                                ap_path,
+                                                password,
+                                            })
+                                            .await;
+
+                                        let _ = entity.update(cx, |this, cx| {
+                                            this.wifi_password.connecting = false;
+                                            if result.is_ok() {
+                                                this.wifi_password.clear();
+                                            } else {
+                                                this.wifi_password.error =
+                                                    Some("Connection failed".to_string());
+                                            }
+                                            cx.notify();
+                                        });
+                                    }
+                                })
+                                .detach();
+                            }
+                        }
+                    });
+                }
+            })
+            .on_key_down({
+                let entity = entity.clone();
+                move |event, _window, cx| {
+                    // Handle printable character input for password
+                    let key = event.keystroke.key.as_str();
+                    if key.len() == 1 && !event.keystroke.modifiers.control {
+                        let ch = key.chars().next().unwrap();
+                        if ch.is_ascii_graphic() || ch == ' ' {
+                            let _ = entity.update(cx, |this, cx| {
+                                if this.wifi_password.ssid.is_some() {
+                                    this.wifi_password.password.push(ch);
+                                    cx.notify();
+                                }
+                            });
+                        }
+                    }
+                }
+            })
             // Quick toggles row
             .child(quick_toggles::render_quick_toggles(
                 &self.services,
                 expanded,
                 on_toggle_section,
             ))
+            // WiFi section (when expanded) - right after toggle
+            .when(expanded == ExpandedSection::WiFi, |el| {
+                el.child(wifi::render_wifi_section(
+                    &services,
+                    &self.wifi_password,
+                    on_wifi_connect,
+                    on_password_change,
+                    on_cancel_password,
+                ))
+            })
+            // Bluetooth section (when expanded) - right after toggle
+            .when(expanded == ExpandedSection::Bluetooth, |el| {
+                el.child(bluetooth::render_bluetooth_section(&self.services))
+            })
             // Volume slider
             .child(sliders::render_volume_slider(
                 &self.services,
@@ -368,20 +492,6 @@ impl Render for ControlCenter {
                 &self.services,
                 &self.brightness_slider,
             ))
-            // WiFi section (when expanded)
-            .when(expanded == ExpandedSection::WiFi, |el| {
-                el.child(wifi::render_wifi_section(
-                    &services,
-                    &self.wifi_password,
-                    on_wifi_connect,
-                    on_password_change,
-                    on_cancel_password,
-                ))
-            })
-            // Bluetooth section (when expanded)
-            .when(expanded == ExpandedSection::Bluetooth, |el| {
-                el.child(bluetooth::render_bluetooth_section(&self.services))
-            })
             // Power section (always visible)
             .child(power::render_power_section(&self.services))
     }

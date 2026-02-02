@@ -134,10 +134,10 @@ impl BrightnessSubscriber {
             }
         };
 
-        let data = self.data.lock_ref();
-        let max = data.max;
-        let current = data.current;
-        drop(data); // Release lock before await
+        let (max, current) = {
+            let data = self.data.lock_ref();
+            (data.max, data.current)
+        };
 
         let new_value = match command {
             BrightnessCommand::Set(v) => v.min(max),
@@ -154,6 +154,11 @@ impl BrightnessSubscriber {
             }
         };
 
+        // Skip if no change needed
+        if new_value == current {
+            return Ok(());
+        }
+
         debug!(
             "Setting brightness to {} (device: {})",
             new_value, device_name
@@ -163,6 +168,10 @@ impl BrightnessSubscriber {
         proxy
             .set_brightness("backlight", device_name, new_value)
             .await?;
+
+        // Immediately update internal state (optimistic update)
+        // This prevents race conditions when clicking buttons rapidly
+        self.data.lock_mut().current = new_value;
 
         Ok(())
     }
