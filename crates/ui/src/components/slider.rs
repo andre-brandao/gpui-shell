@@ -1,5 +1,6 @@
 use gpui::*;
 
+use super::super::theme::{accent, bg};
 use super::h_flex;
 
 #[derive(Clone, Render)]
@@ -16,9 +17,9 @@ pub struct Slider {
     value: f32,
     percentage: f32,
     bounds: Bounds<Pixels>,
-    bg: Rgba,
-    fill: Rgba,
-    thumb_bg: Rgba,
+    track_color: Option<Hsla>,
+    fill_color: Option<Hsla>,
+    thumb_color: Option<Hsla>,
 }
 
 impl EventEmitter<SliderEvent> for Slider {}
@@ -32,9 +33,9 @@ impl Default for Slider {
             value: 0.0,
             percentage: 0.0,
             bounds: Bounds::default(),
-            bg: rgb(0x1e1e2d),
-            fill: rgb(0xcba6f7),
-            thumb_bg: rgb(0xcba6f7),
+            track_color: None,
+            fill_color: None,
+            thumb_color: None,
         }
     }
 }
@@ -58,6 +59,24 @@ impl Slider {
 
     pub fn step(mut self, step: f32) -> Self {
         self.step = step;
+        self
+    }
+
+    /// Set the track (background) color
+    pub fn track_color(mut self, color: Hsla) -> Self {
+        self.track_color = Some(color);
+        self
+    }
+
+    /// Set the fill (progress) color
+    pub fn fill_color(mut self, color: Hsla) -> Self {
+        self.fill_color = Some(color);
+        self
+    }
+
+    /// Set the thumb color
+    pub fn thumb_color(mut self, color: Hsla) -> Self {
+        self.thumb_color = Some(color);
         self
     }
 
@@ -121,6 +140,7 @@ impl Slider {
         cx: &mut Context<Self>,
     ) -> impl gpui::IntoElement {
         let entity_id = cx.entity_id();
+        let thumb_color = self.thumb_color.unwrap_or_else(accent::primary);
 
         div()
             .id("thumb")
@@ -144,18 +164,22 @@ impl Slider {
             .absolute()
             .left(thumb_bar_size)
             .ml_neg_2()
-            .size_2()
+            .size_3()
             .border_1()
+            .border_color(thumb_color)
             .rounded_full()
             .shadow_md()
-            .bg(self.thumb_bg)
+            .bg(thumb_color)
     }
 }
 
 impl Render for Slider {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let thumb_bar_size = if self.percentage < 0.1 {
-            0.1 * self.bounds.size.width
+        let track_color = self.track_color.unwrap_or_else(bg::tertiary);
+        let fill_color = self.fill_color.unwrap_or_else(accent::primary);
+
+        let thumb_bar_size = if self.percentage < 0.05 {
+            0.05 * self.bounds.size.width
         } else {
             self.percentage * self.bounds.size.width
         };
@@ -171,18 +195,17 @@ impl Render for Slider {
                         .id("bar")
                         .relative()
                         .w_full()
-                        .h_2()
-                        .bg(self.bg)
-                        .active(|this| this.bg(self.fill))
-                        .rounded(px(4.))
+                        .h(px(6.))
+                        .bg(track_color)
+                        .rounded(px(3.))
                         .child(
                             div()
                                 .absolute()
                                 .left_0()
                                 .h_full()
                                 .w(thumb_bar_size)
-                                .bg(self.fill)
-                                .rounded_full(),
+                                .bg(fill_color)
+                                .rounded(px(3.)),
                         )
                         .child(self.render_thumb(thumb_bar_size, window, cx))
                         .child({
