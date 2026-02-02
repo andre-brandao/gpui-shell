@@ -7,7 +7,7 @@ use gpui::{AnyElement, Context, Entity, prelude::*};
 
 use services::Services;
 
-use super::{Battery, Clock, KeyboardLayout, LauncherBtn, SysInfo, Tray, Workspaces};
+use super::{Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces};
 
 /// Wrapper enum for all possible widget types.
 ///
@@ -22,8 +22,7 @@ pub enum Widget {
     Tray(Entity<Tray>),
     SysInfo(Entity<SysInfo>),
     LauncherBtn(Entity<LauncherBtn>),
-    // Future widgets:
-    // Info(Entity<Info>),
+    Settings(Entity<Settings>),
 }
 
 impl Widget {
@@ -39,6 +38,7 @@ impl Widget {
             Widget::Tray(e) => e.clone().into_any_element(),
             Widget::SysInfo(e) => e.clone().into_any_element(),
             Widget::LauncherBtn(e) => e.clone().into_any_element(),
+            Widget::Settings(e) => e.clone().into_any_element(),
         }
     }
 
@@ -47,7 +47,7 @@ impl Widget {
     /// Returns `None` if the widget name is unknown.
     ///
     /// # Arguments
-    /// * `name` - The widget name (e.g., "Clock", "Battery")
+    /// * `name` - The widget name (e.g., "Clock", "Battery", "Settings")
     /// * `services` - Shared services for widgets that need them
     /// * `cx` - The GPUI context
     pub fn create<V: 'static>(
@@ -77,10 +77,9 @@ impl Widget {
             "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(
                 cx.new(|cx| LauncherBtn::new(services.clone(), cx)),
             )),
-            // Future widgets:
-            // "Info" => Some(Widget::Info(
-            //     cx.new(|cx| Info::new(services.clone(), cx)),
-            // )),
+            "Settings" | "Info" | "ControlCenter" => Some(Widget::Settings(
+                cx.new(|cx| Settings::new(services.clone(), cx)),
+            )),
             _ => {
                 tracing::warn!("Unknown widget: {}", name);
                 None

@@ -37,7 +37,7 @@ impl Default for BarConfig {
             right: vec![
                 "Systray".to_string(),
                 "KeyboardLayout".to_string(),
-                "Battery".to_string(),
+                "Settings".to_string(),
             ],
         }
     }

@@ -1,29 +1,30 @@
-//! Control Center component for quick settings.
+//! Minimal Control Center component with expandable sections.
 //!
 //! This component is shared between:
-//! - The launcher view (`:cc` or `~` prefix)
-//! - The info widget panel
+//! - The panel (opened from Settings widget click)
+//! - The launcher view (`~` prefix)
 //!
-//! Provides toggles and sliders for:
-//! - Audio volume and mute
-//! - Screen brightness
-//! - Bluetooth on/off and device list
-//! - WiFi toggle
-//! - Power profile selection
-//! - Battery status
+//! Features:
+//! - Quick toggles row (WiFi, Bluetooth, Mic)
+//! - Volume slider
+//! - Brightness slider (if available)
+//! - Expandable WiFi section with available networks
+//! - Expandable Bluetooth section with paired devices
+//! - Battery status and power profile
 
 use futures_signals::signal::SignalExt;
 use gpui::{
     AnyElement, App, Context, FocusHandle, Focusable, FontWeight, MouseButton, ScrollHandle,
-    Window, div, prelude::*, px, rgba,
+    Window, div, prelude::*, px,
 };
 use services::{
-    AudioCommand, BluetoothCommand, BluetoothState, BrightnessCommand, NetworkCommand,
-    PowerProfile, Services, UPowerCommand,
+    AccessPoint, AudioCommand, BluetoothCommand, BluetoothDevice, BluetoothState,
+    BrightnessCommand, NetworkCommand, PowerProfile, Services, UPowerCommand,
 };
 use ui::{accent, bg, border, font_size, icon_size, interactive, radius, spacing, status, text};
+use zbus::zvariant::OwnedObjectPath;
 
-/// Nerd Font icons for control center.
+/// Nerd Font icons.
 pub mod icons {
     // Audio
     pub const VOLUME_HIGH: &str = "󰕾";
@@ -34,335 +35,330 @@ pub mod icons {
     pub const MICROPHONE_MUTE: &str = "󰍭";
 
     // Brightness
-    pub const BRIGHTNESS_HIGH: &str = "󰃠";
-    pub const BRIGHTNESS_MED: &str = "󰃟";
-    pub const BRIGHTNESS_LOW: &str = "󰃞";
+    pub const BRIGHTNESS: &str = "󰃟";
 
-    // Bluetooth
+    // Connectivity
     pub const BLUETOOTH: &str = "󰂯";
     pub const BLUETOOTH_OFF: &str = "󰂲";
     pub const BLUETOOTH_CONNECTED: &str = "󰂱";
-
-    // WiFi
     pub const WIFI: &str = "󰤨";
     pub const WIFI_OFF: &str = "󰤭";
 
     // Power
-    pub const BATTERY_FULL: &str = "󰁹";
-    pub const BATTERY_HIGH: &str = "󰂁";
-    pub const BATTERY_MED: &str = "󰁿";
-    pub const BATTERY_LOW: &str = "󰁻";
-    pub const BATTERY_CRITICAL: &str = "󰂃";
     pub const BATTERY_CHARGING: &str = "󰂄";
     pub const POWER_PROFILE: &str = "󰌪";
-    pub const POWER_PERFORMANCE: &str = "󱐋";
-    pub const POWER_BALANCED: &str = "󰗑";
 
-    // Settings
+    // UI
+    pub const CHEVRON_DOWN: &str = "󰅀";
+    pub const CHEVRON_UP: &str = "󰅃";
+    pub const CHECK: &str = "󰄬";
     pub const SETTINGS: &str = "";
 }
 
-/// Control Center panel/component.
+/// Which section is currently expanded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExpandedSection {
+    #[default]
+    None,
+    WiFi,
+    Bluetooth,
+}
+
+/// Control Center panel component.
 pub struct ControlCenter {
     services: Services,
+    expanded: ExpandedSection,
     scroll_handle: ScrollHandle,
     focus_handle: FocusHandle,
 }
 
 impl ControlCenter {
-    /// Create a new control center with the given services.
+    /// Create a new control center.
     pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
 
-        // Subscribe to service updates for reactive rendering
-        cx.spawn({
-            let mut audio_signal = services.audio.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while audio_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
-
-        cx.spawn({
-            let mut bluetooth_signal = services.bluetooth.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while bluetooth_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
-
-        cx.spawn({
-            let mut brightness_signal = services.brightness.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while brightness_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
-
-        cx.spawn({
-            let mut network_signal = services.network.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while network_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
-
-        cx.spawn({
-            let mut upower_signal = services.upower.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while upower_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        // Subscribe to service updates
+        Self::subscribe_to_services(&services, cx);
 
         ControlCenter {
             services,
+            expanded: ExpandedSection::None,
             scroll_handle,
             focus_handle,
         }
     }
 
-    /// Render a section header.
-    fn render_section_header(icon: &str, title: &str) -> impl IntoElement {
+    fn subscribe_to_services(services: &Services, cx: &mut Context<Self>) {
+        // Audio
+        cx.spawn({
+            let mut signal = services.audio.subscribe().to_stream();
+            async move |this, cx| {
+                use futures_util::StreamExt;
+                while signal.next().await.is_some() {
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
+        .detach();
+
+        // Bluetooth
+        cx.spawn({
+            let mut signal = services.bluetooth.subscribe().to_stream();
+            async move |this, cx| {
+                use futures_util::StreamExt;
+                while signal.next().await.is_some() {
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
+        .detach();
+
+        // Brightness
+        cx.spawn({
+            let mut signal = services.brightness.subscribe().to_stream();
+            async move |this, cx| {
+                use futures_util::StreamExt;
+                while signal.next().await.is_some() {
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
+        .detach();
+
+        // Network
+        cx.spawn({
+            let mut signal = services.network.subscribe().to_stream();
+            async move |this, cx| {
+                use futures_util::StreamExt;
+                while signal.next().await.is_some() {
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
+        .detach();
+
+        // UPower
+        cx.spawn({
+            let mut signal = services.upower.subscribe().to_stream();
+            async move |this, cx| {
+                use futures_util::StreamExt;
+                while signal.next().await.is_some() {
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn toggle_section(&mut self, section: ExpandedSection) {
+        if self.expanded == section {
+            self.expanded = ExpandedSection::None;
+        } else {
+            self.expanded = section;
+        }
+    }
+
+    // ========================================================================
+    // Quick Toggles Row
+    // ========================================================================
+
+    fn render_quick_toggles(&self, cx: &Context<Self>) -> impl IntoElement {
+        let audio = self.services.audio.get();
+        let network = self.services.network.get();
+        let bluetooth = self.services.bluetooth.get();
+
+        let wifi_enabled = network.wifi_enabled;
+        let bt_active = bluetooth.state == BluetoothState::Active;
+        let mic_muted = audio.source_muted;
+
+        let services_wifi = self.services.clone();
+        let services_bt = self.services.clone();
+        let services_mic = self.services.clone();
+
+        div()
+            .flex()
+            .gap(px(spacing::SM))
+            // WiFi toggle
+            .child(self.render_quick_toggle_btn(
+                "wifi-toggle",
+                if wifi_enabled {
+                    icons::WIFI
+                } else {
+                    icons::WIFI_OFF
+                },
+                wifi_enabled,
+                ExpandedSection::WiFi,
+                move |cx| {
+                    let services = services_wifi.clone();
+                    cx.spawn(async move |_| {
+                        let _ = services.network.dispatch(NetworkCommand::ToggleWifi).await;
+                    })
+                    .detach();
+                },
+                cx,
+            ))
+            // Bluetooth toggle
+            .child(self.render_quick_toggle_btn(
+                "bt-toggle",
+                if bt_active {
+                    icons::BLUETOOTH
+                } else {
+                    icons::BLUETOOTH_OFF
+                },
+                bt_active,
+                ExpandedSection::Bluetooth,
+                move |cx| {
+                    let services = services_bt.clone();
+                    cx.spawn(async move |_| {
+                        let _ = services.bluetooth.dispatch(BluetoothCommand::Toggle).await;
+                    })
+                    .detach();
+                },
+                cx,
+            ))
+            // Mic mute toggle
+            .child(self.render_icon_toggle(
+                "mic-toggle",
+                if mic_muted {
+                    icons::MICROPHONE_MUTE
+                } else {
+                    icons::MICROPHONE
+                },
+                !mic_muted,
+                move |_cx| {
+                    services_mic.audio.dispatch(AudioCommand::ToggleSourceMute);
+                },
+            ))
+    }
+
+    /// Quick toggle button with expand arrow.
+    fn render_quick_toggle_btn(
+        &self,
+        id: &str,
+        icon: &'static str,
+        active: bool,
+        section: ExpandedSection,
+        on_toggle: impl Fn(&mut App) + 'static,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
+        let is_expanded = self.expanded == section;
+        let chevron = if is_expanded {
+            icons::CHEVRON_UP
+        } else {
+            icons::CHEVRON_DOWN
+        };
+
         div()
             .flex()
             .items_center()
-            .gap(px(spacing::SM))
-            .mb(px(spacing::SM))
+            .rounded(px(radius::MD))
+            .overflow_hidden()
             .child(
+                // Main toggle button
                 div()
-                    .text_size(px(icon_size::MD))
-                    .text_color(text::muted())
-                    .child(icon.to_string()),
+                    .id(format!("{}-main", id))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .w(px(40.))
+                    .h(px(36.))
+                    .cursor_pointer()
+                    .when(active, |el| el.bg(accent::primary()))
+                    .when(!active, |el| el.bg(interactive::default()))
+                    .hover(|s| s.bg(interactive::hover()))
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        on_toggle(cx);
+                    })
+                    .child(
+                        div()
+                            .text_size(px(icon_size::MD))
+                            .text_color(text::primary())
+                            .child(icon),
+                    ),
             )
             .child(
+                // Expand arrow
                 div()
-                    .text_size(px(font_size::SM))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(text::muted())
-                    .child(title.to_string()),
+                    .id(format!("{}-expand", id))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .w(px(24.))
+                    .h(px(36.))
+                    .cursor_pointer()
+                    .when(active, |el| el.bg(accent::hover()))
+                    .when(!active, |el| el.bg(interactive::default()))
+                    .hover(|s| s.bg(interactive::hover()))
+                    .border_l_1()
+                    .border_color(border::subtle())
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, _, cx| {
+                            this.toggle_section(section);
+                            cx.notify();
+                        }),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(font_size::XS))
+                            .text_color(text::muted())
+                            .child(chevron),
+                    ),
             )
     }
 
-    /// Render a toggle button.
-    fn render_toggle(
-        id: impl Into<String>,
-        icon: &str,
-        label: &str,
-        is_active: bool,
+    /// Simple icon toggle without expand.
+    fn render_icon_toggle(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        icon: &'static str,
+        active: bool,
         on_click: impl Fn(&mut App) + 'static,
     ) -> impl IntoElement {
         div()
             .id(id.into())
             .flex()
-            .flex_col()
             .items_center()
             .justify_center()
-            .w(px(72.))
-            .h(px(72.))
+            .w(px(40.))
+            .h(px(36.))
             .rounded(px(radius::MD))
             .cursor_pointer()
-            .when(is_active, |el| el.bg(accent::primary()))
-            .when(!is_active, |el| el.bg(interactive::default()))
+            .when(active, |el| el.bg(accent::primary()))
+            .when(!active, |el| el.bg(interactive::default()))
             .hover(|s| s.bg(interactive::hover()))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 on_click(cx);
             })
             .child(
                 div()
-                    .text_size(px(20.))
-                    .mb(px(spacing::XS))
-                    .text_color(if is_active {
-                        text::primary()
-                    } else {
-                        text::secondary()
-                    })
-                    .child(icon.to_string()),
-            )
-            .child(
-                div()
-                    .text_size(px(font_size::XS))
-                    .text_color(if is_active {
-                        text::primary()
-                    } else {
-                        text::secondary()
-                    })
-                    .child(label.to_string()),
+                    .text_size(px(icon_size::MD))
+                    .text_color(text::primary())
+                    .child(icon),
             )
     }
 
-    /// Render a slider control.
-    fn render_slider(
-        id: impl Into<String>,
-        icon: &str,
-        value: u8,
-        muted: bool,
-        on_click_icon: impl Fn(&mut App) + 'static,
-        on_increase: impl Fn(&mut App) + 'static,
-        on_decrease: impl Fn(&mut App) + 'static,
-    ) -> impl IntoElement {
-        let id_str = id.into();
-        let percentage = value.min(100);
-        let width_fraction = percentage as f32 / 100.0;
+    // ========================================================================
+    // Sliders
+    // ========================================================================
 
-        div()
-            .flex()
-            .items_center()
-            .gap(px(spacing::SM))
-            .w_full()
-            // Icon (clickable for mute toggle)
-            .child(
-                div()
-                    .id(format!("{}-icon", id_str))
-                    .w(px(32.))
-                    .h(px(32.))
-                    .rounded(px(radius::SM))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .when(muted, |el| el.bg(rgba(0xff444466)))
-                    .when(!muted, |el| el.bg(interactive::default()))
-                    .hover(|s| s.bg(interactive::hover()))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        on_click_icon(cx);
-                    })
-                    .child(
-                        div()
-                            .text_size(px(icon_size::MD))
-                            .text_color(if muted {
-                                status::error()
-                            } else {
-                                text::primary()
-                            })
-                            .child(icon.to_string()),
-                    ),
-            )
-            // Slider track
-            .child(
-                div()
-                    .id(id_str.clone())
-                    .flex_1()
-                    .h(px(8.))
-                    .bg(bg::tertiary())
-                    .rounded(px(4.))
-                    .overflow_hidden()
-                    .relative()
-                    .child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .h_full()
-                            .w(gpui::relative(width_fraction))
-                            .bg(if muted {
-                                text::disabled()
-                            } else {
-                                accent::primary()
-                            })
-                            .rounded(px(4.)),
-                    ),
-            )
-            // Value display
-            .child(
-                div()
-                    .w(px(40.))
-                    .text_size(px(font_size::SM))
-                    .text_color(text::secondary())
-                    .text_right()
-                    .child(format!("{}%", percentage)),
-            )
-            // +/- buttons
-            .child(
-                div()
-                    .flex()
-                    .gap(px(2.))
-                    .child(
-                        div()
-                            .id(format!("{}-dec", id_str))
-                            .w(px(24.))
-                            .h(px(24.))
-                            .rounded(px(radius::SM))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .bg(interactive::default())
-                            .hover(|s| s.bg(interactive::hover()))
-                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                on_decrease(cx);
-                            })
-                            .child(
-                                div()
-                                    .text_size(px(font_size::SM))
-                                    .text_color(text::secondary())
-                                    .child("−"),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id(format!("{}-inc", id_str))
-                            .w(px(24.))
-                            .h(px(24.))
-                            .rounded(px(radius::SM))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .bg(interactive::default())
-                            .hover(|s| s.bg(interactive::hover()))
-                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                on_increase(cx);
-                            })
-                            .child(
-                                div()
-                                    .text_size(px(font_size::SM))
-                                    .text_color(text::secondary())
-                                    .child("+"),
-                            ),
-                    ),
-            )
-    }
-
-    /// Render audio controls section.
-    fn render_audio_section(&self) -> impl IntoElement {
+    fn render_volume_slider(&self) -> impl IntoElement {
         let audio = self.services.audio.get();
         let volume = audio.sink_volume;
         let muted = audio.sink_muted;
-        let mic_muted = audio.source_muted;
 
-        let volume_icon = if muted {
+        let icon = if muted || volume == 0 {
             icons::VOLUME_MUTE
         } else if volume >= 66 {
             icons::VOLUME_HIGH
@@ -372,260 +368,523 @@ impl ControlCenter {
             icons::VOLUME_LOW
         };
 
-        let mic_icon = if mic_muted {
-            icons::MICROPHONE_MUTE
-        } else {
-            icons::MICROPHONE
-        };
-
         let services = self.services.clone();
         let services_inc = self.services.clone();
         let services_dec = self.services.clone();
-        let services_mic = self.services.clone();
 
-        div()
-            .w_full()
-            .p(px(spacing::MD))
-            .bg(bg::secondary())
-            .rounded(px(radius::MD))
-            .flex()
-            .flex_col()
-            .gap(px(spacing::SM))
-            .child(Self::render_section_header(icons::VOLUME_HIGH, "Audio"))
-            // Volume slider
-            .child(Self::render_slider(
-                "volume-slider",
-                volume_icon,
-                volume,
-                muted,
-                move |_cx| {
-                    services.audio.dispatch(AudioCommand::ToggleSinkMute);
-                },
-                move |_cx| {
-                    services_inc
-                        .audio
-                        .dispatch(AudioCommand::AdjustSinkVolume(5));
-                },
-                move |_cx| {
-                    services_dec
-                        .audio
-                        .dispatch(AudioCommand::AdjustSinkVolume(-5));
-                },
-            ))
-            // Microphone toggle
-            .child(div().flex().gap(px(spacing::SM)).mt(px(spacing::XS)).child(
-                Self::render_toggle(
-                    "mic-toggle",
-                    mic_icon,
-                    if mic_muted { "Mic Off" } else { "Mic On" },
-                    !mic_muted,
-                    move |_cx| {
-                        services_mic.audio.dispatch(AudioCommand::ToggleSourceMute);
-                    },
-                ),
-            ))
+        Self::render_slider(
+            "volume",
+            icon,
+            volume,
+            muted,
+            move |_| services.audio.dispatch(AudioCommand::ToggleSinkMute),
+            move |_| {
+                services_inc
+                    .audio
+                    .dispatch(AudioCommand::AdjustSinkVolume(5))
+            },
+            move |_| {
+                services_dec
+                    .audio
+                    .dispatch(AudioCommand::AdjustSinkVolume(-5))
+            },
+        )
     }
 
-    /// Render brightness controls section.
-    fn render_brightness_section(&self) -> AnyElement {
+    fn render_brightness_slider(&self) -> AnyElement {
         let brightness = self.services.brightness.get();
 
         if brightness.max == 0 {
-            // No brightness control available
             return div().into_any_element();
         }
 
-        let percentage = brightness.percentage();
-        let icon = if percentage >= 66 {
-            icons::BRIGHTNESS_HIGH
-        } else if percentage >= 33 {
-            icons::BRIGHTNESS_MED
-        } else {
-            icons::BRIGHTNESS_LOW
-        };
-
+        let percent = brightness.percentage();
         let services = self.services.clone();
         let services_inc = self.services.clone();
         let services_dec = self.services.clone();
 
-        div()
-            .w_full()
-            .p(px(spacing::MD))
-            .bg(bg::secondary())
-            .rounded(px(radius::MD))
-            .flex()
-            .flex_col()
-            .gap(px(spacing::SM))
-            .child(Self::render_section_header(
-                icons::BRIGHTNESS_HIGH,
-                "Display",
-            ))
-            .child(Self::render_slider(
-                "brightness-slider",
-                icon,
-                percentage,
-                false,
-                move |cx| {
-                    let services = services.clone();
-                    cx.spawn(async move |_cx| {
-                        let _ = services
-                            .brightness
-                            .dispatch(BrightnessCommand::SetPercent(50))
-                            .await;
-                    })
-                    .detach();
-                },
-                move |cx| {
-                    let services = services_inc.clone();
-                    cx.spawn(async move |_cx| {
-                        let _ = services
-                            .brightness
-                            .dispatch(BrightnessCommand::Increase(5))
-                            .await;
-                    })
-                    .detach();
-                },
-                move |cx| {
-                    let services = services_dec.clone();
-                    cx.spawn(async move |_cx| {
-                        let _ = services
-                            .brightness
-                            .dispatch(BrightnessCommand::Decrease(5))
-                            .await;
-                    })
-                    .detach();
-                },
-            ))
-            .into_any_element()
+        Self::render_slider(
+            "brightness",
+            icons::BRIGHTNESS,
+            percent,
+            false,
+            move |cx| {
+                let s = services.clone();
+                cx.spawn(async move |_| {
+                    let _ = s
+                        .brightness
+                        .dispatch(BrightnessCommand::SetPercent(50))
+                        .await;
+                })
+                .detach();
+            },
+            move |cx| {
+                let s = services_inc.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.brightness.dispatch(BrightnessCommand::Increase(5)).await;
+                })
+                .detach();
+            },
+            move |cx| {
+                let s = services_dec.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.brightness.dispatch(BrightnessCommand::Decrease(5)).await;
+                })
+                .detach();
+            },
+        )
+        .into_any_element()
     }
 
-    /// Render quick toggles (WiFi, Bluetooth).
-    fn render_quick_toggles(&self) -> impl IntoElement {
-        let network = self.services.network.get();
-        let bluetooth = self.services.bluetooth.get();
-
-        let wifi_enabled = network.wifi_enabled;
-        let bt_state = bluetooth.state;
-        let bt_active = bt_state == BluetoothState::Active;
-        let bt_connected = bluetooth.devices.iter().any(|d| d.connected);
-
-        let bt_icon = match bt_state {
-            BluetoothState::Active if bt_connected => icons::BLUETOOTH_CONNECTED,
-            BluetoothState::Active => icons::BLUETOOTH,
-            _ => icons::BLUETOOTH_OFF,
-        };
-
-        let services_wifi = self.services.clone();
-        let services_bt = self.services.clone();
+    fn render_slider(
+        id: &'static str,
+        icon: &'static str,
+        value: u8,
+        muted: bool,
+        on_icon_click: impl Fn(&mut App) + 'static,
+        on_increase: impl Fn(&mut App) + 'static,
+        on_decrease: impl Fn(&mut App) + 'static,
+    ) -> impl IntoElement {
+        let percent = value.min(100);
+        let width_frac = percent as f32 / 100.0;
+        let id_icon = format!("{}-icon", id);
+        let id_dec = format!("{}-dec", id);
+        let id_inc = format!("{}-inc", id);
 
         div()
-            .w_full()
-            .p(px(spacing::MD))
-            .bg(bg::secondary())
-            .rounded(px(radius::MD))
             .flex()
-            .flex_col()
+            .items_center()
             .gap(px(spacing::SM))
-            .child(Self::render_section_header(
-                icons::SETTINGS,
-                "Quick Settings",
-            ))
+            .w_full()
+            // Icon
+            .child(
+                div()
+                    .id(id_icon)
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(radius::SM))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .bg(interactive::default())
+                    .hover(|s| s.bg(interactive::hover()))
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| on_icon_click(cx))
+                    .child(
+                        div()
+                            .text_size(px(icon_size::SM))
+                            .text_color(if muted {
+                                status::error()
+                            } else {
+                                text::primary()
+                            })
+                            .child(icon),
+                    ),
+            )
+            // Track
+            .child(
+                div()
+                    .id(id)
+                    .flex_1()
+                    .h(px(6.))
+                    .bg(bg::tertiary())
+                    .rounded(px(3.))
+                    .overflow_hidden()
+                    .relative()
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .h_full()
+                            .w(gpui::relative(width_frac))
+                            .bg(if muted {
+                                text::disabled()
+                            } else {
+                                accent::primary()
+                            })
+                            .rounded(px(3.)),
+                    ),
+            )
+            // Percent
+            .child(
+                div()
+                    .w(px(32.))
+                    .text_size(px(font_size::XS))
+                    .text_color(text::muted())
+                    .text_right()
+                    .child(format!("{}%", percent)),
+            )
+            // +/- buttons
             .child(
                 div()
                     .flex()
-                    .flex_wrap()
-                    .gap(px(spacing::SM))
-                    .child(Self::render_toggle(
-                        "wifi-toggle",
-                        if wifi_enabled {
-                            icons::WIFI
-                        } else {
-                            icons::WIFI_OFF
-                        },
-                        "WiFi",
-                        wifi_enabled,
-                        move |cx| {
-                            let services = services_wifi.clone();
-                            cx.spawn(async move |_cx| {
-                                let _ = services.network.dispatch(NetworkCommand::ToggleWifi).await;
-                            })
-                            .detach();
-                        },
-                    ))
-                    .child(Self::render_toggle(
-                        "bt-toggle",
-                        bt_icon,
-                        "Bluetooth",
-                        bt_active,
-                        move |cx| {
-                            let services = services_bt.clone();
-                            cx.spawn(async move |_cx| {
-                                let _ = services.bluetooth.dispatch(BluetoothCommand::Toggle).await;
-                            })
-                            .detach();
-                        },
-                    )),
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .id(id_dec)
+                            .w(px(20.))
+                            .h(px(20.))
+                            .rounded(px(radius::SM))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(interactive::default())
+                            .hover(|s| s.bg(interactive::hover()))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| on_decrease(cx))
+                            .child(
+                                div()
+                                    .text_size(px(font_size::XS))
+                                    .text_color(text::muted())
+                                    .child("−"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id(id_inc)
+                            .w(px(20.))
+                            .h(px(20.))
+                            .rounded(px(radius::SM))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(interactive::default())
+                            .hover(|s| s.bg(interactive::hover()))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| on_increase(cx))
+                            .child(
+                                div()
+                                    .text_size(px(font_size::XS))
+                                    .text_color(text::muted())
+                                    .child("+"),
+                            ),
+                    ),
             )
     }
 
-    /// Render Bluetooth devices list.
-    fn render_bluetooth_devices(&self) -> AnyElement {
-        let bluetooth = self.services.bluetooth.get();
+    // ========================================================================
+    // Expandable Sections
+    // ========================================================================
 
-        if bluetooth.state != BluetoothState::Active || bluetooth.devices.is_empty() {
+    fn render_wifi_section(&self) -> AnyElement {
+        if self.expanded != ExpandedSection::WiFi {
             return div().into_any_element();
         }
 
+        let network = self.services.network.get();
         let services = self.services.clone();
+
+        // Get current connection name
+        let connected_name: Option<String> = network.active_connections.iter().find_map(|c| {
+            if let services::ActiveConnectionInfo::WiFi { name, .. } = c {
+                Some(name.clone())
+            } else {
+                None
+            }
+        });
+
+        // Sort access points: connected first, then by signal strength
+        let mut aps: Vec<AccessPoint> = network.wireless_access_points.clone();
+        aps.sort_by(|a, b| {
+            let a_connected = connected_name.as_ref() == Some(&a.ssid);
+            let b_connected = connected_name.as_ref() == Some(&b.ssid);
+            match (a_connected, b_connected) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => b.strength.cmp(&a.strength),
+            }
+        });
+        let aps_empty = aps.is_empty();
 
         div()
             .w_full()
-            .p(px(spacing::MD))
+            .p(px(spacing::SM))
             .bg(bg::secondary())
             .rounded(px(radius::MD))
             .flex()
             .flex_col()
-            .gap(px(spacing::SM))
-            .child(Self::render_section_header(
-                icons::BLUETOOTH,
-                "Bluetooth Devices",
-            ))
-            .children(bluetooth.devices.iter().take(5).map(|device| {
-                let connected = device.connected;
+            .gap(px(2.))
+            .children(aps.into_iter().take(8).map(|ap| {
+                let ssid = ap.ssid.clone();
+                let is_connected = connected_name.as_ref() == Some(&ssid);
+                let strength = ap.strength;
+                let device_path: OwnedObjectPath = ap.device_path.clone().into();
+                let ap_path: OwnedObjectPath = ap.path.clone().into();
+                let services_clone = services.clone();
+
+                render_wifi_item(ssid, strength, is_connected, move |cx| {
+                    if !is_connected {
+                        let s = services_clone.clone();
+                        let dev = device_path.clone();
+                        let path = ap_path.clone();
+                        cx.spawn(async move |_| {
+                            let _ = s
+                                .network
+                                .dispatch(NetworkCommand::ConnectToAccessPoint {
+                                    device_path: dev,
+                                    ap_path: path,
+                                    password: None,
+                                })
+                                .await;
+                        })
+                        .detach();
+                    }
+                })
+            }))
+            .when(aps_empty, |el| {
+                el.child(
+                    div()
+                        .py(px(spacing::SM))
+                        .text_size(px(font_size::SM))
+                        .text_color(text::muted())
+                        .child("No networks found"),
+                )
+            })
+            .into_any_element()
+    }
+}
+
+fn render_wifi_item(
+    ssid: String,
+    strength: u8,
+    connected: bool,
+    on_click: impl Fn(&mut App) + 'static,
+) -> impl IntoElement {
+    let wifi_icon = match strength {
+        0..=25 => "󰤟",
+        26..=50 => "󰤢",
+        51..=75 => "󰤥",
+        _ => "󰤨",
+    };
+    let id = format!("wifi-{}", ssid);
+
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .justify_between()
+        .w_full()
+        .px(px(spacing::SM))
+        .py(px(spacing::XS))
+        .rounded(px(radius::SM))
+        .cursor_pointer()
+        .hover(|s| s.bg(interactive::hover()))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| on_click(cx))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(spacing::SM))
+                .child(
+                    div()
+                        .text_size(px(icon_size::SM))
+                        .text_color(if connected {
+                            accent::primary()
+                        } else {
+                            text::muted()
+                        })
+                        .child(wifi_icon),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size::SM))
+                        .text_color(if connected {
+                            text::primary()
+                        } else {
+                            text::secondary()
+                        })
+                        .child(ssid),
+                ),
+        )
+        .when(connected, |el| {
+            el.child(
+                div()
+                    .text_size(px(icon_size::SM))
+                    .text_color(status::success())
+                    .child(icons::CHECK),
+            )
+        })
+}
+
+impl ControlCenter {
+    fn render_bluetooth_section(&self) -> AnyElement {
+        if self.expanded != ExpandedSection::Bluetooth {
+            return div().into_any_element();
+        }
+
+        let bluetooth = self.services.bluetooth.get();
+        let services = self.services.clone();
+
+        if bluetooth.devices.is_empty() {
+            return div()
+                .w_full()
+                .p(px(spacing::SM))
+                .bg(bg::secondary())
+                .rounded(px(radius::MD))
+                .child(
+                    div()
+                        .py(px(spacing::SM))
+                        .text_size(px(font_size::SM))
+                        .text_color(text::muted())
+                        .child("No paired devices"),
+                )
+                .into_any_element();
+        }
+
+        // Sort: connected first
+        let mut devices: Vec<BluetoothDevice> = bluetooth.devices.clone();
+        devices.sort_by(|a, b| b.connected.cmp(&a.connected));
+
+        div()
+            .w_full()
+            .p(px(spacing::SM))
+            .bg(bg::secondary())
+            .rounded(px(radius::MD))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .children(devices.into_iter().take(6).map(|device| {
                 let name = device.name.clone();
                 let path = device.path.clone();
+                let connected = device.connected;
                 let battery = device.battery;
                 let services_clone = services.clone();
 
+                render_bluetooth_item(name, connected, battery, move |cx| {
+                    let s = services_clone.clone();
+                    let p = path.clone();
+                    cx.spawn(async move |_| {
+                        if connected {
+                            let _ = s
+                                .bluetooth
+                                .dispatch(BluetoothCommand::DisconnectDevice(p))
+                                .await;
+                        } else {
+                            let _ = s
+                                .bluetooth
+                                .dispatch(BluetoothCommand::ConnectDevice(p))
+                                .await;
+                        }
+                    })
+                    .detach();
+                })
+            }))
+            .into_any_element()
+    }
+}
+
+fn render_bluetooth_item(
+    name: String,
+    connected: bool,
+    battery: Option<u8>,
+    on_click: impl Fn(&mut App) + 'static,
+) -> impl IntoElement {
+    let icon = if connected {
+        icons::BLUETOOTH_CONNECTED
+    } else {
+        icons::BLUETOOTH
+    };
+    let id = format!("bt-{}", name);
+
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .justify_between()
+        .w_full()
+        .px(px(spacing::SM))
+        .py(px(spacing::XS))
+        .rounded(px(radius::SM))
+        .cursor_pointer()
+        .hover(|s| s.bg(interactive::hover()))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| on_click(cx))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(spacing::SM))
+                .child(
+                    div()
+                        .text_size(px(icon_size::SM))
+                        .text_color(if connected {
+                            accent::primary()
+                        } else {
+                            text::muted()
+                        })
+                        .child(icon),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size::SM))
+                        .text_color(if connected {
+                            text::primary()
+                        } else {
+                            text::secondary()
+                        })
+                        .child(name),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(spacing::SM))
+                .when_some(battery, |el, bat| {
+                    el.child(
+                        div()
+                            .text_size(px(font_size::XS))
+                            .text_color(text::muted())
+                            .child(format!("{}%", bat)),
+                    )
+                })
+                .when(connected, |el| {
+                    el.child(
+                        div()
+                            .text_size(px(icon_size::SM))
+                            .text_color(status::success())
+                            .child(icons::CHECK),
+                    )
+                }),
+        )
+}
+
+impl ControlCenter {
+    // ========================================================================
+    // Power Section
+    // ========================================================================
+
+    fn render_power_section(&self) -> AnyElement {
+        let upower = self.services.upower.get();
+        let services = self.services.clone();
+
+        let profile = upower.power_profile;
+        let profiles_available = upower.power_profiles_available;
+
+        match &upower.battery {
+            Some(battery) => {
+                let icon = battery.icon();
+                let percent = battery.percentage;
+                let is_charging = battery.is_charging();
+                let is_critical = battery.is_critical();
+
+                let status_text = if battery.is_full() {
+                    "Full".to_string()
+                } else if is_charging {
+                    battery
+                        .time_remaining_str()
+                        .map_or("Charging".to_string(), |t| format!("{} to full", t))
+                } else {
+                    battery
+                        .time_remaining_str()
+                        .map_or("On battery".to_string(), |t| t)
+                };
+
                 div()
-                    .id(format!("bt-device-{}", name))
                     .flex()
                     .items_center()
                     .justify_between()
                     .w_full()
-                    .px(px(spacing::SM))
-                    .py(px(spacing::SM - 2.0))
-                    .rounded(px(radius::SM))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(interactive::hover()))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        let services = services_clone.clone();
-                        let path = path.clone();
-                        cx.spawn(async move |_cx| {
-                            if connected {
-                                let _ = services
-                                    .bluetooth
-                                    .dispatch(BluetoothCommand::DisconnectDevice(path))
-                                    .await;
-                            } else {
-                                let _ = services
-                                    .bluetooth
-                                    .dispatch(BluetoothCommand::ConnectDevice(path))
-                                    .await;
-                            }
-                        })
-                        .detach();
-                    })
                     .child(
                         div()
                             .flex()
@@ -633,228 +892,105 @@ impl ControlCenter {
                             .gap(px(spacing::SM))
                             .child(
                                 div()
-                                    .text_size(px(icon_size::MD))
-                                    .text_color(if connected {
-                                        accent::primary()
+                                    .text_size(px(icon_size::LG))
+                                    .text_color(if is_critical {
+                                        status::error()
+                                    } else if is_charging {
+                                        status::success()
                                     } else {
-                                        text::muted()
+                                        text::primary()
                                     })
-                                    .child(if connected {
-                                        icons::BLUETOOTH_CONNECTED
-                                    } else {
-                                        icons::BLUETOOTH
-                                    }),
+                                    .child(icon),
                             )
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .child(div().text_size(px(font_size::SM)).child(name.clone()))
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::MD))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(if is_critical {
+                                                status::error()
+                                            } else {
+                                                text::primary()
+                                            })
+                                            .child(format!("{}%", percent)),
+                                    )
                                     .child(
                                         div()
                                             .text_size(px(font_size::XS))
-                                            .text_color(text::disabled())
-                                            .child(if connected { "Connected" } else { "Paired" }),
+                                            .text_color(text::muted())
+                                            .child(status_text),
                                     ),
                             ),
                     )
-                    .when_some(battery, |el, bat| {
-                        el.child(
-                            div()
-                                .text_size(px(font_size::XS))
-                                .text_color(text::muted())
-                                .child(format!("{}%", bat)),
-                        )
+                    .when(profiles_available, |el| {
+                        el.child(self.render_power_profile_btn(profile, services))
                     })
-            }))
-            .into_any_element()
+                    .into_any_element()
+            }
+            None => {
+                // No battery - just show power profile if available
+                if profiles_available {
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .w_full()
+                        .child(
+                            div()
+                                .text_size(px(font_size::SM))
+                                .text_color(text::secondary())
+                                .child("Power Profile"),
+                        )
+                        .child(self.render_power_profile_btn(profile, services))
+                        .into_any_element()
+                } else {
+                    div().into_any_element()
+                }
+            }
+        }
     }
 
-    /// Render battery and power profile section.
-    fn render_power_section(&self) -> AnyElement {
-        let upower = self.services.upower.get();
-        let services = self.services.clone();
-
-        let Some(battery) = &upower.battery else {
-            // No battery, just show power profile if available
-            if !upower.power_profiles_available {
-                return div().into_any_element();
-            }
-
-            let profile = upower.power_profile;
-            let profile_icon = profile.icon();
-            let profile_label = profile.label();
-
-            return div()
-                .w_full()
-                .p(px(spacing::MD))
-                .bg(bg::secondary())
-                .rounded(px(radius::MD))
-                .flex()
-                .flex_col()
-                .gap(px(spacing::SM))
-                .child(Self::render_section_header(icons::POWER_PROFILE, "Power"))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(spacing::SM))
-                                .child(div().text_size(px(icon_size::MD)).child(profile_icon))
-                                .child(div().text_size(px(font_size::SM)).child("Power Profile")),
-                        )
-                        .child(
-                            div()
-                                .id("power-profile-btn")
-                                .px(px(10.))
-                                .py(px(spacing::XS))
-                                .bg(interactive::default())
-                                .rounded(px(radius::SM))
-                                .cursor_pointer()
-                                .hover(|s| s.bg(interactive::hover()))
-                                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                    let services = services.clone();
-                                    cx.spawn(async move |_cx| {
-                                        let _ = services
-                                            .upower
-                                            .dispatch(UPowerCommand::CyclePowerProfile)
-                                            .await;
-                                    })
-                                    .detach();
-                                })
-                                .child(
-                                    div()
-                                        .text_size(px(font_size::SM))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(profile_label),
-                                ),
-                        ),
-                )
-                .into_any_element();
-        };
-
-        let bat_icon = battery.icon();
-        let bat_percentage = battery.percentage;
-        let is_charging = battery.is_charging();
-        let is_critical = battery.is_critical();
-
-        let status_text = if battery.is_full() {
-            "Fully Charged".to_string()
-        } else if is_charging {
-            match battery.time_remaining_str() {
-                Some(time) => format!("Charging · {}", time),
-                None => "Charging".to_string(),
-            }
-        } else {
-            match battery.time_remaining_str() {
-                Some(time) => format!("On Battery · {}", time),
-                None => "On Battery".to_string(),
-            }
-        };
-
-        let profile = upower.power_profile;
-        let profile_icon = profile.icon();
-        let profile_label = profile.label();
-        let profiles_available = upower.power_profiles_available;
+    fn render_power_profile_btn(
+        &self,
+        profile: PowerProfile,
+        services: Services,
+    ) -> impl IntoElement {
+        let icon = profile.icon();
+        let label = profile.label();
 
         div()
-            .w_full()
-            .p(px(spacing::MD))
-            .bg(bg::secondary())
-            .rounded(px(radius::MD))
+            .id("power-profile")
             .flex()
-            .flex_col()
-            .gap(px(spacing::MD))
-            .child(Self::render_section_header(icons::BATTERY_FULL, "Power"))
-            // Battery info
+            .items_center()
+            .gap(px(spacing::XS))
+            .px(px(spacing::SM))
+            .py(px(spacing::XS))
+            .rounded(px(radius::SM))
+            .cursor_pointer()
+            .bg(interactive::default())
+            .hover(|s| s.bg(interactive::hover()))
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                let s = services.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.upower.dispatch(UPowerCommand::CyclePowerProfile).await;
+                })
+                .detach();
+            })
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .gap(px(spacing::MD))
-                    .child(
-                        div()
-                            .text_size(px(24.))
-                            .text_color(if is_critical {
-                                status::error()
-                            } else if is_charging {
-                                status::success()
-                            } else {
-                                text::primary()
-                            })
-                            .child(bat_icon),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .text_size(px(font_size::LG))
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(if is_critical {
-                                        status::error()
-                                    } else {
-                                        text::primary()
-                                    })
-                                    .child(format!("{}%", bat_percentage)),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(font_size::SM))
-                                    .text_color(text::muted())
-                                    .child(status_text),
-                            ),
-                    ),
+                    .text_size(px(icon_size::SM))
+                    .text_color(text::secondary())
+                    .child(icon),
             )
-            // Power profile selector (if available)
-            .when(profiles_available, |el| {
-                el.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(spacing::SM))
-                                .child(div().text_size(px(icon_size::MD)).child(profile_icon))
-                                .child(div().text_size(px(font_size::SM)).child("Power Profile")),
-                        )
-                        .child(
-                            div()
-                                .id("power-profile-btn")
-                                .px(px(10.))
-                                .py(px(spacing::XS))
-                                .bg(interactive::default())
-                                .rounded(px(radius::SM))
-                                .cursor_pointer()
-                                .hover(|s| s.bg(interactive::hover()))
-                                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                    let services = services.clone();
-                                    cx.spawn(async move |_cx| {
-                                        let _ = services
-                                            .upower
-                                            .dispatch(UPowerCommand::CyclePowerProfile)
-                                            .await;
-                                    })
-                                    .detach();
-                                })
-                                .child(
-                                    div()
-                                        .text_size(px(font_size::SM))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(profile_label),
-                                ),
-                        ),
-                )
-            })
-            .into_any_element()
+            .child(
+                div()
+                    .text_size(px(font_size::XS))
+                    .text_color(text::secondary())
+                    .child(label),
+            )
     }
 }
 
@@ -865,7 +1001,7 @@ impl Focusable for ControlCenter {
 }
 
 impl Render for ControlCenter {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("control-center")
             .track_focus(&self.focus_handle)
@@ -883,35 +1019,16 @@ impl Render for ControlCenter {
             .gap(px(spacing::MD))
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
-            // Header
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(spacing::SM))
-                    .mb(px(spacing::XS))
-                    .child(
-                        div()
-                            .text_size(px(icon_size::XL))
-                            .text_color(text::primary())
-                            .child(icons::SETTINGS),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::LG))
-                            .text_color(text::primary())
-                            .font_weight(FontWeight::BOLD)
-                            .child("Control Center"),
-                    ),
-            )
-            // Quick toggles (WiFi, Bluetooth)
-            .child(self.render_quick_toggles())
-            // Bluetooth devices (if any)
-            .child(self.render_bluetooth_devices())
-            // Audio controls
-            .child(self.render_audio_section())
-            // Brightness (only on devices with backlight)
-            .child(self.render_brightness_section())
+            // Quick toggles row
+            .child(self.render_quick_toggles(cx))
+            // Volume slider
+            .child(self.render_volume_slider())
+            // Brightness slider (if available)
+            .child(self.render_brightness_slider())
+            // WiFi expanded section
+            .child(self.render_wifi_section())
+            // Bluetooth expanded section
+            .child(self.render_bluetooth_section())
             // Power/Battery section
             .child(self.render_power_section())
     }
@@ -923,7 +1040,7 @@ impl Render for ControlCenter {
 
 use crate::launcher::view::{LauncherView, ViewContext as LauncherViewContext};
 
-/// Control Center launcher view.
+/// Control Center as a launcher view.
 pub struct ControlCenterView;
 
 impl LauncherView for ControlCenterView {
@@ -940,384 +1057,212 @@ impl LauncherView for ControlCenterView {
     }
 
     fn description(&self) -> &'static str {
-        "Quick settings and controls"
+        "Quick settings and system controls"
     }
 
     fn render(&self, vx: &LauncherViewContext, _cx: &App) -> (AnyElement, usize) {
+        // Render a simplified inline version for the launcher
         let audio = vx.services.audio.get();
         let network = vx.services.network.get();
         let bluetooth = vx.services.bluetooth.get();
-        let brightness = vx.services.brightness.get();
         let upower = vx.services.upower.get();
 
-        let query_lower = vx.query.to_lowercase();
-
-        // Build list of control items
-        let mut items: Vec<ControlItem> = Vec::new();
-
-        // WiFi toggle
-        items.push(ControlItem {
-            id: "wifi",
-            icon: if network.wifi_enabled {
-                icons::WIFI
-            } else {
-                icons::WIFI_OFF
-            },
-            title: "WiFi".to_string(),
-            subtitle: if network.wifi_enabled {
-                "Enabled"
-            } else {
-                "Disabled"
-            }
-            .to_string(),
-            active: network.wifi_enabled,
-            action: ControlAction::ToggleWifi,
-        });
-
-        // Bluetooth toggle
-        let bt_active = bluetooth.state == BluetoothState::Active;
-        let bt_connected = bluetooth.devices.iter().any(|d| d.connected);
-        items.push(ControlItem {
-            id: "bluetooth",
-            icon: match bluetooth.state {
-                BluetoothState::Active if bt_connected => icons::BLUETOOTH_CONNECTED,
-                BluetoothState::Active => icons::BLUETOOTH,
-                _ => icons::BLUETOOTH_OFF,
-            },
-            title: "Bluetooth".to_string(),
-            subtitle: if bt_connected {
-                let count = bluetooth.devices.iter().filter(|d| d.connected).count();
-                format!("{} connected", count)
-            } else if bt_active {
-                "On".to_string()
-            } else {
-                "Off".to_string()
-            },
-            active: bt_active,
-            action: ControlAction::ToggleBluetooth,
-        });
-
-        // Volume mute toggle
-        items.push(ControlItem {
-            id: "mute",
-            icon: if audio.sink_muted {
-                icons::VOLUME_MUTE
-            } else {
-                icons::VOLUME_HIGH
-            },
-            title: "Speaker".to_string(),
-            subtitle: if audio.sink_muted {
-                "Muted".to_string()
-            } else {
-                format!("{}%", audio.sink_volume)
-            },
-            active: !audio.sink_muted,
-            action: ControlAction::ToggleMute,
-        });
-
-        // Mic mute toggle
-        items.push(ControlItem {
-            id: "mic",
-            icon: if audio.source_muted {
-                icons::MICROPHONE_MUTE
-            } else {
-                icons::MICROPHONE
-            },
-            title: "Microphone".to_string(),
-            subtitle: if audio.source_muted {
-                "Muted".to_string()
-            } else {
-                format!("{}%", audio.source_volume)
-            },
-            active: !audio.source_muted,
-            action: ControlAction::ToggleMicMute,
-        });
-
-        // Brightness (if available)
-        if brightness.max > 0 {
-            let pct = brightness.percentage();
-            items.push(ControlItem {
-                id: "brightness",
-                icon: if pct >= 66 {
-                    icons::BRIGHTNESS_HIGH
-                } else if pct >= 33 {
-                    icons::BRIGHTNESS_MED
+        let items = vec![
+            (
+                "WiFi",
+                network.wifi_enabled,
+                if network.wifi_enabled {
+                    icons::WIFI
                 } else {
-                    icons::BRIGHTNESS_LOW
+                    icons::WIFI_OFF
                 },
-                title: "Brightness".to_string(),
-                subtitle: format!("{}%", pct),
-                active: true,
-                action: ControlAction::CycleBrightness,
-            });
-        }
-
-        // Power profile
-        let profile = upower.power_profile;
-        items.push(ControlItem {
-            id: "power-profile",
-            icon: profile.icon(),
-            title: "Power Profile".to_string(),
-            subtitle: profile.label().to_string(),
-            active: profile == PowerProfile::Performance,
-            action: ControlAction::CyclePowerProfile,
-        });
-
-        // Battery info (if present)
-        if let Some(battery) = &upower.battery {
-            items.push(ControlItem {
-                id: "battery",
-                icon: battery.icon(),
-                title: format!("Battery {}%", battery.percentage),
-                subtitle: if battery.is_charging() {
-                    "Charging".to_string()
-                } else if battery.is_full() {
-                    "Full".to_string()
+            ),
+            (
+                "Bluetooth",
+                bluetooth.state == BluetoothState::Active,
+                if bluetooth.state == BluetoothState::Active {
+                    icons::BLUETOOTH
                 } else {
-                    battery
-                        .time_remaining_str()
-                        .unwrap_or_else(|| "On Battery".to_string())
+                    icons::BLUETOOTH_OFF
                 },
-                active: false,
-                action: ControlAction::None,
-            });
-        }
-
-        // Filter by query
-        let filtered: Vec<_> = items
-            .into_iter()
-            .filter(|item| {
-                if query_lower.is_empty() {
-                    true
+            ),
+            (
+                "Microphone",
+                !audio.source_muted,
+                if audio.source_muted {
+                    icons::MICROPHONE_MUTE
                 } else {
-                    item.title.to_lowercase().contains(&query_lower)
-                        || item.subtitle.to_lowercase().contains(&query_lower)
-                }
-            })
-            .collect();
+                    icons::MICROPHONE
+                },
+            ),
+        ];
 
-        let count = filtered.len();
-        let services = vx.services.clone();
+        let count = items.len() + 2; // +2 for volume and battery
 
-        let element = div()
-            .flex_1()
+        let el = div()
+            .w_full()
             .flex()
             .flex_col()
-            .gap(px(4.))
-            .p(px(spacing::SM))
-            .children(filtered.into_iter().enumerate().map(|(i, item)| {
-                let is_selected = i == vx.selected_index;
-                let services = services.clone();
-                let action = item.action.clone();
-
-                div()
-                    .id(format!("cc-{}", item.id))
-                    .w_full()
-                    .h(px(56.))
-                    .px(px(spacing::MD))
-                    .rounded(px(radius::MD))
-                    .cursor_pointer()
-                    .flex()
-                    .items_center()
-                    .gap(px(spacing::MD))
-                    .when(is_selected, |el| el.bg(rgba(0x3b82f6ff)))
-                    .when(!is_selected, |el| el.hover(|s| s.bg(interactive::hover())))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        execute_action(&services, &action, cx);
-                    })
-                    // Icon
-                    .child(
+            .gap(px(spacing::SM))
+            // Status items
+            .children(
+                items
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, (name, active, icon))| {
                         div()
-                            .w(px(40.))
-                            .h(px(40.))
-                            .rounded(px(radius::MD))
+                            .id(format!("cc-item-{}", idx))
                             .flex()
                             .items_center()
-                            .justify_center()
-                            .bg(if item.active {
-                                accent::primary()
-                            } else {
-                                interactive::default()
-                            })
+                            .justify_between()
+                            .w_full()
+                            .px(px(spacing::MD))
+                            .py(px(spacing::SM))
+                            .rounded(px(radius::MD))
+                            .when(vx.selected_index == idx, |el| el.bg(interactive::hover()))
                             .child(
                                 div()
-                                    .text_size(px(icon_size::LG))
-                                    .text_color(text::primary())
-                                    .child(item.icon),
-                            ),
-                    )
-                    // Text
-                    .child(
-                        div()
-                            .flex_1()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_size(px(font_size::BASE))
-                                    .text_color(text::primary())
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(item.title),
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(spacing::SM))
+                                    .child(
+                                        div()
+                                            .text_size(px(icon_size::MD))
+                                            .text_color(if active {
+                                                accent::primary()
+                                            } else {
+                                                text::muted()
+                                            })
+                                            .child(icon),
+                                    )
+                                    .child(div().text_size(px(font_size::SM)).child(name)),
                             )
                             .child(
                                 div()
-                                    .text_size(px(font_size::SM))
+                                    .text_size(px(font_size::XS))
                                     .text_color(text::muted())
-                                    .child(item.subtitle),
-                            ),
+                                    .child(if active { "On" } else { "Off" }),
+                            )
+                    }),
+            )
+            // Volume row
+            .child(
+                div()
+                    .id("cc-volume")
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .w_full()
+                    .px(px(spacing::MD))
+                    .py(px(spacing::SM))
+                    .rounded(px(radius::MD))
+                    .when(vx.selected_index == 3, |el| el.bg(interactive::hover()))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(spacing::SM))
+                            .child(
+                                div()
+                                    .text_size(px(icon_size::MD))
+                                    .text_color(if audio.sink_muted {
+                                        status::error()
+                                    } else {
+                                        text::primary()
+                                    })
+                                    .child(if audio.sink_muted {
+                                        icons::VOLUME_MUTE
+                                    } else {
+                                        icons::VOLUME_HIGH
+                                    }),
+                            )
+                            .child(div().text_size(px(font_size::SM)).child("Volume")),
                     )
-            }))
+                    .child(
+                        div()
+                            .text_size(px(font_size::XS))
+                            .text_color(text::muted())
+                            .child(format!("{}%", audio.sink_volume)),
+                    ),
+            )
+            // Battery row
+            .when_some(upower.battery.as_ref(), |el, battery| {
+                el.child(
+                    div()
+                        .id("cc-battery")
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .w_full()
+                        .px(px(spacing::MD))
+                        .py(px(spacing::SM))
+                        .rounded(px(radius::MD))
+                        .when(vx.selected_index == 4, |el| el.bg(interactive::hover()))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(spacing::SM))
+                                .child(
+                                    div()
+                                        .text_size(px(icon_size::MD))
+                                        .text_color(if battery.is_critical() {
+                                            status::error()
+                                        } else if battery.is_charging() {
+                                            status::success()
+                                        } else {
+                                            text::primary()
+                                        })
+                                        .child(battery.icon()),
+                                )
+                                .child(div().text_size(px(font_size::SM)).child("Battery")),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(text::muted())
+                                .child(format!("{}%", battery.percentage)),
+                        ),
+                )
+            })
             .into_any_element();
 
-        (element, count)
+        (el, count)
     }
 
     fn on_select(&self, index: usize, vx: &LauncherViewContext, cx: &mut App) -> bool {
-        let audio = vx.services.audio.get();
-        let network = vx.services.network.get();
-        let bluetooth = vx.services.bluetooth.get();
-        let brightness = vx.services.brightness.get();
-        let upower = vx.services.upower.get();
+        let services = vx.services.clone();
 
-        let query_lower = vx.query.to_lowercase();
-
-        // Rebuild items list to find the selected one
-        let mut items: Vec<ControlAction> = Vec::new();
-
-        // WiFi
-        if query_lower.is_empty() || "wifi".contains(&query_lower) {
-            items.push(ControlAction::ToggleWifi);
-        }
-
-        // Bluetooth
-        if query_lower.is_empty()
-            || "bluetooth".contains(&query_lower)
-            || "bt".contains(&query_lower)
-        {
-            items.push(ControlAction::ToggleBluetooth);
-        }
-
-        // Mute
-        if query_lower.is_empty()
-            || "speaker".contains(&query_lower)
-            || "mute".contains(&query_lower)
-            || "volume".contains(&query_lower)
-        {
-            items.push(ControlAction::ToggleMute);
-        }
-
-        // Mic
-        if query_lower.is_empty()
-            || "microphone".contains(&query_lower)
-            || "mic".contains(&query_lower)
-        {
-            items.push(ControlAction::ToggleMicMute);
-        }
-
-        // Brightness
-        if brightness.max > 0 && (query_lower.is_empty() || "brightness".contains(&query_lower)) {
-            items.push(ControlAction::CycleBrightness);
-        }
-
-        // Power profile
-        if query_lower.is_empty()
-            || "power".contains(&query_lower)
-            || "profile".contains(&query_lower)
-        {
-            items.push(ControlAction::CyclePowerProfile);
-        }
-
-        // Battery (no action)
-        if upower.battery.is_some() && (query_lower.is_empty() || "battery".contains(&query_lower))
-        {
-            items.push(ControlAction::None);
-        }
-
-        if let Some(action) = items.get(index) {
-            execute_action(vx.services, action, cx);
+        match index {
+            0 => {
+                // Toggle WiFi
+                cx.spawn(async move |_| {
+                    let _ = services.network.dispatch(NetworkCommand::ToggleWifi).await;
+                })
+                .detach();
+            }
+            1 => {
+                // Toggle Bluetooth
+                cx.spawn(async move |_| {
+                    let _ = services.bluetooth.dispatch(BluetoothCommand::Toggle).await;
+                })
+                .detach();
+            }
+            2 => {
+                // Toggle Mic
+                services.audio.dispatch(AudioCommand::ToggleSourceMute);
+            }
+            3 => {
+                // Toggle Volume mute
+                services.audio.dispatch(AudioCommand::ToggleSinkMute);
+            }
+            _ => {}
         }
 
         false // Don't close launcher
     }
 
     fn footer_actions(&self, _vx: &LauncherViewContext) -> Vec<(&'static str, &'static str)> {
-        vec![("Toggle", "Enter"), ("Close", "Esc")]
-    }
-}
-
-/// A control item for the launcher view.
-struct ControlItem {
-    id: &'static str,
-    icon: &'static str,
-    title: String,
-    subtitle: String,
-    active: bool,
-    action: ControlAction,
-}
-
-/// Actions that can be performed from the control center.
-#[derive(Clone)]
-enum ControlAction {
-    None,
-    ToggleWifi,
-    ToggleBluetooth,
-    ToggleMute,
-    ToggleMicMute,
-    CycleBrightness,
-    CyclePowerProfile,
-}
-
-/// Execute a control action.
-fn execute_action(services: &Services, action: &ControlAction, cx: &mut App) {
-    let services = services.clone();
-    let action = action.clone();
-
-    match action {
-        ControlAction::None => {}
-        ControlAction::ToggleWifi => {
-            cx.spawn(async move |_cx| {
-                let _ = services.network.dispatch(NetworkCommand::ToggleWifi).await;
-            })
-            .detach();
-        }
-        ControlAction::ToggleBluetooth => {
-            cx.spawn(async move |_cx| {
-                let _ = services.bluetooth.dispatch(BluetoothCommand::Toggle).await;
-            })
-            .detach();
-        }
-        ControlAction::ToggleMute => {
-            services.audio.dispatch(AudioCommand::ToggleSinkMute);
-        }
-        ControlAction::ToggleMicMute => {
-            services.audio.dispatch(AudioCommand::ToggleSourceMute);
-        }
-        ControlAction::CycleBrightness => {
-            // Cycle through 25%, 50%, 75%, 100%
-            let current = services.brightness.get().percentage();
-            let next = match current {
-                0..=25 => 50,
-                26..=50 => 75,
-                51..=75 => 100,
-                _ => 25,
-            };
-            cx.spawn(async move |_cx| {
-                let _ = services
-                    .brightness
-                    .dispatch(BrightnessCommand::SetPercent(next))
-                    .await;
-            })
-            .detach();
-        }
-        ControlAction::CyclePowerProfile => {
-            cx.spawn(async move |_cx| {
-                let _ = services
-                    .upower
-                    .dispatch(UPowerCommand::CyclePowerProfile)
-                    .await;
-            })
-            .detach();
-        }
+        vec![("Enter", "Toggle"), ("Esc", "Close")]
     }
 }
