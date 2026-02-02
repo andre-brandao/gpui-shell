@@ -15,6 +15,14 @@
   vulkan-loader,
   wayland,
   xorg,
+  glib,
+  atk,
+  gtk3,
+  cairo,
+  pango,
+  gdk-pixbuf,
+  pipewire,
+  systemd,
 }:
 
 mkShell rec {
@@ -39,6 +47,16 @@ mkShell rec {
     vulkan-loader
     freetype
     libpulseaudio
+    # --
+
+    glib
+    atk
+    gtk3
+    cairo
+    pango
+    gdk-pixbuf
+    pipewire
+    systemd
   ];
 
   env = {
