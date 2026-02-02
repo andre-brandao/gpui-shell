@@ -1,11 +1,12 @@
 use crate::services::Services;
-use gpui::{Context, FontWeight, Window, div, prelude::*, px, rgba};
+use gpui::{Context, FontWeight, ScrollHandle, Window, div, prelude::*, px, rgba};
 
 use super::icons;
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanelContent {
     services: Services,
+    scroll_handle: ScrollHandle,
 }
 
 impl SysInfoPanelContent {
@@ -14,7 +15,10 @@ impl SysInfoPanelContent {
         cx.observe(&services.sysinfo, |_, _, cx| cx.notify())
             .detach();
 
-        SysInfoPanelContent { services }
+        SysInfoPanelContent {
+            services,
+            scroll_handle: ScrollHandle::new(),
+        }
     }
 
     fn render_info_row(
@@ -41,7 +45,7 @@ impl SysInfoPanelContent {
                 div()
                     .flex_1()
                     .text_size(px(13.))
-                    .text_color(rgba(0xccccccff))
+                    .text_color(rgba(0xffffffff))
                     .child(label.to_string()),
             )
             .child(
@@ -55,21 +59,21 @@ impl SysInfoPanelContent {
 
     fn usage_color(usage: u32) -> gpui::Hsla {
         if usage >= 90 {
-            gpui::rgb(0xef4444).into() // red - critical
+            gpui::rgb(0xf87171).into() // red - critical (brighter)
         } else if usage >= 70 {
-            gpui::rgb(0xf59e0b).into() // amber - warning
+            gpui::rgb(0xfbbf24).into() // amber - warning (brighter)
         } else {
-            gpui::rgb(0x22c55e).into() // green - normal
+            gpui::rgb(0x4ade80).into() // green - normal (brighter)
         }
     }
 
     fn temp_color(temp: i32) -> gpui::Hsla {
         if temp >= 85 {
-            gpui::rgb(0xef4444).into() // red - critical
+            gpui::rgb(0xf87171).into() // red - critical (brighter)
         } else if temp >= 70 {
-            gpui::rgb(0xf59e0b).into() // amber - warning
+            gpui::rgb(0xfbbf24).into() // amber - warning (brighter)
         } else {
-            gpui::rgb(0x22c55e).into() // green - normal
+            gpui::rgb(0x4ade80).into() // green - normal (brighter)
         }
     }
 
@@ -81,7 +85,7 @@ impl SysInfoPanelContent {
             .w_full()
             .h(px(4.))
             .rounded(px(2.))
-            .bg(rgba(0x333333ff))
+            .bg(rgba(0x404040ff))
             .child(
                 div()
                     .h_full()
@@ -102,7 +106,7 @@ impl SysInfoPanelContent {
         div()
             .w_full()
             .p(px(12.))
-            .bg(rgba(0x2a2a2aff))
+            .bg(rgba(0x333333ff))
             .rounded(px(8.))
             .flex()
             .flex_col()
@@ -117,10 +121,16 @@ impl SysInfoPanelContent {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .child(div().text_size(px(16.)).child(icon.to_string()))
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .text_color(rgba(0xffffffff))
+                                    .child(icon.to_string()),
+                            )
                             .child(
                                 div()
                                     .text_size(px(13.))
+                                    .text_color(rgba(0xffffffff))
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(title.to_string()),
                             ),
@@ -137,7 +147,7 @@ impl SysInfoPanelContent {
             .child(
                 div()
                     .text_size(px(11.))
-                    .text_color(rgba(0x888888ff))
+                    .text_color(rgba(0xccccccff))
                     .child(details.to_string()),
             )
     }
@@ -190,9 +200,13 @@ impl Render for SysInfoPanelContent {
         };
 
         div()
+            .id("sysinfo-panel")
             .w_full()
             .h_full()
             .p(px(16.))
+            .bg(rgba(0x242424ff))
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll_handle)
             .flex()
             .flex_col()
             .gap(px(12.))
@@ -202,10 +216,16 @@ impl Render for SysInfoPanelContent {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(div().text_size(px(18.)).child(icons::SYSTEM))
+                    .child(
+                        div()
+                            .text_size(px(18.))
+                            .text_color(rgba(0xffffffff))
+                            .child(icons::SYSTEM),
+                    )
                     .child(
                         div()
                             .text_size(px(16.))
+                            .text_color(rgba(0xffffffff))
                             .font_weight(FontWeight::BOLD)
                             .child("System Information"),
                     ),
@@ -234,7 +254,7 @@ impl Render for SysInfoPanelContent {
                 ))
             })
             // Divider
-            .child(div().w_full().h(px(1.)).bg(rgba(0x333333ff)))
+            .child(div().w_full().h(px(1.)).bg(rgba(0x444444ff)))
             // Temperature
             .child(Self::render_info_row(
                 temp_icon,
@@ -247,7 +267,7 @@ impl Render for SysInfoPanelContent {
                 div()
                     .w_full()
                     .p(px(12.))
-                    .bg(rgba(0x2a2a2aff))
+                    .bg(rgba(0x333333ff))
                     .rounded(px(8.))
                     .flex()
                     .flex_col()
@@ -257,10 +277,16 @@ impl Render for SysInfoPanelContent {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .child(div().text_size(px(16.)).child(icons::NETWORK))
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .text_color(rgba(0xffffffff))
+                                    .child(icons::NETWORK),
+                            )
                             .child(
                                 div()
                                     .text_size(px(13.))
+                                    .text_color(rgba(0xffffffff))
                                     .font_weight(FontWeight::MEDIUM)
                                     .child("Network"),
                             ),
@@ -290,7 +316,7 @@ impl Render for SysInfoPanelContent {
                     div()
                         .w_full()
                         .p(px(12.))
-                        .bg(rgba(0x2a2a2aff))
+                        .bg(rgba(0x333333ff))
                         .rounded(px(8.))
                         .flex()
                         .flex_col()
@@ -300,10 +326,16 @@ impl Render for SysInfoPanelContent {
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
-                                .child(div().text_size(px(16.)).child(icons::DISK))
+                                .child(
+                                    div()
+                                        .text_size(px(16.))
+                                        .text_color(rgba(0xffffffff))
+                                        .child(icons::DISK),
+                                )
                                 .child(
                                     div()
                                         .text_size(px(13.))
+                                        .text_color(rgba(0xffffffff))
                                         .font_weight(FontWeight::MEDIUM)
                                         .child("Disks"),
                                 ),
@@ -332,7 +364,7 @@ impl Render for SysInfoPanelContent {
                                     div()
                                         .pl(px(32.))
                                         .text_size(px(11.))
-                                        .text_color(rgba(0x666666ff))
+                                        .text_color(rgba(0xccccccff))
                                         .child(details),
                                 )
                         })),

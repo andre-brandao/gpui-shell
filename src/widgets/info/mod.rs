@@ -1,7 +1,7 @@
 mod panel;
 
 use crate::services::Services;
-use crate::services::upower::BatteryStatus;
+use crate::services::upower::{BatteryStatus, PowerProfile};
 use crate::ui::{PanelConfig, toggle_panel};
 use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px, rgba};
 use panel::InfoPanelContent;
@@ -108,16 +108,27 @@ impl Info {
         let mut icons = Vec::new();
 
         if privacy.microphone_access() {
-            icons.push(("", "#ef4444")); // FontAwesome microphone
+            icons.push(("", "#ef4444")); // FontAwesome microphone
         }
         if privacy.webcam_access() {
-            icons.push(("", "#ef4444")); // FontAwesome camera
+            icons.push(("", "#ef4444")); // FontAwesome camera
         }
         if privacy.screenshare_access() {
             icons.push(("󰍹", "#ef4444")); // red screen
         }
 
         icons
+    }
+
+    fn power_profile_icon(&self, cx: &Context<Self>) -> &'static str {
+        let upower = self.services.upower.read(cx);
+
+        match upower.power_profile {
+            PowerProfile::Performance => "󰓅", // speedometer
+            PowerProfile::Balanced => "󰾅",    // balance scale
+            PowerProfile::PowerSaver => "󰌪",  // leaf/eco
+            PowerProfile::Unknown => "󰾅",
+        }
     }
 }
 
@@ -159,6 +170,8 @@ impl Render for Info {
             .child(div().text_size(px(14.)).child(volume_icon))
             // WiFi icon
             .child(div().text_size(px(14.)).child(wifi_icon))
+            // Power profile icon
+            .child(div().text_size(px(14.)).child(self.power_profile_icon(cx)))
             // Battery icon and percentage
             .child(
                 div()

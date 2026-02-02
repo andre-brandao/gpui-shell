@@ -164,9 +164,10 @@ pub fn render_list_item(
         .w_full()
         .h(px(LIST_ITEM_HEIGHT))
         .px(px(12.))
-        .py(px(8.))
         .rounded(px(6.))
         .cursor_pointer()
+        .flex()
+        .items_center()
         .when(is_selected, |el| el.bg(rgba(0x3b82f6ff)))
         .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x333333ff))))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
