@@ -1,9 +1,17 @@
-use crate::launcher::view::{
-    LauncherView, ViewAction, ViewContext, execute_action, render_list_item,
-};
-use gpui::{AnyElement, App, div, prelude::*, px};
+use crate::launcher::view::{LauncherView, ViewContext, ViewObserver, render_list_item};
+use crate::services::Services;
+use crate::services::compositor::types::CompositorCommand;
+use gpui::{AnyElement, App, Context, div, prelude::*, px};
 
 pub struct MonitorsView;
+
+impl<T: 'static> ViewObserver<T> for MonitorsView {
+    fn observe_services(services: &Services, cx: &mut Context<T>) {
+        // MonitorsView only needs to observe the compositor service
+        cx.observe(&services.compositor, |_, _, cx| cx.notify())
+            .detach();
+    }
+}
 
 impl LauncherView for MonitorsView {
     fn prefix(&self) -> &'static str {
@@ -57,7 +65,9 @@ impl LauncherView for MonitorsView {
                     Some(&subtitle),
                     i == vx.selected_index,
                     move |cx| {
-                        execute_action(&ViewAction::FocusMonitor(mon_id), &services_clone, cx);
+                        services_clone.compositor.update(cx, |compositor, cx| {
+                            compositor.dispatch(CompositorCommand::FocusMonitor(mon_id), cx);
+                        });
                     },
                 )
             }))
@@ -82,7 +92,10 @@ impl LauncherView for MonitorsView {
             .collect();
 
         if let Some(mon) = filtered.get(index) {
-            execute_action(&ViewAction::FocusMonitor(mon.id), vx.services, cx);
+            let mon_id = mon.id;
+            vx.services.compositor.update(cx, |compositor, cx| {
+                compositor.dispatch(CompositorCommand::FocusMonitor(mon_id), cx);
+            });
             true
         } else {
             false

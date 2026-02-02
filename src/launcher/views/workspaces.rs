@@ -1,9 +1,17 @@
-use crate::launcher::view::{
-    LauncherView, ViewAction, ViewContext, execute_action, render_list_item,
-};
-use gpui::{AnyElement, App, div, prelude::*, px};
+use crate::launcher::view::{LauncherView, ViewContext, ViewObserver, render_list_item};
+use crate::services::Services;
+use crate::services::compositor::types::CompositorCommand;
+use gpui::{AnyElement, App, Context, div, prelude::*, px};
 
 pub struct WorkspacesView;
+
+impl<T: 'static> ViewObserver<T> for WorkspacesView {
+    fn observe_services(services: &Services, cx: &mut Context<T>) {
+        // WorkspacesView only needs to observe the compositor service
+        cx.observe(&services.compositor, |_, _, cx| cx.notify())
+            .detach();
+    }
+}
 
 impl LauncherView for WorkspacesView {
     fn prefix(&self) -> &'static str {
@@ -69,7 +77,9 @@ impl LauncherView for WorkspacesView {
                     Some(&subtitle),
                     i == vx.selected_index,
                     move |cx| {
-                        execute_action(&ViewAction::FocusWorkspace(ws_id), &services_clone, cx);
+                        services_clone.compositor.update(cx, |compositor, cx| {
+                            compositor.dispatch(CompositorCommand::FocusWorkspace(ws_id), cx);
+                        });
                     },
                 )
             }))
@@ -101,7 +111,10 @@ impl LauncherView for WorkspacesView {
             .collect();
 
         if let Some(ws) = filtered.get(index) {
-            execute_action(&ViewAction::FocusWorkspace(ws.id), vx.services, cx);
+            let ws_id = ws.id;
+            vx.services.compositor.update(cx, |compositor, cx| {
+                compositor.dispatch(CompositorCommand::FocusWorkspace(ws_id), cx);
+            });
             true
         } else {
             false

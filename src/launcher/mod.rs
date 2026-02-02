@@ -8,7 +8,7 @@ use gpui::{
     WindowOptions, actions, div, layer_shell::*, prelude::*, px, rgba,
 };
 use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput};
-use views::{HelpView, all_views};
+use views::{HelpView, all_views, register_all_observers};
 
 actions!(launcher, [Escape, Enter]);
 
@@ -49,22 +49,8 @@ impl Launcher {
     pub fn new(services: Services, config: LauncherConfig, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        // Observe all services for updates
-        cx.observe(&services.applications, |_, _, cx| cx.notify())
-            .detach();
-        cx.observe(&services.compositor, |_, _, cx| cx.notify())
-            .detach();
-        cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
-        cx.observe(&services.network, |_, _, cx| cx.notify())
-            .detach();
-        cx.observe(&services.upower, |_, _, cx| cx.notify())
-            .detach();
-        cx.observe(&services.sysinfo, |_, _, cx| cx.notify())
-            .detach();
-        cx.observe(&services.bluetooth, |_, _, cx| cx.notify())
-            .detach();
-        cx.observe(&services.brightness, |_, _, cx| cx.notify())
-            .detach();
+        // Register observers for all views - each view only observes the services it needs
+        register_all_observers(&services, cx);
 
         let views = all_views();
         let help_view = HelpView::new(config.prefix_char, &views);
@@ -174,7 +160,6 @@ impl Launcher {
             services: &self.services,
             query: search,
             selected_index: self.selected_index,
-            prefix_char: self.config.prefix_char,
         }
     }
 

@@ -1,9 +1,40 @@
-use crate::launcher::view::{
-    LauncherView, ViewAction, ViewContext, execute_action, render_list_item,
-};
-use gpui::{AnyElement, App, div, prelude::*, px};
+use crate::launcher::view::{LauncherView, ViewContext, ViewObserver, render_list_item};
+use crate::services::Services;
+use gpui::{AnyElement, App, Context, div, prelude::*, px};
 
 pub struct AppsView;
+
+impl AppsView {
+    /// Launch an application by exec command.
+    fn launch(exec: &str) {
+        let exec = exec.to_string();
+        std::thread::spawn(move || {
+            let exec_cleaned = exec
+                .replace("%f", "")
+                .replace("%F", "")
+                .replace("%u", "")
+                .replace("%U", "")
+                .replace("%d", "")
+                .replace("%D", "")
+                .replace("%n", "")
+                .replace("%N", "")
+                .replace("%i", "")
+                .replace("%c", "")
+                .replace("%k", "");
+            let _ = std::process::Command::new("sh")
+                .args(["-c", &exec_cleaned])
+                .spawn();
+        });
+    }
+}
+
+impl<T: 'static> ViewObserver<T> for AppsView {
+    fn observe_services(services: &Services, cx: &mut Context<T>) {
+        // AppsView only needs to observe the applications service
+        cx.observe(&services.applications, |_, _, cx| cx.notify())
+            .detach();
+    }
+}
 
 impl LauncherView for AppsView {
     fn prefix(&self) -> &'static str {
@@ -50,7 +81,6 @@ impl LauncherView for AppsView {
             .collect();
 
         let count = filtered.len();
-        let services = vx.services.clone();
 
         let element = div()
             .flex_1()
@@ -59,15 +89,14 @@ impl LauncherView for AppsView {
             .gap(px(4.))
             .children(filtered.into_iter().enumerate().map(|(i, app)| {
                 let exec = app.exec.clone();
-                let services_clone = services.clone();
                 render_list_item(
                     format!("app-{}", app.name),
                     "",
                     &app.name,
                     app.description.as_deref(),
                     i == vx.selected_index,
-                    move |cx| {
-                        execute_action(&ViewAction::Launch(exec.clone()), &services_clone, cx);
+                    move |_cx| {
+                        Self::launch(&exec);
                     },
                 )
             }))
@@ -100,7 +129,7 @@ impl LauncherView for AppsView {
             .collect();
 
         if let Some(app) = filtered.get(index) {
-            execute_action(&ViewAction::Launch(app.exec.clone()), vx.services, cx);
+            Self::launch(&app.exec);
             true // Close launcher
         } else {
             false

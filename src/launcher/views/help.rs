@@ -1,6 +1,9 @@
-use crate::launcher::view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput};
+use crate::launcher::view::{
+    InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput, ViewObserver,
+};
+use crate::services::Services;
 use crate::widgets::sysinfo::icons;
-use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
+use gpui::{AnyElement, App, Context, FontWeight, div, prelude::*, px, rgba};
 
 pub struct HelpView {
     prefix_char: char,
@@ -11,6 +14,19 @@ struct HelpEntry {
     prefix: String,
     icon: String,
     description: String,
+}
+
+impl<T: 'static> ViewObserver<T> for HelpView {
+    fn observe_services(services: &Services, cx: &mut Context<T>) {
+        // HelpView displays system info from multiple services
+        cx.observe(&services.upower, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
+        cx.observe(&services.network, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.sysinfo, |_, _, cx| cx.notify())
+            .detach();
+    }
 }
 
 impl HelpView {
@@ -341,7 +357,7 @@ impl LauncherView for HelpView {
             .collect();
 
         if let Some(_entry) = filtered.get(index) {
-            // Return false - the launcher will handle SwitchView action
+            // Return false - the launcher will handle switching to the selected view
             false
         } else {
             false

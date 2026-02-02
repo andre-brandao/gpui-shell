@@ -1,5 +1,8 @@
 use crate::services::Services;
-use gpui::{AnyElement, App, MouseButton, div, prelude::*, px, rgba};
+use gpui::{AnyElement, App, Context, MouseButton, div, prelude::*, px, rgba};
+
+/// Height of each list item in pixels
+pub const LIST_ITEM_HEIGHT: f32 = 48.0;
 
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]
@@ -21,22 +24,33 @@ pub enum ViewInput {
 }
 
 /// Result of handling input.
+#[allow(dead_code)]
 pub enum InputResult {
-    /// Input was handled, update the query to this value.
-    Handled { query: String, close: bool },
-    /// Input was not handled, use default behavior.
+    /// Input was handled, optionally update the query and/or close
+    Handled {
+        /// New query value (view-local part, without prefix)
+        query: String,
+        /// Whether to close the launcher
+        close: bool,
+    },
+    /// Input was not handled, use default behavior
     Unhandled,
 }
 
-/// Context passed to views for rendering.
+/// Context passed to views for rendering and actions.
 pub struct ViewContext<'a> {
     pub services: &'a Services,
     pub query: &'a str,
     pub selected_index: usize,
-    pub prefix_char: char,
 }
 
 /// A launcher view that provides custom rendering and input handling.
+///
+/// Views are responsible for:
+/// - Observing the services they need (implement ViewObserver)
+/// - Rendering their content
+/// - Handling selection and input
+/// - Executing their own actions directly (no centralized action dispatcher)
 pub trait LauncherView: Send + Sync {
     /// The prefix command to activate this view (e.g., "apps", "ws").
     fn prefix(&self) -> &'static str;
@@ -59,96 +73,31 @@ pub trait LauncherView: Send + Sync {
     fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize);
 
     /// Handle input. Return InputResult::Handled to consume the input.
+    ///
+    /// Views can use the helper functions for common navigation patterns,
+    /// or implement completely custom behavior.
     fn handle_input(&self, _input: &ViewInput, _vx: &ViewContext, _cx: &mut App) -> InputResult {
         InputResult::Unhandled
     }
 
     /// Handle item selection (Enter pressed or clicked).
+    /// Return true to close the launcher.
+    ///
+    /// Views should execute their own actions here directly.
     fn on_select(&self, _index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
-        // Return true to close the launcher
         false
     }
 }
 
-/// Action to perform when an item is selected.
-#[derive(Clone)]
-pub enum ViewAction {
-    /// Launch an application by exec command.
-    Launch(String),
-    /// Focus a workspace by ID.
-    FocusWorkspace(i32),
-    /// Focus a monitor by ID.
-    FocusMonitor(i128),
-    /// Toggle WiFi.
-    ToggleWifi,
-    /// Toggle audio mute.
-    ToggleMute,
-    /// Adjust volume by delta.
-    AdjustVolume(i8),
-    /// Switch to a different view prefix.
-    SwitchView(String),
-    /// No action (for display only).
-    None,
+/// Trait for registering service observers on the launcher entity.
+///
+/// Views implement this to observe only the services they need.
+/// This is called once when the view is registered with the launcher.
+pub trait ViewObserver<T: 'static> {
+    /// Register observers for the services this view needs.
+    /// The launcher entity is passed so views can call cx.observe() on it.
+    fn observe_services(services: &Services, cx: &mut Context<T>);
 }
-
-/// Execute a view action.
-pub fn execute_action(action: &ViewAction, services: &Services, cx: &mut App) {
-    use crate::services::audio::AudioCommand;
-    use crate::services::compositor::types::CompositorCommand;
-    use crate::services::network::NetworkCommand;
-
-    match action {
-        ViewAction::Launch(exec) => {
-            let exec = exec.clone();
-            std::thread::spawn(move || {
-                let exec_cleaned = exec
-                    .replace("%f", "")
-                    .replace("%F", "")
-                    .replace("%u", "")
-                    .replace("%U", "")
-                    .replace("%d", "")
-                    .replace("%D", "")
-                    .replace("%n", "")
-                    .replace("%N", "")
-                    .replace("%i", "")
-                    .replace("%c", "")
-                    .replace("%k", "");
-                let _ = std::process::Command::new("sh")
-                    .args(["-c", &exec_cleaned])
-                    .spawn();
-            });
-        }
-        ViewAction::FocusWorkspace(id) => {
-            services.compositor.update(cx, |compositor, cx| {
-                compositor.dispatch(CompositorCommand::FocusWorkspace(*id), cx);
-            });
-        }
-        ViewAction::FocusMonitor(id) => {
-            services.compositor.update(cx, |compositor, cx| {
-                compositor.dispatch(CompositorCommand::FocusMonitor(*id), cx);
-            });
-        }
-        ViewAction::ToggleWifi => {
-            services.network.update(cx, |network, cx| {
-                network.dispatch(NetworkCommand::ToggleWiFi, cx);
-            });
-        }
-        ViewAction::ToggleMute => {
-            services.audio.update(cx, |audio, cx| {
-                audio.dispatch(AudioCommand::ToggleSinkMute, cx);
-            });
-        }
-        ViewAction::AdjustVolume(delta) => {
-            services.audio.update(cx, |audio, cx| {
-                audio.dispatch(AudioCommand::AdjustSinkVolume(*delta), cx);
-            });
-        }
-        ViewAction::SwitchView(_) | ViewAction::None => {}
-    }
-}
-
-/// Height of each list item in pixels (must match ITEM_HEIGHT in launcher/mod.rs)
-pub const LIST_ITEM_HEIGHT: f32 = 48.0;
 
 /// Helper to render a standard list item.
 pub fn render_list_item(
@@ -211,37 +160,5 @@ pub fn render_list_item(
                         }),
                 ),
         )
-        .into_any_element()
-}
-
-/// Helper to render a standard list of items.
-pub fn render_item_list(
-    items: Vec<(
-        String,
-        String,
-        String,
-        Option<String>,
-        Box<dyn Fn(&mut App) + 'static>,
-    )>,
-    selected_index: usize,
-) -> AnyElement {
-    div()
-        .flex_1()
-        .overflow_hidden()
-        .flex()
-        .flex_col()
-        .gap(px(4.))
-        .children(items.into_iter().enumerate().map(
-            |(i, (id, icon, title, subtitle, on_click))| {
-                render_list_item(
-                    id,
-                    &icon,
-                    &title,
-                    subtitle.as_deref(),
-                    i == selected_index,
-                    on_click,
-                )
-            },
-        ))
         .into_any_element()
 }

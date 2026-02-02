@@ -1,12 +1,13 @@
 //! Control Center launcher view for quick settings access.
 
-use crate::launcher::view::{LauncherView, ViewContext};
+use crate::launcher::view::{LauncherView, ViewContext, ViewObserver};
+use crate::services::Services;
 use crate::services::audio::AudioCommand;
 use crate::services::bluetooth::{BluetoothCommand, BluetoothState};
 use crate::services::brightness::BrightnessCommand;
 use crate::services::network::NetworkCommand;
 use crate::services::upower::{BatteryStatus, PowerProfile, UPowerCommand};
-use gpui::{AnyElement, App, FontWeight, MouseButton, div, prelude::*, px, rgba};
+use gpui::{AnyElement, App, Context, FontWeight, MouseButton, div, prelude::*, px, rgba};
 
 /// Nerd Font icons
 mod icons {
@@ -64,6 +65,21 @@ enum ControlAction {
     BrightnessUp,
     BrightnessDown,
     CyclePowerProfile,
+}
+
+impl<T: 'static> ViewObserver<T> for ControlView {
+    fn observe_services(services: &Services, cx: &mut Context<T>) {
+        // ControlView needs to observe audio, network, bluetooth, brightness, and upower
+        cx.observe(&services.audio, |_, _, cx| cx.notify()).detach();
+        cx.observe(&services.network, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.bluetooth, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.brightness, |_, _, cx| cx.notify())
+            .detach();
+        cx.observe(&services.upower, |_, _, cx| cx.notify())
+            .detach();
+    }
 }
 
 impl ControlView {
@@ -241,50 +257,51 @@ impl ControlView {
         items
     }
 
-    fn execute_action(action: &ControlAction, vx: &ViewContext, cx: &mut App) {
+    /// Execute an action directly on the services.
+    fn execute_action(action: &ControlAction, services: &Services, cx: &mut App) {
         match action {
             ControlAction::ToggleWifi => {
-                vx.services.network.update(cx, |network, cx| {
+                services.network.update(cx, |network, cx| {
                     network.dispatch(NetworkCommand::ToggleWiFi, cx);
                 });
             }
             ControlAction::ToggleBluetooth => {
-                vx.services.bluetooth.update(cx, |bt, cx| {
+                services.bluetooth.update(cx, |bt, cx| {
                     bt.dispatch(BluetoothCommand::Toggle, cx);
                 });
             }
             ControlAction::ToggleMute => {
-                vx.services.audio.update(cx, |audio, cx| {
+                services.audio.update(cx, |audio, cx| {
                     audio.dispatch(AudioCommand::ToggleSinkMute, cx);
                 });
             }
             ControlAction::ToggleMicMute => {
-                vx.services.audio.update(cx, |audio, cx| {
+                services.audio.update(cx, |audio, cx| {
                     audio.dispatch(AudioCommand::ToggleSourceMute, cx);
                 });
             }
             ControlAction::VolumeUp => {
-                vx.services.audio.update(cx, |audio, cx| {
+                services.audio.update(cx, |audio, cx| {
                     audio.dispatch(AudioCommand::AdjustSinkVolume(5), cx);
                 });
             }
             ControlAction::VolumeDown => {
-                vx.services.audio.update(cx, |audio, cx| {
+                services.audio.update(cx, |audio, cx| {
                     audio.dispatch(AudioCommand::AdjustSinkVolume(-5), cx);
                 });
             }
             ControlAction::BrightnessUp => {
-                vx.services.brightness.update(cx, |brightness, cx| {
+                services.brightness.update(cx, |brightness, cx| {
                     brightness.dispatch(BrightnessCommand::Increase(5), cx);
                 });
             }
             ControlAction::BrightnessDown => {
-                vx.services.brightness.update(cx, |brightness, cx| {
+                services.brightness.update(cx, |brightness, cx| {
                     brightness.dispatch(BrightnessCommand::Decrease(5), cx);
                 });
             }
             ControlAction::CyclePowerProfile => {
-                vx.services.upower.update(cx, |upower, cx| {
+                services.upower.update(cx, |upower, cx| {
                     upower.dispatch(UPowerCommand::CyclePowerProfile, cx);
                 });
             }
@@ -293,7 +310,7 @@ impl ControlView {
 
     fn render_item(
         item: &ControlItem,
-        index: usize,
+        _index: usize,
         selected: bool,
         vx: &ViewContext,
     ) -> AnyElement {
@@ -310,6 +327,7 @@ impl ControlView {
             } => {
                 let action = action.clone();
                 let active = *active;
+                let services_clone = services.clone();
 
                 div()
                     .id(id.to_string())
@@ -321,13 +339,7 @@ impl ControlView {
                     .when(selected, |el| el.bg(rgba(0x3b82f6ff)))
                     .when(!selected, |el| el.hover(|s| s.bg(rgba(0x333333ff))))
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        let vx = ViewContext {
-                            services: &services,
-                            query: "",
-                            selected_index: index,
-                            prefix_char: ';',
-                        };
-                        Self::execute_action(&action, &vx, cx);
+                        Self::execute_action(&action, &services_clone, cx);
                     })
                     .child(
                         div()
@@ -457,13 +469,11 @@ impl ControlView {
                                             .text_size(px(14.))
                                             .child("−")
                                             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                                let vx = ViewContext {
-                                                    services: &services_dec,
-                                                    query: "",
-                                                    selected_index: 0,
-                                                    prefix_char: ';',
-                                                };
-                                                Self::execute_action(&action_dec, &vx, cx);
+                                                Self::execute_action(
+                                                    &action_dec,
+                                                    &services_dec,
+                                                    cx,
+                                                );
                                             }),
                                     )
                                     .child(
@@ -481,13 +491,11 @@ impl ControlView {
                                             .text_size(px(14.))
                                             .child("+")
                                             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                                let vx = ViewContext {
-                                                    services: &services_inc,
-                                                    query: "",
-                                                    selected_index: 0,
-                                                    prefix_char: ';',
-                                                };
-                                                Self::execute_action(&action_inc, &vx, cx);
+                                                Self::execute_action(
+                                                    &action_inc,
+                                                    &services_inc,
+                                                    cx,
+                                                );
                                             }),
                                     ),
                             ),
@@ -592,13 +600,13 @@ impl LauncherView for ControlView {
         if let Some(item) = items.get(index) {
             match item {
                 ControlItem::Toggle { action, .. } => {
-                    Self::execute_action(action, vx, cx);
+                    Self::execute_action(action, vx.services, cx);
                     false // Don't close
                 }
                 ControlItem::Slider {
                     action_increase, ..
                 } => {
-                    Self::execute_action(action_increase, vx, cx);
+                    Self::execute_action(action_increase, vx.services, cx);
                     false // Don't close
                 }
                 ControlItem::Info { .. } => false,
