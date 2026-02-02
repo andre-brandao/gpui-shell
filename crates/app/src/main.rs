@@ -2,6 +2,7 @@
 
 use assets::Assets;
 use gpui::Application;
+use services::Services;
 
 mod bar;
 mod widgets;
@@ -12,7 +13,7 @@ async fn main() {
     compile_error!("This application requires a Linux system with Wayland.");
 
     // Initialize services before starting GPUI
-    let services = bar::Services::new()
+    let services = Services::new()
         .await
         .expect("Failed to initialize services");
 

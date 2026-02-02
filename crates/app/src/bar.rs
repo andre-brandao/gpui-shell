@@ -4,49 +4,70 @@
 //! status, anchored to the top of the screen using the layer shell protocol.
 
 use gpui::{
-    App, Bounds, Context, Entity, FontWeight, Size, Window, WindowBackgroundAppearance,
+    AnyElement, App, Bounds, Context, FontWeight, Size, Window, WindowBackgroundAppearance,
     WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
 };
-use services::UPowerSubscriber;
+use services::Services;
 use ui::{bg, border, spacing, text};
 
-use crate::widgets::{Battery, Clock};
+use crate::widgets::Widget;
 
 /// Height of the bar in pixels.
 pub const BAR_HEIGHT: f32 = 32.0;
 
-/// Shared services for widgets.
-#[derive(Clone)]
-pub struct Services {
-    pub upower: UPowerSubscriber,
+/// Bar layout configuration.
+///
+/// Specifies which widgets to display in each section of the bar.
+#[derive(Debug, Clone)]
+pub struct BarConfig {
+    pub left: Vec<String>,
+    pub center: Vec<String>,
+    pub right: Vec<String>,
 }
 
-impl Services {
-    /// Create new services. Must be called from an async context.
-    pub async fn new() -> anyhow::Result<Self> {
-        let upower = UPowerSubscriber::new().await?;
-        Ok(Self { upower })
+impl Default for BarConfig {
+    fn default() -> Self {
+        BarConfig {
+            left: vec![
+                // "LauncherBtn".to_string(),
+                // "Workspaces".to_string(),
+                // "SysInfo".to_string(),
+            ],
+            center: vec!["Clock".to_string()],
+            right: vec![
+                // "Systray".to_string(),
+                "Battery".to_string(),
+            ],
+        }
     }
 }
 
 /// The main bar view.
 struct Bar {
-    clock: Entity<Clock>,
-    battery: Entity<Battery>,
+    left_widgets: Vec<Widget>,
+    center_widgets: Vec<Widget>,
+    right_widgets: Vec<Widget>,
 }
 
 impl Bar {
-    /// Create a new bar with the given services.
-    fn new(services: Services, cx: &mut Context<Self>) -> Self {
-        let clock = cx.new(Clock::new);
-        let battery = cx.new(|cx| Battery::new(services.upower.clone(), cx));
-
-        Bar { clock, battery }
+    /// Create a bar with services and configuration.
+    fn new(services: Services, config: BarConfig, cx: &mut Context<Self>) -> Self {
+        Bar {
+            left_widgets: Widget::create_many(&config.left, &services, cx),
+            center_widgets: Widget::create_many(&config.center, &services, cx),
+            right_widgets: Widget::create_many(&config.right, &services, cx),
+        }
     }
 }
 
 impl Render for Bar {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let left_elements: Vec<AnyElement> = self.left_widgets.iter().map(|w| w.render()).collect();
+        let center_elements: Vec<AnyElement> =
+            self.center_widgets.iter().map(|w| w.render()).collect();
+        let right_elements: Vec<AnyElement> =
+            self.right_widgets.iter().map(|w| w.render()).collect();
+
         div()
             .size_full()
             .flex()
@@ -59,25 +80,29 @@ impl Render for Bar {
             .bg(bg::primary())
             .border_b_1()
             .border_color(border::default())
-            // Left section (placeholder for future widgets)
-            .child(
-                div().flex().items_center().gap(px(spacing::SM)), // Add left widgets here
-            )
-            // Center section - Clock
+            // Left section
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(spacing::SM))
-                    .child(self.clock.clone()),
+                    .children(left_elements),
             )
-            // Right section - Battery
+            // Center section
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(spacing::SM))
+                    .children(center_elements),
+            )
+            // Right section
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(spacing::MD))
-                    .child(self.battery.clone()),
+                    .children(right_elements),
             )
     }
 }
@@ -105,10 +130,15 @@ pub fn window_options() -> WindowOptions {
     }
 }
 
-/// Open the bar window with the given services.
+/// Open the bar with default configuration.
 pub fn open(services: Services, cx: &mut App) {
+    open_with_config(services, BarConfig::default(), cx);
+}
+
+/// Open the bar with custom configuration.
+pub fn open_with_config(services: Services, config: BarConfig, cx: &mut App) {
     cx.open_window(window_options(), move |_, cx| {
-        cx.new(|cx| Bar::new(services, cx))
+        cx.new(|cx| Bar::new(services, config, cx))
     })
     .unwrap();
 }
