@@ -215,9 +215,7 @@ fn start_listener(data: Mutable<AudioData>) {
         let mut proplist = match Proplist::new() {
             Some(p) => p,
             None => {
-                error!("Failed to create PulseAudio proplist, falling back to polling");
-                start_polling_fallback(data);
-                return;
+                panic!("Failed to create PulseAudio proplist");
             }
         };
         let _ = proplist.set_str(APPLICATION_NAME, "gpuishell");
@@ -225,42 +223,32 @@ fn start_listener(data: Mutable<AudioData>) {
         let mut mainloop = match Mainloop::new() {
             Some(m) => m,
             None => {
-                error!("Failed to create PulseAudio mainloop, falling back to polling");
-                start_polling_fallback(data);
-                return;
+                panic!("Failed to create PulseAudio mainloop");
             }
         };
 
         let mut context = match Context::new_with_proplist(&mainloop, "gpuishell", &proplist) {
             Some(c) => c,
             None => {
-                error!("Failed to create PulseAudio context, falling back to polling");
-                start_polling_fallback(data);
-                return;
+                panic!("Failed to create PulseAudio context");
             }
         };
 
         if context.connect(None, FlagSet::NOFLAGS, None).is_err() {
-            error!("Failed to connect to PulseAudio, falling back to polling");
-            start_polling_fallback(data);
-            return;
+            panic!("Failed to connect to PulseAudio");
         }
 
         // Wait for context to be ready
         loop {
             match mainloop.iterate(true) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
-                    error!("PulseAudio mainloop error during connect");
-                    start_polling_fallback(data);
-                    return;
+                    panic!("PulseAudio mainloop error during connect");
                 }
                 IterateResult::Success(_) => {
                     match context.get_state() {
                         context::State::Ready => break,
                         context::State::Failed | context::State::Terminated => {
-                            error!("PulseAudio context failed");
-                            start_polling_fallback(data);
-                            return;
+                            panic!("PulseAudio context failed or terminated");
                         }
                         _ => {} // Still connecting
                     }
@@ -277,7 +265,7 @@ fn start_listener(data: Mutable<AudioData>) {
                 .union(InterestMaskSet::SERVER),
             |success| {
                 if !success {
-                    error!("PulseAudio subscription failed");
+                    panic!("PulseAudio subscription failed");
                 }
             },
         );
@@ -305,36 +293,12 @@ fn start_listener(data: Mutable<AudioData>) {
         loop {
             match mainloop.iterate(true) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
-                    error!("PulseAudio mainloop error, falling back to polling");
-                    start_polling_fallback(data);
-                    return;
+                    panic!("PulseAudio mainloop error after connection");
                 }
                 IterateResult::Success(_) => {}
             }
         }
     });
-}
-
-/// Fallback polling listener if PulseAudio connection fails.
-fn start_polling_fallback(data: Mutable<AudioData>) {
-    warn!("Using polling fallback for audio monitoring");
-    loop {
-        let new_data = fetch_audio_data();
-        let current = data.lock_ref().clone();
-
-        if new_data != current {
-            debug!(
-                "Audio state changed (poll): sink={}% (muted={}), source={}% (muted={})",
-                new_data.sink_volume,
-                new_data.sink_muted,
-                new_data.source_volume,
-                new_data.source_muted
-            );
-            *data.lock_mut() = new_data;
-        }
-
-        thread::sleep(std::time::Duration::from_millis(500));
-    }
 }
 
 /// Fetch current audio data from wpctl.
