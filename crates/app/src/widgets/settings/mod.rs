@@ -182,7 +182,7 @@ impl Settings {
             width: 300.0,
             height: 380.0,
             anchor: Anchor::TOP | Anchor::RIGHT,
-            margin: (36.0, 8.0, 0.0, 0.0), // Below the bar
+            margin: (0.0, 8.0, 0.0, 0.0), // Compositor handles top margin
             namespace: "control-center".to_string(),
         };
 

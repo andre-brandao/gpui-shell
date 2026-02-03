@@ -482,6 +482,10 @@ impl Render for ControlCenter {
             .when(expanded == ExpandedSection::Bluetooth, |el| {
                 el.child(bluetooth::render_bluetooth_section(&self.services))
             })
+            // Power section (when expanded) - right after toggle
+            .when(expanded == ExpandedSection::Power, |el| {
+                el.child(power::render_power_section(&self.services))
+            })
             // Volume slider
             .child(sliders::render_volume_slider(
                 &self.services,
@@ -492,7 +496,5 @@ impl Render for ControlCenter {
                 &self.services,
                 &self.brightness_slider,
             ))
-            // Power section (always visible)
-            .child(power::render_power_section(&self.services))
     }
 }

@@ -3,7 +3,10 @@
 //! Provides compact toggle buttons for WiFi, Bluetooth, and Microphone.
 
 use gpui::{App, MouseButton, div, prelude::*, px};
-use services::{AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand, Services};
+use services::{
+    AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand, PowerProfile, Services,
+    UPowerCommand,
+};
 use ui::{accent, icon_size, interactive, radius, spacing, text};
 
 use super::icons;
@@ -15,6 +18,7 @@ pub enum ExpandedSection {
     None,
     WiFi,
     Bluetooth,
+    Power,
 }
 
 /// Render the quick toggles row
@@ -26,17 +30,31 @@ pub fn render_quick_toggles(
     let network = services.network.get();
     let bluetooth = services.bluetooth.get();
     let audio = services.audio.get();
+    let upower = services.upower.get();
 
     let wifi_enabled = network.wifi_enabled;
     let bt_active = bluetooth.state == BluetoothState::Active;
     let mic_muted = audio.source_muted;
+    let has_battery = upower.battery.is_some();
+    let battery_icon = upower
+        .battery
+        .as_ref()
+        .map(|b| b.icon())
+        .unwrap_or(icons::BATTERY_FULL);
+    let is_charging = upower
+        .battery
+        .as_ref()
+        .map(|b| b.is_charging())
+        .unwrap_or(false);
 
     let services_wifi = services.clone();
     let services_bt = services.clone();
     let services_mic = services.clone();
+    let services_power = services.clone();
 
     let on_toggle_wifi = on_toggle_section.clone();
     let on_toggle_bt = on_toggle_section.clone();
+    let on_toggle_power = on_toggle_section.clone();
 
     div()
         .flex()
@@ -98,6 +116,39 @@ pub fn render_quick_toggles(
                 services_mic.audio.dispatch(AudioCommand::ToggleSourceMute);
             },
         ))
+        // Battery/Power toggle (only if battery present)
+        .when(has_battery, |el| {
+            el.child(render_expandable_toggle(
+                "power-toggle",
+                battery_icon,
+                is_charging,
+                expanded == ExpandedSection::Power,
+                {
+                    let services = services_power.clone();
+                    move |cx| {
+                        // Cycle through power profiles on click
+                        let current = services.upower.get().power_profile;
+                        let next = match current {
+                            PowerProfile::PowerSaver => PowerProfile::Balanced,
+                            PowerProfile::Balanced => PowerProfile::Performance,
+                            PowerProfile::Performance => PowerProfile::PowerSaver,
+                            PowerProfile::Unknown => PowerProfile::Balanced,
+                        };
+                        let s = services.clone();
+                        cx.spawn(async move |_| {
+                            let _ = s
+                                .upower
+                                .dispatch(UPowerCommand::SetPowerProfile(next))
+                                .await;
+                        })
+                        .detach();
+                    }
+                },
+                move |cx| {
+                    on_toggle_power(ExpandedSection::Power, cx);
+                },
+            ))
+        })
 }
 
 /// Render an expandable toggle button (left click = toggle, right click = expand)
