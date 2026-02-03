@@ -160,8 +160,13 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
             }
         })
         .global_remove(move |id| {
-            debug!("Remove media node: {}", id);
-            data_remove.lock_mut().nodes.retain(|n| n.id != id);
+            let mut guard = data_remove.lock_mut();
+            let before_len = guard.nodes.len();
+            guard.nodes.retain(|n| n.id != id);
+            // Only log if we actually removed a tracked media node
+            if guard.nodes.len() < before_len {
+                debug!("Removed tracked media node: {}", id);
+            }
         })
         .register();
 
