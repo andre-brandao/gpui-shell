@@ -1,13 +1,18 @@
 //! Audio service for volume control via WirePlumber/PipeWire.
 //!
 //! This module provides a reactive subscriber for monitoring and controlling
-//! audio sink (output) and source (input) volumes using wpctl.
+//! audio sink (output) and source (input) volumes using wpctl for commands
+//! and PulseAudio's subscribe API (via PipeWire-pulse) for event-driven updates.
 
 use std::process::Command;
 use std::thread;
-use std::time::Duration;
 
 use futures_signals::signal::{Mutable, MutableSignalCloned};
+use libpulse_binding::{
+    context::{self, Context, FlagSet, subscribe::InterestMaskSet},
+    mainloop::standard::{IterateResult, Mainloop},
+    proplist::{Proplist, properties::APPLICATION_NAME},
+};
 use tracing::{debug, error, warn};
 
 /// Audio device data.
@@ -62,7 +67,7 @@ pub enum AudioCommand {
 
 /// Event-driven audio subscriber.
 ///
-/// This subscriber monitors audio state via wpctl polling
+/// This subscriber monitors audio state via PulseAudio's subscribe API
 /// and provides reactive state updates through `futures_signals`.
 #[derive(Debug, Clone)]
 pub struct AudioSubscriber {
@@ -71,13 +76,10 @@ pub struct AudioSubscriber {
 
 impl AudioSubscriber {
     /// Create a new audio subscriber and start monitoring.
-    ///
-    /// Polls wpctl every 500ms to detect external volume changes.
     pub fn new() -> Self {
         let initial_data = fetch_audio_data();
         let data = Mutable::new(initial_data);
 
-        // Start the polling listener
         start_listener(data.clone());
 
         Self { data }
@@ -203,28 +205,136 @@ impl Default for AudioSubscriber {
     }
 }
 
-/// Start the polling listener thread.
+/// Start the PulseAudio event listener thread.
+///
+/// Uses PulseAudio's subscribe API (via PipeWire-pulse) to get instant
+/// notifications on sink/source volume and mute changes, then re-fetches
+/// the actual values via wpctl.
 fn start_listener(data: Mutable<AudioData>) {
     thread::spawn(move || {
-        loop {
-            let new_data = fetch_audio_data();
-            let current = data.lock_ref().clone();
-
-            // Only update if changed to avoid unnecessary signal emissions
-            if new_data != current {
-                debug!(
-                    "Audio state changed: sink={}% (muted={}), source={}% (muted={})",
-                    new_data.sink_volume,
-                    new_data.sink_muted,
-                    new_data.source_volume,
-                    new_data.source_muted
-                );
-                *data.lock_mut() = new_data;
+        let mut proplist = match Proplist::new() {
+            Some(p) => p,
+            None => {
+                error!("Failed to create PulseAudio proplist, falling back to polling");
+                start_polling_fallback(data);
+                return;
             }
+        };
+        let _ = proplist.set_str(APPLICATION_NAME, "gpuishell");
 
-            thread::sleep(Duration::from_millis(500));
+        let mut mainloop = match Mainloop::new() {
+            Some(m) => m,
+            None => {
+                error!("Failed to create PulseAudio mainloop, falling back to polling");
+                start_polling_fallback(data);
+                return;
+            }
+        };
+
+        let mut context = match Context::new_with_proplist(&mainloop, "gpuishell", &proplist) {
+            Some(c) => c,
+            None => {
+                error!("Failed to create PulseAudio context, falling back to polling");
+                start_polling_fallback(data);
+                return;
+            }
+        };
+
+        if context.connect(None, FlagSet::NOFLAGS, None).is_err() {
+            error!("Failed to connect to PulseAudio, falling back to polling");
+            start_polling_fallback(data);
+            return;
+        }
+
+        // Wait for context to be ready
+        loop {
+            match mainloop.iterate(true) {
+                IterateResult::Quit(_) | IterateResult::Err(_) => {
+                    error!("PulseAudio mainloop error during connect");
+                    start_polling_fallback(data);
+                    return;
+                }
+                IterateResult::Success(_) => {
+                    match context.get_state() {
+                        context::State::Ready => break,
+                        context::State::Failed | context::State::Terminated => {
+                            error!("PulseAudio context failed");
+                            start_polling_fallback(data);
+                            return;
+                        }
+                        _ => {} // Still connecting
+                    }
+                }
+            }
+        }
+
+        debug!("PulseAudio connection established");
+
+        // Subscribe to sink and source changes
+        context.subscribe(
+            InterestMaskSet::SINK
+                .union(InterestMaskSet::SOURCE)
+                .union(InterestMaskSet::SERVER),
+            |success| {
+                if !success {
+                    error!("PulseAudio subscription failed");
+                }
+            },
+        );
+
+        // Set callback: on any change, re-fetch audio data via wpctl
+        context.set_subscribe_callback(Some(Box::new({
+            let data = data.clone();
+            move |_facility, _operation, _idx| {
+                let new_data = fetch_audio_data();
+                let current = data.lock_ref().clone();
+                if new_data != current {
+                    debug!(
+                        "Audio state changed: sink={}% (muted={}), source={}% (muted={})",
+                        new_data.sink_volume,
+                        new_data.sink_muted,
+                        new_data.source_volume,
+                        new_data.source_muted
+                    );
+                    *data.lock_mut() = new_data;
+                }
+            }
+        })));
+
+        // Run the mainloop — blocks and dispatches callbacks
+        loop {
+            match mainloop.iterate(true) {
+                IterateResult::Quit(_) | IterateResult::Err(_) => {
+                    error!("PulseAudio mainloop error, falling back to polling");
+                    start_polling_fallback(data);
+                    return;
+                }
+                IterateResult::Success(_) => {}
+            }
         }
     });
+}
+
+/// Fallback polling listener if PulseAudio connection fails.
+fn start_polling_fallback(data: Mutable<AudioData>) {
+    warn!("Using polling fallback for audio monitoring");
+    loop {
+        let new_data = fetch_audio_data();
+        let current = data.lock_ref().clone();
+
+        if new_data != current {
+            debug!(
+                "Audio state changed (poll): sink={}% (muted={}), source={}% (muted={})",
+                new_data.sink_volume,
+                new_data.sink_muted,
+                new_data.source_volume,
+                new_data.source_muted
+            );
+            *data.lock_mut() = new_data;
+        }
+
+        thread::sleep(std::time::Duration::from_millis(500));
+    }
 }
 
 /// Fetch current audio data from wpctl.
