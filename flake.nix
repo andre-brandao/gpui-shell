@@ -26,7 +26,7 @@
       forAllSystems =
         f: nixpkgs.lib.genAttrs supportedSystems (system: f nixpkgs.legacyPackages.${system});
 
-      mkMgs =
+      mkBuild =
         pkgs:
         let
           rustBin = rust-overlay.lib.mkRustBin { } pkgs;
@@ -49,7 +49,7 @@
     {
 
       packages = forAllSystems (pkgs: rec {
-        default = mkMgs pkgs;
+        default = mkBuild pkgs;
         debug = default.override { profile = "dev"; };
       });
 
