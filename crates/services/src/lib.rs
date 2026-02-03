@@ -30,7 +30,7 @@ pub use network::{
     NetworkData, NetworkStatistics, NetworkSubscriber,
 };
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
-pub use shell::{InstanceResult, LauncherRequest, ShellData, ShellSubscriber};
+pub use shell::{InstanceResult, LauncherRequest, ShellSubscriber};
 pub use sysinfo::{DiskInfo, NetworkInfo, SysInfoData, SysInfoSubscriber};
 pub use tray::{
     MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,
