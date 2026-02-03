@@ -17,6 +17,15 @@
   wayland,
   xorg,
 
+  systemd,
+  pipewire,
+  # glib,
+  # pango,
+  # gdk-pixbuf,
+  # atk,
+  # cairo,
+  # gtk3,
+
   profile ? "release",
 }:
 let
@@ -40,7 +49,7 @@ let
       mgsCargoLock = builtins.fromTOML (builtins.readFile ../crates/app/Cargo.toml);
     in
     rec {
-      pname = "mgs";
+      pname = "gpuishell";
       version = mgsCargoLock.package.version;
       src = builtins.path {
         path = ../.;
@@ -66,6 +75,14 @@ let
         vulkan-loader
         freetype
         libpulseaudio
+        pipewire
+        systemd
+        # glib
+        # atk
+        # gtk3
+        # cairo
+        # pango
+        # gdk-pixbuf
       ];
 
       stdenv =
