@@ -10,6 +10,7 @@ pub mod brightness;
 pub mod compositor;
 pub mod network;
 pub mod privacy;
+pub mod shell;
 pub mod sysinfo;
 pub mod tray;
 pub mod upower;
@@ -29,6 +30,7 @@ pub use network::{
     NetworkData, NetworkStatistics, NetworkSubscriber,
 };
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
+pub use shell::{InstanceResult, LauncherRequest, ShellData, ShellSubscriber};
 pub use sysinfo::{DiskInfo, NetworkInfo, SysInfoData, SysInfoSubscriber};
 pub use tray::{
     MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,

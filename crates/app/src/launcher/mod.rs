@@ -44,8 +44,8 @@ pub struct Launcher {
 }
 
 impl Launcher {
-    /// Create a new launcher with the given services.
-    pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
+    /// Create a new launcher with the given services and optional initial input.
+    pub fn new(services: Services, initial_input: Option<String>, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
 
@@ -97,7 +97,7 @@ impl Launcher {
 
         Launcher {
             services,
-            search_query: String::new(),
+            search_query: initial_input.unwrap_or_default(),
             selected_index: 0,
             item_count: 0,
             focus_handle,
@@ -105,6 +105,13 @@ impl Launcher {
             views,
             help_view,
         }
+    }
+
+    /// Set the search query (used for IPC input).
+    pub fn set_input(&mut self, input: String) {
+        self.search_query = input;
+        self.selected_index = 0;
+        self.reset_scroll();
     }
 
     /// Reset scroll to top.
@@ -340,10 +347,14 @@ impl Render for Launcher {
             .track_focus(&self.focus_handle)
             .key_context("Launcher")
             .on_action(cx.listener(|_, _: &Escape, window, _cx| {
+                // Clear the static handle before removing window
+                *LAUNCHER_WINDOW.lock().unwrap() = None;
                 window.remove_window();
             }))
             .on_action(cx.listener(|this, _: &Enter, window, cx| {
                 if this.handle_input(ViewInput::Enter, cx) {
+                    // Clear the static handle before removing window
+                    *LAUNCHER_WINDOW.lock().unwrap() = None;
                     window.remove_window();
                 }
                 cx.notify();
@@ -370,6 +381,8 @@ impl Render for Launcher {
                         }
                     };
                     if should_close {
+                        // Clear the static handle before removing window
+                        *LAUNCHER_WINDOW.lock().unwrap() = None;
                         window.remove_window();
                     }
                     cx.notify();
@@ -511,9 +524,26 @@ pub fn register_keybindings(cx: &mut App) {
 
 /// Toggle the launcher window.
 pub fn toggle(services: Services, cx: &mut App) {
+    toggle_with_input(services, None, cx);
+}
+
+/// Toggle the launcher window with optional prefilled input.
+pub fn toggle_with_input(services: Services, input: Option<String>, cx: &mut App) {
     let mut guard = LAUNCHER_WINDOW.lock().unwrap();
 
     if let Some(handle) = guard.take() {
+        // If input is provided, update existing launcher instead of closing
+        if let Some(input_text) = input {
+            let update_result = handle.update(cx, |launcher, _, cx| {
+                launcher.set_input(input_text);
+                cx.notify();
+            });
+            if update_result.is_ok() {
+                *guard = Some(handle);
+                return;
+            }
+        }
+        // No input or update failed, close the window
         let _ = handle.update(cx, |_, window, _| {
             window.remove_window();
         });
@@ -539,7 +569,7 @@ pub fn toggle(services: Services, cx: &mut App) {
                 focus: true,
                 ..Default::default()
             },
-            move |_, cx| cx.new(|cx| Launcher::new(services.clone(), cx)),
+            move |_, cx| cx.new(|cx| Launcher::new(services.clone(), input.clone(), cx)),
         ) {
             *guard = Some(handle);
         }
@@ -549,4 +579,24 @@ pub fn toggle(services: Services, cx: &mut App) {
 /// Open the launcher (alias for toggle).
 pub fn open(services: Services, cx: &mut App) {
     toggle(services, cx);
+}
+
+/// Open the launcher with prefilled input.
+/// If already open, updates the input. If closed, opens with the input.
+pub fn open_with_input(services: Services, input: Option<String>, cx: &mut App) {
+    let guard = LAUNCHER_WINDOW.lock().unwrap();
+
+    if let Some(handle) = &*guard {
+        // Launcher already open, update input if provided
+        if let Some(input_text) = input {
+            let _ = handle.update(cx, |launcher, _, cx| {
+                launcher.set_input(input_text);
+                cx.notify();
+            });
+        }
+    } else {
+        // Launcher not open, open it with input
+        drop(guard); // Release lock before calling toggle_with_input
+        toggle_with_input(services, input, cx);
+    }
 }
