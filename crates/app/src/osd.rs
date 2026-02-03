@@ -101,14 +101,20 @@ impl OsdView {
         }
     }
 
-    fn render_horizontal(&self) -> impl IntoElement {
-        let (icon, level, muted) = self.icon_and_level();
-        let fill_color = if muted {
+    fn fill_color(level: u8, muted: bool) -> gpui::Hsla {
+        if muted {
             ui::status::error()
+        } else if level > 100 {
+            ui::status::warning()
         } else {
             accent::primary()
-        };
-        let bar_fill_pct = level as f32 / 100.0;
+        }
+    }
+
+    fn render_horizontal(&self) -> impl IntoElement {
+        let (icon, level, muted) = self.icon_and_level();
+        let fill_color = Self::fill_color(level, muted);
+        let bar_fill_pct = (level as f32 / 100.0).min(1.0);
 
         div()
             .size_full()
@@ -165,12 +171,8 @@ impl OsdView {
 
     fn render_vertical(&self) -> impl IntoElement {
         let (icon, level, muted) = self.icon_and_level();
-        let fill_color = if muted {
-            ui::status::error()
-        } else {
-            accent::primary()
-        };
-        let bar_fill_pct = level as f32 / 100.0;
+        let fill_color = Self::fill_color(level, muted);
+        let bar_fill_pct = (level as f32 / 100.0).min(1.0);
 
         div()
             .size_full()
