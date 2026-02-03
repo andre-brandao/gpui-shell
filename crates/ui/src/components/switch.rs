@@ -7,8 +7,7 @@ use gpui::{
     prelude::FluentBuilder as _, px,
 };
 
-use super::super::theme::{bg, interactive, text};
-use super::h_flex;
+use crate::{ActiveTheme, h_flex};
 
 /// Which side the label appears on
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -111,13 +110,26 @@ impl Switch {
 
 impl RenderOnce for Switch {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        // Extract theme colors before mutable borrow of cx
+        let (toggle_on, bg_primary, bg_tertiary, bg_elevated, text_disabled, text_primary) = {
+            let theme = cx.theme();
+            (
+                theme.interactive.toggle_on,
+                theme.bg.primary,
+                theme.bg.tertiary,
+                theme.bg.elevated,
+                theme.text.disabled,
+                theme.text.primary,
+            )
+        };
+
         let checked = self.checked;
         let on_click = self.on_click.clone();
         let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
         let (bg_color, toggle_bg) = match checked {
-            true => (interactive::toggle_on(), bg::primary()),
-            false => (bg::tertiary(), bg::elevated()),
+            true => (toggle_on, bg_primary),
+            false => (bg_tertiary, bg_elevated),
         };
 
         let (bg_color, toggle_bg) = if self.disabled {
@@ -135,6 +147,8 @@ impl RenderOnce for Switch {
         } else {
             (bg_color, toggle_bg)
         };
+
+        let label_color = if self.disabled { text_disabled } else { text_primary };
 
         let (bg_width, bg_height, bar_width) = self.size.dimensions();
         let inset = px(2.);
@@ -208,11 +222,7 @@ impl RenderOnce for Switch {
                     this.child(
                         div()
                             .line_height(bg_height)
-                            .text_color(if self.disabled {
-                                text::disabled()
-                            } else {
-                                text::primary()
-                            })
+                            .text_color(label_color)
                             .map(|this| match self.size {
                                 SwitchSize::Small => this.text_sm(),
                                 SwitchSize::Medium => this.text_base(),

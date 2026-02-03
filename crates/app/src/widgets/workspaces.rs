@@ -4,7 +4,7 @@ use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState, CompositorSubscriber};
-use ui::{accent, interactive, radius, spacing, text};
+use ui::{ActiveTheme, radius, spacing};
 
 /// Workspaces widget that displays workspace indicators and allows switching.
 pub struct Workspaces {
@@ -60,7 +60,18 @@ impl Workspaces {
 
 impl Render for Workspaces {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let active_workspace_id = self.state.active_workspace_id;
+
+        // Pre-compute colors for closures
+        let accent_primary = theme.accent.primary;
+        let accent_hover = theme.accent.hover;
+        let interactive_default = theme.interactive.default;
+        let interactive_hover = theme.interactive.hover;
+        let text_primary = theme.text.primary;
+        let text_secondary = theme.text.secondary;
+        let text_muted = theme.text.muted;
+        let transparent = gpui::transparent_black();
 
         div()
             .id("workspaces")
@@ -99,17 +110,17 @@ impl Render for Workspaces {
                             .rounded(px(radius::SM))
                             .cursor_pointer()
                             .bg(if is_active {
-                                accent::primary()
+                                accent_primary
                             } else if has_windows {
-                                interactive::default()
+                                interactive_default
                             } else {
-                                gpui::transparent_black()
+                                transparent
                             })
-                            .hover(|s| {
+                            .hover(move |s| {
                                 if is_active {
-                                    s.bg(accent::hover())
+                                    s.bg(accent_hover)
                                 } else {
-                                    s.bg(interactive::hover())
+                                    s.bg(interactive_hover)
                                 }
                             })
                             .on_mouse_down(
@@ -121,11 +132,11 @@ impl Render for Workspaces {
                             .child(
                                 div()
                                     .text_color(if is_active {
-                                        text::primary()
+                                        text_primary
                                     } else if has_windows {
-                                        text::secondary()
+                                        text_secondary
                                     } else {
-                                        text::muted()
+                                        text_muted
                                     })
                                     .child(ws.name.clone()),
                             )

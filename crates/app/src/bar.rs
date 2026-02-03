@@ -8,7 +8,7 @@ use gpui::{
     WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
 };
 use services::Services;
-use ui::{bg, border, spacing, text};
+use ui::{ActiveTheme, spacing};
 
 use crate::widgets::Widget;
 
@@ -62,7 +62,8 @@ impl Bar {
 }
 
 impl Render for Bar {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let left_elements: Vec<AnyElement> = self.left_widgets.iter().map(|w| w.render()).collect();
         let center_elements: Vec<AnyElement> =
             self.center_widgets.iter().map(|w| w.render()).collect();
@@ -77,10 +78,10 @@ impl Render for Bar {
             .px(px(spacing::LG))
             .text_size(rems(0.67))
             .font_weight(FontWeight::MEDIUM)
-            .text_color(text::primary())
-            .bg(bg::primary())
+            .text_color(theme.text.primary)
+            .bg(theme.bg.primary)
             .border_b_1()
-            .border_color(border::default())
+            .border_color(theme.border.default)
             // Left section
             .child(
                 div()

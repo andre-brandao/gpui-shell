@@ -3,7 +3,7 @@
 use crate::launcher::view::{LIST_ITEM_HEIGHT, LauncherView, ViewContext};
 use crate::widgets::sysinfo::icons;
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
-use ui::{bg, font_size, icon_size, spacing, status, text};
+use ui::{ActiveTheme, font_size, icon_size, spacing};
 
 /// Help view - shows available commands and system status.
 pub struct HelpView {
@@ -34,14 +34,15 @@ impl HelpView {
         HelpView { entries }
     }
 
-    fn render_system_info(&self, vx: &ViewContext) -> AnyElement {
+    fn render_system_info(&self, vx: &ViewContext, cx: &App) -> AnyElement {
+        let theme = cx.theme();
         let sysinfo = vx.services.sysinfo.get();
         let upower = vx.services.upower.get();
 
         let cpu_usage = sysinfo.cpu_usage;
         let memory_usage = sysinfo.memory_usage;
-        let cpu_color = status::from_percentage(cpu_usage);
-        let memory_color = status::from_percentage(memory_usage);
+        let cpu_color = theme.status.from_percentage(cpu_usage);
+        let memory_color = theme.status.from_percentage(memory_usage);
 
         let cpu_icon = if cpu_usage >= 90 {
             icons::CPU_HIGH
@@ -66,12 +67,14 @@ impl HelpView {
             String::new()
         };
 
+        let text_muted = theme.text.muted;
+
         // Single compact row with system info
         div()
             .w_full()
             .px(px(spacing::MD))
             .py(px(spacing::SM))
-            .bg(bg::secondary())
+            .bg(theme.bg.secondary)
             .rounded(px(8.))
             .flex()
             .items_center()
@@ -123,13 +126,13 @@ impl HelpView {
                     .child(
                         div()
                             .text_size(px(icon_size::MD))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child(icons::TEMP),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child(temp_text),
                     ),
             )
@@ -142,14 +145,14 @@ impl HelpView {
                     .child(
                         div()
                             .text_size(px(icon_size::MD))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child(battery_icon),
                     )
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
                             div()
                                 .text_size(px(font_size::SM))
-                                .text_color(text::muted())
+                                .text_color(text_muted)
                                 .child(battery_text.clone()),
                         )
                     }),
@@ -157,8 +160,12 @@ impl HelpView {
             .into_any_element()
     }
 
-    fn render_commands(&self, vx: &ViewContext) -> AnyElement {
+    fn render_commands(&self, vx: &ViewContext, cx: &App) -> AnyElement {
+        let theme = cx.theme();
         let query_lower = vx.query.to_lowercase();
+
+        let text_primary = theme.text.primary;
+        let text_muted = theme.text.muted;
 
         let filtered: Vec<_> = self
             .entries
@@ -231,7 +238,7 @@ impl HelpView {
                                             .child(
                                                 div()
                                                     .text_size(px(font_size::BASE))
-                                                    .text_color(text::primary())
+                                                    .text_color(text_primary)
                                                     .font_weight(FontWeight::MEDIUM)
                                                     .child(entry.name.clone()),
                                             ),
@@ -239,7 +246,7 @@ impl HelpView {
                                     .child(
                                         div()
                                             .text_size(px(font_size::SM))
-                                            .text_color(text::muted())
+                                            .text_color(text_muted)
                                             .child(entry.description.clone()),
                                     ),
                             ),
@@ -302,8 +309,12 @@ impl LauncherView for HelpView {
         false
     }
 
-    fn render(&self, vx: &ViewContext, _cx: &App) -> (AnyElement, usize) {
+    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
+        let theme = cx.theme();
         let count = self.filtered_count(vx.query);
+
+        let text_disabled = theme.text.disabled;
+        let text_muted = theme.text.muted;
 
         let element = div()
             .flex_1()
@@ -312,18 +323,18 @@ impl LauncherView for HelpView {
             .gap(px(spacing::LG))
             .p(px(spacing::SM))
             // System info header
-            .child(self.render_system_info(vx))
+            .child(self.render_system_info(vx, cx))
             // Section title
             .child(
                 div()
                     .px(px(spacing::SM))
                     .text_size(px(font_size::XS))
-                    .text_color(text::disabled())
+                    .text_color(text_disabled)
                     .font_weight(FontWeight::MEDIUM)
                     .child("COMMANDS"),
             )
             // Commands list
-            .child(self.render_commands(vx))
+            .child(self.render_commands(vx, cx))
             // Usage hint
             .child(
                 div()
@@ -335,26 +346,26 @@ impl LauncherView for HelpView {
                     .child(
                         div()
                             .text_size(px(font_size::XS))
-                            .text_color(text::disabled())
+                            .text_color(text_disabled)
                             .font_weight(FontWeight::MEDIUM)
                             .child("USAGE"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child("• Type a prefix (like @, $, !) to switch to that view"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child("• Type without prefix to search apps directly"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child("• Press ? anytime to return to this help"),
                     ),
             )

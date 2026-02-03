@@ -1,21 +1,22 @@
 //! Theme module providing consistent styling across the application.
 //!
-//! This module defines color constants, styling helpers, and a global theme
-//! system to ensure a cohesive visual appearance throughout the bar, launcher,
-//! and panels.
+//! This module defines the theme system and styling constants to ensure
+//! a cohesive visual appearance throughout the bar, launcher, and panels.
 //!
 //! # Usage
 //!
-//! Colors can be accessed either via module functions or through the theme trait:
+//! Access theme colors through the `ActiveTheme` trait:
 //!
 //! ```ignore
-//! // Module-based access (existing pattern)
-//! use ui::{bg, text, accent};
-//! div().bg(bg::primary()).text_color(text::primary())
-//!
-//! // Trait-based access (new pattern)
 //! use ui::ActiveTheme;
-//! div().bg(cx.theme().bg.primary).text_color(cx.theme().text.primary)
+//!
+//! fn render(&mut self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+//!     let theme = cx.theme();
+//!     div()
+//!         .bg(theme.bg.primary)
+//!         .text_color(theme.text.primary)
+//!         .border_color(theme.border.default)
+//! }
 //! ```
 
 use gpui::{App, Global, Hsla, Pixels, px, rgba};
@@ -74,7 +75,6 @@ impl Default for Theme {
 }
 
 impl Theme {
-
     /// Initialize the global theme.
     ///
     /// Call this once at application startup.
@@ -92,6 +92,14 @@ impl Theme {
     #[inline(always)]
     pub fn global_mut(cx: &mut App) -> &mut Theme {
         cx.global_mut::<Theme>()
+    }
+
+    /// Replace the global theme with a new one.
+    ///
+    /// Call this to swap themes at runtime. The theme service will use this
+    /// when loading Base16 schemes or switching themes.
+    pub fn set(theme: Theme, cx: &mut App) {
+        *cx.global_mut::<Theme>() = theme;
     }
 }
 
@@ -231,7 +239,6 @@ impl Default for StatusColors {
 }
 
 impl StatusColors {
-
     /// Get color based on percentage value (for progress bars, usage indicators).
     pub fn from_percentage(&self, value: u32) -> Hsla {
         if value >= 90 {
@@ -283,186 +290,8 @@ impl Default for InteractiveColors {
 }
 
 // =============================================================================
-// Legacy Module-Based Access (kept for backwards compatibility)
+// Design Constants
 // =============================================================================
-
-/// Core background colors
-pub mod bg {
-    use super::*;
-
-    pub const PRIMARY: u32 = 0x1e1e1eff;
-    pub const SECONDARY: u32 = 0x252526ff;
-    pub const TERTIARY: u32 = 0x2d2d2dff;
-    pub const ELEVATED: u32 = 0x333333ff;
-
-    pub fn primary() -> Hsla {
-        rgba(PRIMARY).into()
-    }
-
-    pub fn secondary() -> Hsla {
-        rgba(SECONDARY).into()
-    }
-
-    pub fn tertiary() -> Hsla {
-        rgba(TERTIARY).into()
-    }
-
-    pub fn elevated() -> Hsla {
-        rgba(ELEVATED).into()
-    }
-}
-
-/// Border colors
-pub mod border {
-    use super::*;
-
-    pub const DEFAULT: u32 = 0x3c3c3cff;
-    pub const SUBTLE: u32 = 0x2d2d2dff;
-    pub const FOCUSED: u32 = 0x007accff;
-
-    pub fn default() -> Hsla {
-        rgba(DEFAULT).into()
-    }
-
-    pub fn subtle() -> Hsla {
-        rgba(SUBTLE).into()
-    }
-
-    pub fn focused() -> Hsla {
-        rgba(FOCUSED).into()
-    }
-}
-
-/// Text colors
-pub mod text {
-    use super::*;
-
-    pub const PRIMARY: u32 = 0xffffffee;
-    pub const SECONDARY: u32 = 0xccccccff;
-    pub const MUTED: u32 = 0x888888ff;
-    pub const DISABLED: u32 = 0x6e6e6eff;
-    pub const PLACEHOLDER: u32 = 0x6e6e6eff;
-
-    pub fn primary() -> Hsla {
-        rgba(PRIMARY).into()
-    }
-
-    pub fn secondary() -> Hsla {
-        rgba(SECONDARY).into()
-    }
-
-    pub fn muted() -> Hsla {
-        rgba(MUTED).into()
-    }
-
-    pub fn disabled() -> Hsla {
-        rgba(DISABLED).into()
-    }
-
-    pub fn placeholder() -> Hsla {
-        rgba(PLACEHOLDER).into()
-    }
-}
-
-/// Accent/brand colors
-pub mod accent {
-    use super::*;
-
-    pub const PRIMARY: u32 = 0x007accff;
-    pub const SELECTION: u32 = 0x094771ff;
-    pub const HOVER: u32 = 0x1177bbff;
-
-    pub fn primary() -> Hsla {
-        rgba(PRIMARY).into()
-    }
-
-    pub fn selection() -> Hsla {
-        rgba(SELECTION).into()
-    }
-
-    pub fn hover() -> Hsla {
-        rgba(HOVER).into()
-    }
-}
-
-/// Status colors for indicators
-pub mod status {
-    use super::*;
-
-    pub const SUCCESS: u32 = 0x4ade80ff;
-    pub const WARNING: u32 = 0xfbbf24ff;
-    pub const ERROR: u32 = 0xf87171ff;
-    pub const INFO: u32 = 0x60a5faff;
-
-    pub fn success() -> Hsla {
-        rgba(SUCCESS).into()
-    }
-
-    pub fn warning() -> Hsla {
-        rgba(WARNING).into()
-    }
-
-    pub fn error() -> Hsla {
-        rgba(ERROR).into()
-    }
-
-    pub fn info() -> Hsla {
-        rgba(INFO).into()
-    }
-
-    /// Get color based on percentage value (for progress bars, usage indicators)
-    pub fn from_percentage(value: u32) -> Hsla {
-        if value >= 90 {
-            error()
-        } else if value >= 70 {
-            warning()
-        } else {
-            success()
-        }
-    }
-
-    /// Get color based on temperature
-    pub fn from_temperature(temp: i32) -> Hsla {
-        if temp >= 85 {
-            error()
-        } else if temp >= 70 {
-            warning()
-        } else {
-            success()
-        }
-    }
-}
-
-/// Interactive element colors (buttons, toggles)
-pub mod interactive {
-    use super::*;
-
-    pub const DEFAULT: u32 = 0x3b3b3bff;
-    pub const HOVER: u32 = 0x454545ff;
-    pub const ACTIVE: u32 = 0x505050ff;
-    pub const TOGGLE_ON: u32 = 0x007accff;
-    pub const TOGGLE_ON_HOVER: u32 = 0x1177bbff;
-
-    pub fn default() -> Hsla {
-        rgba(DEFAULT).into()
-    }
-
-    pub fn hover() -> Hsla {
-        rgba(HOVER).into()
-    }
-
-    pub fn active() -> Hsla {
-        rgba(ACTIVE).into()
-    }
-
-    pub fn toggle_on() -> Hsla {
-        rgba(TOGGLE_ON).into()
-    }
-
-    pub fn toggle_on_hover() -> Hsla {
-        rgba(TOGGLE_ON_HOVER).into()
-    }
-}
 
 /// Spacing constants (in pixels)
 pub mod spacing {

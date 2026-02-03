@@ -4,7 +4,7 @@ use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState, CompositorSubscriber};
-use ui::{interactive, radius, spacing, text};
+use ui::{ActiveTheme, radius, spacing};
 
 /// Keyboard layout widget that displays the current keyboard layout.
 pub struct KeyboardLayout {
@@ -110,7 +110,15 @@ impl KeyboardLayout {
 
 impl Render for KeyboardLayout {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let short_name = self.short_layout_name();
+
+        // Pre-compute colors for closures
+        let interactive_default = theme.interactive.default;
+        let interactive_hover = theme.interactive.hover;
+        let interactive_active = theme.interactive.active;
+        let text_secondary = theme.text.secondary;
+        let text_primary = theme.text.primary;
 
         div()
             .id("keyboard-layout")
@@ -121,9 +129,9 @@ impl Render for KeyboardLayout {
             .py(px(2.))
             .rounded(px(radius::SM))
             .cursor_pointer()
-            .bg(interactive::default())
-            .hover(|s| s.bg(interactive::hover()))
-            .active(|s| s.bg(interactive::active()))
+            .bg(interactive_default)
+            .hover(move |s| s.bg(interactive_hover))
+            .active(move |s| s.bg(interactive_active))
             // Click to cycle layout
             .on_mouse_down(
                 MouseButton::Left,
@@ -133,10 +141,10 @@ impl Render for KeyboardLayout {
             )
             .child(
                 div()
-                    .text_color(text::secondary())
+                    .text_color(text_secondary)
                     // Keyboard icon
                     .child("󰌌 "),
             )
-            .child(div().text_color(text::primary()).child(short_name))
+            .child(div().text_color(text_primary).child(short_name))
     }
 }

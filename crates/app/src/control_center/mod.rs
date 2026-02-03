@@ -27,7 +27,7 @@ use gpui::{
     prelude::*, px,
 };
 use services::{AudioCommand, BrightnessCommand, NetworkCommand, Services};
-use ui::{Slider, SliderEvent, bg, border, radius, spacing, text};
+use ui::{ActiveTheme, Slider, SliderEvent, radius, spacing};
 
 // Keyboard actions for password input
 actions!(control_center, [Backspace, Cancel, Submit, TypeChar]);
@@ -251,6 +251,7 @@ impl Focusable for ControlCenter {
 
 impl Render for ControlCenter {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let expanded = self.expanded;
         let services = self.services.clone();
 
@@ -355,11 +356,11 @@ impl Render for ControlCenter {
             .w_full()
             .h_full()
             .p(px(spacing::MD))
-            .bg(bg::primary())
+            .bg(theme.bg.primary)
             .border_1()
-            .border_color(border::default())
+            .border_color(theme.border.default)
             .rounded(px(radius::LG))
-            .text_color(text::primary())
+            .text_color(theme.text.primary)
             .flex()
             .flex_col()
             .gap(px(spacing::MD))
@@ -467,6 +468,7 @@ impl Render for ControlCenter {
                 &self.services,
                 expanded,
                 on_toggle_section,
+                cx,
             ))
             // WiFi section (when expanded) - right after toggle
             .when(expanded == ExpandedSection::WiFi, |el| {
@@ -476,25 +478,28 @@ impl Render for ControlCenter {
                     on_wifi_connect,
                     on_password_change,
                     on_cancel_password,
+                    cx,
                 ))
             })
             // Bluetooth section (when expanded) - right after toggle
             .when(expanded == ExpandedSection::Bluetooth, |el| {
-                el.child(bluetooth::render_bluetooth_section(&self.services))
+                el.child(bluetooth::render_bluetooth_section(&self.services, cx))
             })
             // Power section (when expanded) - right after toggle
             .when(expanded == ExpandedSection::Power, |el| {
-                el.child(power::render_power_section(&self.services))
+                el.child(power::render_power_section(&self.services, cx))
             })
             // Volume slider
             .child(sliders::render_volume_slider(
                 &self.services,
                 &self.volume_slider,
+                cx,
             ))
             // Brightness slider (if available)
             .child(sliders::render_brightness_slider(
                 &self.services,
                 &self.brightness_slider,
+                cx,
             ))
     }
 }

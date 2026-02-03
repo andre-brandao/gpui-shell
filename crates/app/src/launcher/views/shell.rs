@@ -2,7 +2,7 @@
 
 use crate::launcher::view::{LauncherView, ViewContext};
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
-use ui::{bg, font_size, radius, spacing, text};
+use ui::{ActiveTheme, font_size, radius, spacing};
 
 /// Shell view - executes shell commands in a terminal.
 pub struct ShellView;
@@ -24,9 +24,16 @@ impl LauncherView for ShellView {
         "Run shell commands in terminal"
     }
 
-    fn render(&self, vx: &ViewContext, _cx: &App) -> (AnyElement, usize) {
+    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
+        let theme = cx.theme();
         let query = vx.query.trim();
         let has_command = !query.is_empty();
+
+        let text_primary = theme.text.primary;
+        let text_muted = theme.text.muted;
+        let text_disabled = theme.text.disabled;
+        let text_placeholder = theme.text.placeholder;
+        let bg_secondary = theme.bg.secondary;
 
         let element = div()
             .flex_1()
@@ -39,7 +46,7 @@ impl LauncherView for ShellView {
                 div()
                     .w_full()
                     .p(px(spacing::MD))
-                    .bg(bg::secondary())
+                    .bg(bg_secondary)
                     .rounded(px(radius::MD))
                     .flex()
                     .flex_col()
@@ -58,13 +65,13 @@ impl LauncherView for ShellView {
                                     .child(
                                         div()
                                             .text_size(px(font_size::XL))
-                                            .text_color(text::primary())
+                                            .text_color(text_primary)
                                             .child(""),
                                     )
                                     .child(
                                         div()
                                             .text_size(px(font_size::BASE))
-                                            .text_color(text::primary())
+                                            .text_color(text_primary)
                                             .font_weight(FontWeight::MEDIUM)
                                             .child("Terminal"),
                                     )
@@ -98,9 +105,9 @@ impl LauncherView for ShellView {
                                         div()
                                             .text_size(px(font_size::SM))
                                             .text_color(if has_command {
-                                                text::primary()
+                                                text_primary
                                             } else {
-                                                text::disabled()
+                                                text_disabled
                                             })
                                             .child("Run"),
                                     )
@@ -112,9 +119,9 @@ impl LauncherView for ShellView {
                                             .bg(rgba(0x00000044))
                                             .text_size(px(font_size::XS))
                                             .text_color(if has_command {
-                                                text::muted()
+                                                text_muted
                                             } else {
-                                                text::disabled()
+                                                text_disabled
                                             })
                                             .child("Enter"),
                                     ),
@@ -130,9 +137,9 @@ impl LauncherView for ShellView {
                             .font_family("monospace")
                             .text_size(px(font_size::BASE))
                             .text_color(if has_command {
-                                text::primary()
+                                text_primary
                             } else {
-                                text::placeholder()
+                                text_placeholder
                             })
                             .child(if has_command {
                                 query.to_string()
@@ -152,26 +159,26 @@ impl LauncherView for ShellView {
                     .child(
                         div()
                             .text_size(px(font_size::XS))
-                            .text_color(text::disabled())
+                            .text_color(text_disabled)
                             .font_weight(FontWeight::MEDIUM)
                             .child("TIPS"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child("• Commands run in your default terminal emulator"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child("• Interactive commands and output are fully supported"),
                     )
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child("• Example: $htop, $vim ~/.config, $cargo build"),
                     ),
             )

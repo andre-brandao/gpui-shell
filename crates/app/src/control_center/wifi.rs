@@ -5,7 +5,7 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand, Services};
-use ui::{accent, bg, border, font_size, icon_size, interactive, radius, spacing, status, text};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use super::icons;
 
@@ -52,7 +52,9 @@ pub fn render_wifi_section(
     on_connect: impl Fn(String, Option<String>, &mut App) + Clone + 'static,
     on_password_change: impl Fn(String, &mut App) + Clone + 'static,
     on_cancel_password: impl Fn(&mut App) + Clone + 'static,
+    cx: &App,
 ) -> impl IntoElement {
+    let theme = cx.theme();
     let network = services.network.get();
 
     // Get current connection name
@@ -82,10 +84,10 @@ pub fn render_wifi_section(
         .flex_col()
         .gap(px(spacing::XS))
         .p(px(spacing::SM))
-        .bg(bg::secondary())
+        .bg(theme.bg.secondary)
         .rounded(px(radius::MD))
         .border_1()
-        .border_color(border::subtle())
+        .border_color(theme.border.subtle)
         .child(
             // Section header
             div()
@@ -96,25 +98,25 @@ pub fn render_wifi_section(
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
-                        .text_color(text::muted())
+                        .text_color(theme.text.muted)
                         .child(icons::WIFI),
                 )
                 .child(
                     div()
                         .flex_1()
                         .text_size(px(font_size::SM))
-                        .text_color(text::secondary())
+                        .text_color(theme.text.secondary)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child("Networks"),
                 )
-                .child(render_refresh_button(services)),
+                .child(render_refresh_button(services, cx)),
         )
         .when(aps.is_empty(), |el| {
             el.child(
                 div()
                     .py(px(spacing::MD))
                     .text_size(px(font_size::SM))
-                    .text_color(text::muted())
+                    .text_color(theme.text.muted)
                     .text_center()
                     .child("No networks found"),
             )
@@ -156,6 +158,7 @@ pub fn render_wifi_section(
                                 },
                                 on_password_change.clone(),
                                 on_cancel,
+                                cx,
                             )
                             .into_any_element()
                         } else {
@@ -183,6 +186,7 @@ pub fn render_wifi_section(
                                         on_connect(ssid, Some(String::new()), cx);
                                     }
                                 },
+                                cx,
                             )
                             .into_any_element()
                         }
@@ -200,8 +204,18 @@ fn render_network_item(
     known: bool,
     connected: bool,
     on_click: impl Fn(&mut App) + 'static,
+    cx: &App,
 ) -> impl IntoElement {
+    let theme = cx.theme();
     let signal_icon = icons::wifi_signal_icon(strength);
+
+    // Pre-compute colors for closures
+    let accent_selection = theme.accent.selection;
+    let interactive_hover = theme.interactive.hover;
+    let accent_primary = theme.accent.primary;
+    let text_muted = theme.text.muted;
+    let text_primary = theme.text.primary;
+    let status_success = theme.status.success;
 
     div()
         .id(ElementId::Name(SharedString::from(format!(
@@ -216,8 +230,8 @@ fn render_network_item(
         .py(px(spacing::XS))
         .rounded(px(radius::SM))
         .cursor_pointer()
-        .when(connected, |el| el.bg(accent::selection()))
-        .when(!connected, |el| el.hover(|s| s.bg(interactive::hover())))
+        .when(connected, move |el| el.bg(accent_selection))
+        .when(!connected, move |el| el.hover(move |s| s.bg(interactive_hover)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
@@ -226,9 +240,9 @@ fn render_network_item(
             div()
                 .text_size(px(icon_size::SM))
                 .text_color(if connected {
-                    accent::primary()
+                    accent_primary
                 } else {
-                    text::muted()
+                    text_muted
                 })
                 .child(signal_icon),
         )
@@ -237,7 +251,7 @@ fn render_network_item(
             div()
                 .flex_1()
                 .text_size(px(font_size::SM))
-                .text_color(text::primary())
+                .text_color(text_primary)
                 .overflow_hidden()
                 .child(ssid.to_string()),
         )
@@ -247,9 +261,9 @@ fn render_network_item(
                 div()
                     .text_size(px(icon_size::SM))
                     .text_color(if known {
-                        status::success()
+                        status_success
                     } else {
-                        text::muted()
+                        text_muted
                     })
                     .child(icons::LOCK),
             )
@@ -259,7 +273,7 @@ fn render_network_item(
             el.child(
                 div()
                     .text_size(px(icon_size::SM))
-                    .text_color(status::success())
+                    .text_color(status_success)
                     .child(icons::CHECK),
             )
         })
@@ -275,9 +289,21 @@ fn render_password_input(
     on_submit: impl Fn(String, &mut App) + 'static,
     _on_change: impl Fn(String, &mut App) + 'static,
     on_cancel: impl Fn(&mut App) + 'static,
+    cx: &App,
 ) -> impl IntoElement {
+    let theme = cx.theme();
     let password = current_password.to_string();
     let password_for_submit = password.clone();
+
+    // Pre-compute colors for closures
+    let bg_tertiary = theme.bg.tertiary;
+    let bg_primary = theme.bg.primary;
+    let accent_primary = theme.accent.primary;
+    let accent_hover = theme.accent.hover;
+    let text_primary = theme.text.primary;
+    let text_muted = theme.text.muted;
+    let text_placeholder = theme.text.placeholder;
+    let status_error = theme.status.error;
 
     div()
         .id(ElementId::Name(SharedString::from(format!(
@@ -290,7 +316,7 @@ fn render_password_input(
         .w_full()
         .px(px(spacing::SM))
         .py(px(spacing::SM))
-        .bg(bg::tertiary())
+        .bg(bg_tertiary)
         .rounded(px(radius::SM))
         // Network name header
         .child(
@@ -301,14 +327,14 @@ fn render_password_input(
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
-                        .text_color(accent::primary())
+                        .text_color(accent_primary)
                         .child(icons::WIFI_LOCK),
                 )
                 .child(
                     div()
                         .flex_1()
                         .text_size(px(font_size::SM))
-                        .text_color(text::primary())
+                        .text_color(text_primary)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(ssid.to_string()),
                 )
@@ -316,9 +342,9 @@ fn render_password_input(
                     div()
                         .id(format!("wifi-cancel-{}", index))
                         .text_size(px(icon_size::SM))
-                        .text_color(text::muted())
+                        .text_color(text_muted)
                         .cursor_pointer()
-                        .hover(|s| s.text_color(text::primary()))
+                        .hover(move |s| s.text_color(text_primary))
                         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                             on_cancel(cx);
                         })
@@ -336,10 +362,10 @@ fn render_password_input(
                         .flex_1()
                         .px(px(spacing::SM))
                         .py(px(spacing::XS))
-                        .bg(bg::primary())
+                        .bg(bg_primary)
                         .rounded(px(radius::SM))
                         .border_1()
-                        .border_color(accent::primary())
+                        .border_color(accent_primary)
                         .child(
                             div()
                                 .flex()
@@ -348,9 +374,9 @@ fn render_password_input(
                                     div()
                                         .text_size(px(font_size::SM))
                                         .text_color(if password.is_empty() {
-                                            text::placeholder()
+                                            text_placeholder
                                         } else {
-                                            text::primary()
+                                            text_primary
                                         })
                                         .child(if password.is_empty() {
                                             "Type password...".to_string()
@@ -359,7 +385,7 @@ fn render_password_input(
                                         }),
                                 )
                                 // Blinking cursor indicator
-                                .child(div().w(px(1.)).h(px(14.)).bg(text::primary()).ml(px(1.))),
+                                .child(div().w(px(1.)).h(px(14.)).bg(text_primary).ml(px(1.))),
                         ),
                 )
                 .child(
@@ -367,10 +393,10 @@ fn render_password_input(
                         .id(format!("wifi-connect-{}", index))
                         .px(px(spacing::MD))
                         .py(px(spacing::XS))
-                        .bg(accent::primary())
+                        .bg(accent_primary)
                         .rounded(px(radius::SM))
                         .cursor_pointer()
-                        .hover(|s| s.bg(accent::hover()))
+                        .hover(move |s| s.bg(accent_hover))
                         .when(connecting, |el| el.opacity(0.7))
                         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                             if !connecting {
@@ -380,7 +406,7 @@ fn render_password_input(
                         .child(
                             div()
                                 .text_size(px(font_size::SM))
-                                .text_color(text::primary())
+                                .text_color(text_primary)
                                 .child(if connecting {
                                     "Connecting..."
                                 } else {
@@ -393,7 +419,7 @@ fn render_password_input(
         .child(
             div()
                 .text_size(px(font_size::XS))
-                .text_color(text::muted())
+                .text_color(text_muted)
                 .child("Press Enter to connect, Escape to cancel"),
         )
         // Error message
@@ -401,15 +427,21 @@ fn render_password_input(
             el.child(
                 div()
                     .text_size(px(font_size::XS))
-                    .text_color(status::error())
+                    .text_color(status_error)
                     .child(err.to_string()),
             )
         })
 }
 
 /// Render a refresh button for rescanning networks
-pub fn render_refresh_button(services: &Services) -> impl IntoElement {
+pub fn render_refresh_button(services: &Services, cx: &App) -> impl IntoElement {
+    let theme = cx.theme();
     let services = services.clone();
+
+    // Pre-compute colors for closures
+    let interactive_default = theme.interactive.default;
+    let interactive_hover = theme.interactive.hover;
+    let text_muted = theme.text.muted;
 
     div()
         .id("wifi-refresh")
@@ -420,8 +452,8 @@ pub fn render_refresh_button(services: &Services) -> impl IntoElement {
         .h(px(24.))
         .rounded(px(radius::SM))
         .cursor_pointer()
-        .bg(interactive::default())
-        .hover(|s| s.bg(interactive::hover()))
+        .bg(interactive_default)
+        .hover(move |s| s.bg(interactive_hover))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             let s = services.clone();
             cx.spawn(async move |_| {
@@ -432,7 +464,7 @@ pub fn render_refresh_button(services: &Services) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(icon_size::SM))
-                .text_color(text::muted())
+                .text_color(text_muted)
                 .child(icons::REFRESH),
         )
 }

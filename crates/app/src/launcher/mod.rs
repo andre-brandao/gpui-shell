@@ -17,7 +17,7 @@ use gpui::{
     div, layer_shell::*, prelude::*, px,
 };
 use services::Services;
-use ui::{bg, border, font_size, icon_size, interactive, radius, spacing, text};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput, is_special_char};
 use views::{HelpView, all_views};
 
@@ -330,6 +330,8 @@ impl Render for Launcher {
             self.focus_handle.focus(window, cx);
         }
 
+        let theme = cx.theme();
+
         let query = self.search_query.clone();
         let view_name = self.current_view_name().to_string();
         let placeholder = self.placeholder();
@@ -346,6 +348,16 @@ impl Render for Launcher {
         if self.selected_index >= item_count && item_count > 0 {
             self.selected_index = item_count - 1;
         }
+
+        // Pre-compute colors for closures
+        let text_primary = theme.text.primary;
+        let text_muted = theme.text.muted;
+        let text_secondary = theme.text.secondary;
+        let text_disabled = theme.text.disabled;
+        let text_placeholder = theme.text.placeholder;
+        let bg_primary = theme.bg.primary;
+        let border_default = theme.border.default;
+        let interactive_default = theme.interactive.default;
 
         div()
             .id("launcher")
@@ -394,11 +406,11 @@ impl Render for Launcher {
                 }),
             )
             .size_full()
-            .bg(bg::primary())
+            .bg(bg_primary)
             .border_1()
-            .border_color(border::default())
+            .border_color(border_default)
             .rounded(px(radius::LG))
-            .text_color(text::primary())
+            .text_color(text_primary)
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -415,7 +427,7 @@ impl Render for Launcher {
                     .child(
                         div()
                             .text_size(px(icon_size::LG))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .child(""),
                     )
                     // Search text
@@ -425,9 +437,9 @@ impl Render for Launcher {
                             .text_size(px(font_size::MD))
                             .child(if query.is_empty() { placeholder } else { query })
                             .text_color(if is_empty {
-                                text::placeholder()
+                                text_placeholder
                             } else {
-                                text::primary()
+                                text_primary
                             }),
                     )
                     // View badge (right side)
@@ -436,14 +448,14 @@ impl Render for Launcher {
                             .px(px(spacing::SM))
                             .py(px(3.))
                             .rounded(px(radius::SM))
-                            .bg(interactive::default())
+                            .bg(interactive_default)
                             .text_size(px(font_size::SM))
-                            .text_color(text::secondary())
+                            .text_color(text_secondary)
                             .child(view_name),
                     ),
             )
             // Divider line
-            .child(div().w_full().h(px(1.)).bg(border::default()))
+            .child(div().w_full().h(px(1.)).bg(border_default))
             // View content with scroll support
             .child(
                 div()
@@ -455,7 +467,7 @@ impl Render for Launcher {
                     .child(view_content),
             )
             // Bottom footer bar
-            .child(div().w_full().h(px(1.)).bg(border::default()))
+            .child(div().w_full().h(px(1.)).bg(border_default))
             .child(
                 div()
                     .w_full()
@@ -471,7 +483,7 @@ impl Render for Launcher {
                             .items_center()
                             .gap(px(spacing::SM))
                             .text_size(px(font_size::XS))
-                            .text_color(text::disabled())
+                            .text_color(text_disabled)
                             .child(
                                 div()
                                     .flex()
@@ -493,7 +505,7 @@ impl Render for Launcher {
                             .items_center()
                             .gap(px(spacing::LG))
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(text_muted)
                             .children(footer_actions.into_iter().map(|(action, key)| {
                                 div()
                                     .flex()
@@ -505,7 +517,7 @@ impl Render for Launcher {
                                             .px(px(spacing::SM - 2.0))
                                             .py(px(2.))
                                             .rounded(px(radius::SM - 1.0))
-                                            .bg(interactive::default())
+                                            .bg(interactive_default)
                                             .text_size(px(font_size::XS))
                                             .child(key),
                                     )

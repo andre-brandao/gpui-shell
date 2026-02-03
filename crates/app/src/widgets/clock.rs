@@ -3,7 +3,7 @@
 use chrono::Local;
 use gpui::{Context, Window, div, prelude::*};
 use std::time::Duration;
-use ui::{font_size, text};
+use ui::{ActiveTheme, font_size};
 
 /// A clock widget that updates every second.
 pub struct Clock;
@@ -32,12 +32,14 @@ impl Clock {
 }
 
 impl Render for Clock {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
         div()
             .flex()
             .items_center()
             .text_size(gpui::px(font_size::BASE))
-            .text_color(text::primary())
+            .text_color(theme.text.primary)
             .child(self.formatted_time())
     }
 }

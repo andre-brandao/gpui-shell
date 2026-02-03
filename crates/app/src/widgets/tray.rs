@@ -5,7 +5,7 @@ use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{App, Context, MouseButton, Render, Window, div, layer_shell::Anchor, prelude::*, px};
 use services::{MenuLayout, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber};
-use ui::{bg, border, icon_size, interactive, radius, spacing, text};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 /// System tray widget that displays tray icons.
 pub struct Tray {
@@ -70,7 +70,13 @@ impl Tray {
 
 impl Render for Tray {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let items: Vec<_> = self.data.items.clone();
+
+        // Pre-compute colors for closures
+        let interactive_hover = theme.interactive.hover;
+        let interactive_active = theme.interactive.active;
+        let text_primary = theme.text.primary;
 
         div()
             .id("systray")
@@ -92,8 +98,8 @@ impl Render for Tray {
                     .p(px(spacing::XS))
                     .rounded(px(radius::SM))
                     .cursor_pointer()
-                    .hover(|s| s.bg(interactive::hover()))
-                    .active(|s| s.bg(interactive::active()))
+                    .hover(move |s| s.bg(interactive_hover))
+                    .active(move |s| s.bg(interactive_active))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _event, _window, cx| {
@@ -103,7 +109,7 @@ impl Render for Tray {
                     .child(
                         div()
                             .text_size(px(icon_size::MD))
-                            .text_color(text::primary())
+                            .text_color(text_primary)
                             .child(icon_char),
                     )
             }))
@@ -163,7 +169,12 @@ impl TrayMenuPanel {
         depth: usize,
         cx: &mut Context<Self>,
     ) -> Vec<gpui::AnyElement> {
+        let theme = cx.theme();
         let mut elements = Vec::new();
+
+        // Pre-compute colors for closures
+        let border_default = theme.border.default;
+        let interactive_hover = theme.interactive.hover;
 
         for layout in items {
             let MenuLayout(id, props, children) = layout;
@@ -185,7 +196,7 @@ impl TrayMenuPanel {
                     div()
                         .h(px(1.))
                         .w_full()
-                        .bg(border::default())
+                        .bg(border_default)
                         .my(px(spacing::XS))
                         .into_any_element(),
                 );
@@ -228,9 +239,9 @@ impl TrayMenuPanel {
                     .py(px(spacing::SM - 2.0))
                     .cursor_pointer()
                     .when(!is_enabled, |s| s.opacity(0.5))
-                    .hover(|s| {
+                    .hover(move |s| {
                         if is_enabled {
-                            s.bg(interactive::hover())
+                            s.bg(interactive_hover)
                         } else {
                             s
                         }
@@ -273,16 +284,17 @@ impl TrayMenuPanel {
 impl Render for TrayMenuPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let menu_items = self.render_menu_items(&self.menu.2, 0, cx);
+        let theme = cx.theme();
 
         div()
             .id("systray-menu-panel")
             .size_full()
-            .bg(bg::primary())
+            .bg(theme.bg.primary)
             .border_1()
-            .border_color(border::default())
+            .border_color(theme.border.default)
             .rounded(px(radius::LG))
             .py(px(spacing::SM))
-            .text_color(text::primary())
+            .text_color(theme.text.primary)
             .overflow_hidden()
             .children(menu_items)
     }

@@ -6,7 +6,7 @@ use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use gpui::{App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
-use ui::{font_size, icon_size, interactive, radius, spacing, status};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 mod panel;
 pub use panel::SysInfoPanel;
@@ -107,24 +107,22 @@ impl SysInfo {
             icons::MEMORY
         }
     }
-
-    fn cpu_color(&self) -> gpui::Hsla {
-        status::from_percentage(self.data.cpu_usage)
-    }
-
-    fn memory_color(&self) -> gpui::Hsla {
-        status::from_percentage(self.data.memory_usage)
-    }
 }
 
 impl Render for SysInfo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
         let cpu_usage = self.data.cpu_usage;
         let memory_usage = self.data.memory_usage;
         let cpu_icon = self.cpu_icon();
         let memory_icon = self.memory_icon();
-        let cpu_color = self.cpu_color();
-        let memory_color = self.memory_color();
+        let cpu_color = theme.status.from_percentage(cpu_usage);
+        let memory_color = theme.status.from_percentage(memory_usage);
+
+        // Pre-compute colors for closures
+        let interactive_hover = theme.interactive.hover;
+        let interactive_active = theme.interactive.active;
 
         div()
             .id("sysinfo-widget")
@@ -135,8 +133,8 @@ impl Render for SysInfo {
             .py(px(spacing::XS))
             .rounded(px(radius::SM))
             .cursor_pointer()
-            .hover(|s| s.bg(interactive::hover()))
-            .active(|s| s.bg(interactive::active()))
+            .hover(move |s| s.bg(interactive_hover))
+            .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {

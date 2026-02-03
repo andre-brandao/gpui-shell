@@ -16,7 +16,7 @@ use gpui::{
     prelude::*, px,
 };
 use services::Services;
-use ui::{accent, bg, border, icon_size, radius, spacing, text};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 use crate::control_center::icons;
 
@@ -101,20 +101,25 @@ impl OsdView {
         }
     }
 
-    fn fill_color(level: u8, muted: bool) -> gpui::Hsla {
-        if muted {
-            ui::status::error()
-        } else if level > 100 {
-            ui::status::warning()
-        } else {
-            accent::primary()
-        }
-    }
-
-    fn render_horizontal(&self) -> impl IntoElement {
+    fn render_horizontal(&self, cx: &Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let (icon, level, muted) = self.icon_and_level();
-        let fill_color = Self::fill_color(level, muted);
+
+        let fill_color = if muted {
+            theme.status.error
+        } else if level > 100 {
+            theme.status.warning
+        } else {
+            theme.accent.primary
+        };
+
         let bar_fill_pct = (level as f32 / 100.0).min(1.0);
+
+        let icon_color = if muted {
+            theme.status.error
+        } else {
+            theme.text.primary
+        };
 
         div()
             .size_full()
@@ -126,9 +131,9 @@ impl OsdView {
                     .w(px(OSD_LONG - 16.0))
                     .h(px(OSD_SHORT - 16.0))
                     .px(px(spacing::MD))
-                    .bg(bg::primary())
+                    .bg(theme.bg.primary)
                     .border_1()
-                    .border_color(border::default())
+                    .border_color(theme.border.default)
                     .rounded(px(radius::LG))
                     .flex()
                     .items_center()
@@ -136,18 +141,14 @@ impl OsdView {
                     .child(
                         div()
                             .text_size(px(icon_size::XL))
-                            .text_color(if muted {
-                                ui::status::error()
-                            } else {
-                                text::primary()
-                            })
+                            .text_color(icon_color)
                             .child(icon),
                     )
                     .child(
                         div()
                             .flex_1()
                             .h(px(6.0))
-                            .bg(bg::tertiary())
+                            .bg(theme.bg.tertiary)
                             .rounded(px(3.0))
                             .overflow_hidden()
                             .child(
@@ -162,17 +163,32 @@ impl OsdView {
                         div()
                             .w(px(36.0))
                             .text_size(px(12.0))
-                            .text_color(text::secondary())
+                            .text_color(theme.text.secondary)
                             .text_right()
                             .child(format!("{}%", level)),
                     ),
             )
     }
 
-    fn render_vertical(&self) -> impl IntoElement {
+    fn render_vertical(&self, cx: &Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let (icon, level, muted) = self.icon_and_level();
-        let fill_color = Self::fill_color(level, muted);
+
+        let fill_color = if muted {
+            theme.status.error
+        } else if level > 100 {
+            theme.status.warning
+        } else {
+            theme.accent.primary
+        };
+
         let bar_fill_pct = (level as f32 / 100.0).min(1.0);
+
+        let icon_color = if muted {
+            theme.status.error
+        } else {
+            theme.text.primary
+        };
 
         div()
             .size_full()
@@ -184,9 +200,9 @@ impl OsdView {
                     .w(px(OSD_SHORT - 16.0))
                     .h(px(OSD_LONG - 16.0))
                     .py(px(spacing::MD))
-                    .bg(bg::primary())
+                    .bg(theme.bg.primary)
                     .border_1()
-                    .border_color(border::default())
+                    .border_color(theme.border.default)
                     .rounded(px(radius::LG))
                     .flex()
                     .flex_col()
@@ -196,7 +212,7 @@ impl OsdView {
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(text::secondary())
+                            .text_color(theme.text.secondary)
                             .child(format!("{}%", level)),
                     )
                     // Vertical progress bar (grows upward from bottom)
@@ -204,7 +220,7 @@ impl OsdView {
                         div()
                             .flex_1()
                             .w(px(6.0))
-                            .bg(bg::tertiary())
+                            .bg(theme.bg.tertiary)
                             .rounded(px(3.0))
                             .overflow_hidden()
                             .flex()
@@ -222,11 +238,7 @@ impl OsdView {
                     .child(
                         div()
                             .text_size(px(icon_size::XL))
-                            .text_color(if muted {
-                                ui::status::error()
-                            } else {
-                                text::primary()
-                            })
+                            .text_color(icon_color)
                             .child(icon),
                     ),
             )
@@ -234,11 +246,11 @@ impl OsdView {
 }
 
 impl Render for OsdView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.position.is_vertical() {
-            self.render_vertical().into_any_element()
+            self.render_vertical(cx).into_any_element()
         } else {
-            self.render_horizontal().into_any_element()
+            self.render_horizontal(cx).into_any_element()
         }
     }
 }

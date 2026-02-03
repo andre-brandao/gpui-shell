@@ -3,7 +3,7 @@
 use futures_signals::signal::SignalExt;
 use gpui::{Context, Window, div, prelude::*, px};
 use services::{BatteryState, UPowerData, UPowerSubscriber};
-use ui::{font_size, icon_size, spacing, status, text};
+use ui::{ActiveTheme, font_size, icon_size, spacing};
 
 /// A battery widget that displays the current battery percentage and status.
 pub struct Battery {
@@ -55,42 +55,6 @@ impl Battery {
         }
     }
 
-    /// Get the text color based on battery state.
-    fn text_color(&self) -> gpui::Hsla {
-        match &self.data.battery {
-            Some(battery) => {
-                if battery.is_critical() {
-                    status::error()
-                } else if battery.is_low() {
-                    status::warning()
-                } else if battery.is_charging() {
-                    status::info()
-                } else {
-                    text::primary()
-                }
-            }
-            None => text::muted(),
-        }
-    }
-
-    /// Get the icon color based on battery state.
-    fn icon_color(&self) -> gpui::Hsla {
-        match &self.data.battery {
-            Some(battery) => {
-                if battery.is_critical() {
-                    status::error()
-                } else if battery.is_low() {
-                    status::warning()
-                } else if matches!(battery.state, BatteryState::Charging | BatteryState::FullyCharged) {
-                    status::success()
-                } else {
-                    text::primary()
-                }
-            }
-            None => text::muted(),
-        }
-    }
-
     /// Get tooltip text with detailed battery info.
     pub fn tooltip_text(&self) -> String {
         match &self.data.battery {
@@ -128,11 +92,43 @@ impl Battery {
 }
 
 impl Render for Battery {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
         let icon = self.battery_icon();
         let text = self.battery_text();
-        let icon_color = self.icon_color();
-        let text_color = self.text_color();
+
+        // Get the text color based on battery state
+        let text_color = match &self.data.battery {
+            Some(battery) => {
+                if battery.is_critical() {
+                    theme.status.error
+                } else if battery.is_low() {
+                    theme.status.warning
+                } else if battery.is_charging() {
+                    theme.status.info
+                } else {
+                    theme.text.primary
+                }
+            }
+            None => theme.text.muted,
+        };
+
+        // Get the icon color based on battery state
+        let icon_color = match &self.data.battery {
+            Some(battery) => {
+                if battery.is_critical() {
+                    theme.status.error
+                } else if battery.is_low() {
+                    theme.status.warning
+                } else if matches!(battery.state, BatteryState::Charging | BatteryState::FullyCharged) {
+                    theme.status.success
+                } else {
+                    theme.text.primary
+                }
+            }
+            None => theme.text.muted,
+        };
 
         div()
             .id("battery-widget")

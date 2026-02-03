@@ -7,7 +7,7 @@ use services::{
     AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand, PowerProfile, Services,
     UPowerCommand,
 };
-use ui::{accent, icon_size, interactive, radius, spacing, text};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 use super::icons;
 
@@ -26,6 +26,7 @@ pub fn render_quick_toggles(
     services: &Services,
     expanded: ExpandedSection,
     on_toggle_section: impl Fn(ExpandedSection, &mut App) + Clone + 'static,
+    cx: &App,
 ) -> impl IntoElement {
     let network = services.network.get();
     let bluetooth = services.bluetooth.get();
@@ -71,6 +72,7 @@ pub fn render_quick_toggles(
             },
             wifi_enabled,
             expanded == ExpandedSection::WiFi,
+            cx,
             move |cx| {
                 let services = services_wifi.clone();
                 cx.spawn(async move |_| {
@@ -92,6 +94,7 @@ pub fn render_quick_toggles(
             },
             bt_active,
             expanded == ExpandedSection::Bluetooth,
+            cx,
             move |cx| {
                 let services = services_bt.clone();
                 cx.spawn(async move |_| {
@@ -112,6 +115,7 @@ pub fn render_quick_toggles(
                 icons::MICROPHONE
             },
             !mic_muted,
+            cx,
             move |_cx| {
                 services_mic.audio.dispatch(AudioCommand::ToggleSourceMute);
             },
@@ -123,6 +127,7 @@ pub fn render_quick_toggles(
                 battery_icon,
                 is_charging,
                 expanded == ExpandedSection::Power,
+                cx,
                 {
                     let services = services_power.clone();
                     move |cx| {
@@ -157,9 +162,20 @@ fn render_expandable_toggle(
     icon: &'static str,
     active: bool,
     expanded: bool,
+    cx: &App,
     on_toggle: impl Fn(&mut App) + 'static,
     on_expand: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
+    let theme = cx.theme();
+
+    // Pre-compute colors for closures
+    let accent_primary = theme.accent.primary;
+    let accent_selection = theme.accent.selection;
+    let interactive_default = theme.interactive.default;
+    let interactive_hover = theme.interactive.hover;
+    let text_primary = theme.text.primary;
+    let text_muted = theme.text.muted;
+
     div()
         .id(id)
         .flex()
@@ -177,16 +193,16 @@ fn render_expandable_toggle(
                 .w(px(40.))
                 .h(px(36.))
                 .cursor_pointer()
-                .when(active, |el| el.bg(accent::primary()))
-                .when(!active, |el| el.bg(interactive::default()))
-                .hover(|s| s.bg(interactive::hover()))
+                .when(active, move |el| el.bg(accent_primary))
+                .when(!active, move |el| el.bg(interactive_default))
+                .hover(move |s| s.bg(interactive_hover))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_toggle(cx);
                 })
                 .child(
                     div()
                         .text_size(px(icon_size::MD))
-                        .text_color(text::primary())
+                        .text_color(text_primary)
                         .child(icon),
                 ),
         )
@@ -200,16 +216,16 @@ fn render_expandable_toggle(
                 .w(px(20.))
                 .h(px(36.))
                 .cursor_pointer()
-                .when(expanded, |el| el.bg(accent::selection()))
-                .when(!expanded, |el| el.bg(interactive::default()))
-                .hover(|s| s.bg(interactive::hover()))
+                .when(expanded, move |el| el.bg(accent_selection))
+                .when(!expanded, move |el| el.bg(interactive_default))
+                .hover(move |s| s.bg(interactive_hover))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_expand(cx);
                 })
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
-                        .text_color(text::muted())
+                        .text_color(text_muted)
                         .child(if expanded {
                             icons::CHEVRON_UP
                         } else {
@@ -224,8 +240,17 @@ fn render_simple_toggle(
     id: &'static str,
     icon: &'static str,
     active: bool,
+    cx: &App,
     on_click: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
+    let theme = cx.theme();
+
+    // Pre-compute colors for closures
+    let accent_primary = theme.accent.primary;
+    let interactive_default = theme.interactive.default;
+    let interactive_hover = theme.interactive.hover;
+    let text_primary = theme.text.primary;
+
     div()
         .id(id)
         .flex()
@@ -235,16 +260,16 @@ fn render_simple_toggle(
         .h(px(36.))
         .rounded(px(radius::MD))
         .cursor_pointer()
-        .when(active, |el| el.bg(accent::primary()))
-        .when(!active, |el| el.bg(interactive::default()))
-        .hover(|s| s.bg(interactive::hover()))
+        .when(active, move |el| el.bg(accent_primary))
+        .when(!active, move |el| el.bg(interactive_default))
+        .hover(move |s| s.bg(interactive_hover))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
         .child(
             div()
                 .text_size(px(icon_size::MD))
-                .text_color(text::primary())
+                .text_color(text_primary)
                 .child(icon),
         )
 }

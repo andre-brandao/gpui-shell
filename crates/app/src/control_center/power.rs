@@ -2,14 +2,15 @@
 //!
 //! Displays battery status and power profile controls when expanded.
 
-use gpui::{App, MouseButton, div, prelude::*, px};
+use gpui::{App, Hsla, MouseButton, div, prelude::*, px};
 use services::{PowerProfile, Services, UPowerCommand};
-use ui::{accent, bg, border, font_size, icon_size, interactive, radius, spacing, status, text};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use super::icons;
 
 /// Render the power section (expanded view with battery details and profiles)
-pub fn render_power_section(services: &Services) -> impl IntoElement {
+pub fn render_power_section(services: &Services, cx: &App) -> impl IntoElement {
+    let theme = cx.theme();
     let upower = services.upower.get();
     let services_clone = services.clone();
 
@@ -19,10 +20,10 @@ pub fn render_power_section(services: &Services) -> impl IntoElement {
         .flex_col()
         .gap(px(spacing::XS))
         .p(px(spacing::SM))
-        .bg(bg::secondary())
+        .bg(theme.bg.secondary)
         .rounded(px(radius::MD))
         .border_1()
-        .border_color(border::subtle())
+        .border_color(theme.border.subtle)
         .child(
             // Section header
             div()
@@ -33,13 +34,13 @@ pub fn render_power_section(services: &Services) -> impl IntoElement {
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
-                        .text_color(text::muted())
+                        .text_color(theme.text.muted)
                         .child(icons::BATTERY_FULL),
                 )
                 .child(
                     div()
                         .text_size(px(font_size::SM))
-                        .text_color(text::secondary())
+                        .text_color(theme.text.secondary)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child("Power"),
                 ),
@@ -52,13 +53,13 @@ pub fn render_power_section(services: &Services) -> impl IntoElement {
             let time_remaining = format_time_remaining(battery);
 
             let color = if is_critical {
-                status::error()
+                theme.status.error
             } else if is_charging {
-                status::success()
+                theme.status.success
             } else if percentage <= 20 {
-                status::warning()
+                theme.status.warning
             } else {
-                text::primary()
+                theme.text.primary
             };
 
             el.child(
@@ -78,7 +79,7 @@ pub fn render_power_section(services: &Services) -> impl IntoElement {
                     .child(
                         div()
                             .text_size(px(font_size::LG))
-                            .text_color(text::primary())
+                            .text_color(theme.text.primary)
                             .font_weight(gpui::FontWeight::BOLD)
                             .child(format!("{}%", percentage)),
                     )
@@ -86,7 +87,7 @@ pub fn render_power_section(services: &Services) -> impl IntoElement {
                     .child(
                         div()
                             .text_size(px(font_size::SM))
-                            .text_color(text::muted())
+                            .text_color(theme.text.muted)
                             .child(if is_charging {
                                 "Charging"
                             } else {
@@ -98,18 +99,22 @@ pub fn render_power_section(services: &Services) -> impl IntoElement {
                         el.child(
                             div()
                                 .text_size(px(font_size::XS))
-                                .text_color(text::muted())
+                                .text_color(theme.text.muted)
                                 .child(format!("· {}", time)),
                         )
                     }),
             )
         })
         // Power profiles
-        .child(render_power_profiles(&services_clone, upower.power_profile))
+        .child(render_power_profiles(&services_clone, upower.power_profile, cx))
 }
 
 /// Render power profile selector
-fn render_power_profiles(services: &Services, current_profile: PowerProfile) -> impl IntoElement {
+fn render_power_profiles(
+    services: &Services,
+    current_profile: PowerProfile,
+    cx: &App,
+) -> impl IntoElement {
     let services_saver = services.clone();
     let services_balanced = services.clone();
     let services_performance = services.clone();
@@ -124,6 +129,7 @@ fn render_power_profiles(services: &Services, current_profile: PowerProfile) -> 
             icons::POWER_SAVER,
             "Saver",
             current_profile == PowerProfile::PowerSaver,
+            cx,
             move |cx| {
                 let s = services_saver.clone();
                 cx.spawn(async move |_| {
@@ -140,6 +146,7 @@ fn render_power_profiles(services: &Services, current_profile: PowerProfile) -> 
             icons::POWER_BALANCED,
             "Balanced",
             current_profile == PowerProfile::Balanced,
+            cx,
             move |cx| {
                 let s = services_balanced.clone();
                 cx.spawn(async move |_| {
@@ -156,6 +163,7 @@ fn render_power_profiles(services: &Services, current_profile: PowerProfile) -> 
             icons::POWER_PERFORMANCE,
             "Perf",
             current_profile == PowerProfile::Performance,
+            cx,
             move |cx| {
                 let s = services_performance.clone();
                 cx.spawn(async move |_| {
@@ -175,8 +183,20 @@ fn render_profile_button(
     icon: &'static str,
     label: &'static str,
     active: bool,
+    cx: &App,
     on_click: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
+    let theme = cx.theme();
+
+    // Pre-compute colors for closures
+    let accent_primary = theme.accent.primary;
+    let interactive_default = theme.interactive.default;
+    let interactive_hover = theme.interactive.hover;
+    let text_primary = theme.text.primary;
+    let text_muted = theme.text.muted;
+
+    let label_color: Hsla = if active { text_primary } else { text_muted };
+
     div()
         .id(id)
         .flex_1()
@@ -187,26 +207,22 @@ fn render_profile_button(
         .py(px(spacing::SM))
         .rounded(px(radius::SM))
         .cursor_pointer()
-        .when(active, |el| el.bg(accent::primary()))
-        .when(!active, |el| el.bg(interactive::default()))
-        .hover(|s| s.bg(interactive::hover()))
+        .when(active, move |el| el.bg(accent_primary))
+        .when(!active, move |el| el.bg(interactive_default))
+        .hover(move |s| s.bg(interactive_hover))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
         .child(
             div()
                 .text_size(px(icon_size::SM))
-                .text_color(text::primary())
+                .text_color(text_primary)
                 .child(icon),
         )
         .child(
             div()
                 .text_size(px(font_size::XS))
-                .text_color(if active {
-                    text::primary()
-                } else {
-                    text::muted()
-                })
+                .text_color(label_color)
                 .child(label),
         )
 }

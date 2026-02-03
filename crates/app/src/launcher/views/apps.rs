@@ -27,7 +27,7 @@ impl LauncherView for AppsView {
         true
     }
 
-    fn render(&self, vx: &ViewContext, _cx: &App) -> (AnyElement, usize) {
+    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
         let query_lower = vx.query.to_lowercase();
         let apps = vx.services.applications.search(&query_lower);
         let count = apps.len();
@@ -48,6 +48,7 @@ impl LauncherView for AppsView {
                     move |_cx| {
                         launch_app(&exec);
                     },
+                    cx,
                 )
             }))
             .into_any_element();

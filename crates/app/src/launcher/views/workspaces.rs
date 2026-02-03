@@ -24,7 +24,7 @@ impl LauncherView for WorkspacesView {
         "Switch between workspaces"
     }
 
-    fn render(&self, vx: &ViewContext, _cx: &App) -> (AnyElement, usize) {
+    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
         let compositor = vx.services.compositor.get();
         let query_lower = vx.query.to_lowercase();
 
@@ -73,6 +73,7 @@ impl LauncherView for WorkspacesView {
                     move |_cx| {
                         let _ = compositor_clone.dispatch(CompositorCommand::FocusWorkspace(ws_id));
                     },
+                    cx,
                 )
             }))
             .into_any_element();

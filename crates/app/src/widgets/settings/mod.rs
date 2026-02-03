@@ -16,7 +16,7 @@ use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     Services, UPowerData,
 };
-use ui::{font_size, icon_size, interactive, radius, spacing, status, text};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::control_center::ControlCenter;
 use crate::panel::{PanelConfig, toggle_panel};
@@ -282,28 +282,12 @@ impl Settings {
             None => String::new(),
         }
     }
-
-    /// Get the battery icon color.
-    fn battery_color(&self) -> gpui::Hsla {
-        match &self.upower.battery {
-            Some(battery) => {
-                if battery.is_critical() {
-                    status::error()
-                } else if battery.is_low() {
-                    status::warning()
-                } else if battery.is_charging() {
-                    status::success()
-                } else {
-                    text::primary()
-                }
-            }
-            None => text::muted(),
-        }
-    }
 }
 
 impl Render for Settings {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
         let privacy_icons = self.privacy_icons();
         let volume_icon = self.volume_icon();
         let network_icon = self.network_icon();
@@ -311,7 +295,28 @@ impl Render for Settings {
         let power_profile_icon = self.power_profile_icon();
         let battery_icon = self.battery_icon();
         let battery_text = self.battery_text();
-        let battery_color = self.battery_color();
+
+        // Get the battery icon color
+        let battery_color = match &self.upower.battery {
+            Some(battery) => {
+                if battery.is_critical() {
+                    theme.status.error
+                } else if battery.is_low() {
+                    theme.status.warning
+                } else if battery.is_charging() {
+                    theme.status.success
+                } else {
+                    theme.text.primary
+                }
+            }
+            None => theme.text.muted,
+        };
+
+        // Pre-compute colors for closures
+        let interactive_hover = theme.interactive.hover;
+        let interactive_active = theme.interactive.active;
+        let status_error = theme.status.error;
+        let text_primary = theme.text.primary;
 
         div()
             .id("settings-widget")
@@ -322,8 +327,8 @@ impl Render for Settings {
             .py(px(spacing::XS))
             .rounded(px(radius::SM))
             .cursor_pointer()
-            .hover(|s| s.bg(interactive::hover()))
-            .active(|s| s.bg(interactive::active()))
+            .hover(move |s| s.bg(interactive_hover))
+            .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
@@ -331,24 +336,24 @@ impl Render for Settings {
                 }),
             )
             // Privacy icons (red, only shown when active)
-            .children(privacy_icons.into_iter().map(|icon| {
+            .children(privacy_icons.into_iter().map(move |icon| {
                 div()
                     .text_size(px(icon_size::MD))
-                    .text_color(status::error())
+                    .text_color(status_error)
                     .child(icon)
             }))
             // Volume icon
             .child(
                 div()
                     .text_size(px(icon_size::MD))
-                    .text_color(text::primary())
+                    .text_color(text_primary)
                     .child(volume_icon),
             )
             // Network icon
             .child(
                 div()
                     .text_size(px(icon_size::MD))
-                    .text_color(text::primary())
+                    .text_color(text_primary)
                     .child(network_icon),
             )
             // Bluetooth icon (only when connected)
@@ -356,7 +361,7 @@ impl Render for Settings {
                 el.child(
                     div()
                         .text_size(px(icon_size::MD))
-                        .text_color(text::primary())
+                        .text_color(text_primary)
                         .child(icon),
                 )
             })
@@ -364,7 +369,7 @@ impl Render for Settings {
             .child(
                 div()
                     .text_size(px(icon_size::MD))
-                    .text_color(text::primary())
+                    .text_color(text_primary)
                     .child(power_profile_icon),
             )
             // Battery icon and percentage

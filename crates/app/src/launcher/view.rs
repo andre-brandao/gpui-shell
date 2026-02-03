@@ -5,7 +5,7 @@
 
 use gpui::{AnyElement, App, FontWeight, MouseButton, div, prelude::*, px};
 use services::Services;
-use ui::{accent, font_size, interactive, radius, spacing, text};
+use ui::{ActiveTheme, font_size, radius, spacing};
 
 /// Height of each list item in pixels.
 pub const LIST_ITEM_HEIGHT: f32 = 48.0;
@@ -125,7 +125,17 @@ pub fn render_list_item(
     subtitle: Option<&str>,
     is_selected: bool,
     on_click: impl Fn(&mut App) + 'static,
+    cx: &App,
 ) -> AnyElement {
+    let theme = cx.theme();
+
+    // Pre-compute colors for closures
+    let accent_selection = theme.accent.selection;
+    let interactive_hover = theme.interactive.hover;
+    let interactive_default = theme.interactive.default;
+    let text_primary = theme.text.primary;
+    let text_disabled = theme.text.disabled;
+
     div()
         .id(id.into())
         .w_full()
@@ -136,8 +146,10 @@ pub fn render_list_item(
         .cursor_pointer()
         .flex()
         .items_center()
-        .when(is_selected, |el| el.bg(accent::selection()))
-        .when(!is_selected, |el| el.hover(|s| s.bg(interactive::hover())))
+        .when(is_selected, move |el| el.bg(accent_selection))
+        .when(!is_selected, move |el| {
+            el.hover(move |s| s.bg(interactive_hover))
+        })
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
@@ -151,7 +163,7 @@ pub fn render_list_item(
                         .w(px(28.))
                         .h(px(28.))
                         .rounded(px(radius::SM))
-                        .bg(interactive::default())
+                        .bg(interactive_default)
                         .flex()
                         .items_center()
                         .justify_center()
@@ -166,7 +178,7 @@ pub fn render_list_item(
                         .child(
                             div()
                                 .text_size(px(font_size::BASE))
-                                .text_color(text::primary())
+                                .text_color(text_primary)
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(title.to_string()),
                         )
@@ -174,7 +186,7 @@ pub fn render_list_item(
                             el.child(
                                 div()
                                     .text_size(px(font_size::SM))
-                                    .text_color(text::disabled())
+                                    .text_color(text_disabled)
                                     .child(sub.to_string()),
                             )
                         }),
