@@ -4,6 +4,7 @@
 //! display backlight brightness. Uses udev for device discovery and change
 //! monitoring, and D-Bus (systemd-logind) for unprivileged brightness control.
 
+use std::os::unix::io::AsFd;
 use std::path::{Path, PathBuf};
 use std::thread;
 
@@ -226,15 +227,27 @@ fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
         };
 
         let mut current_value = data.lock_ref().current;
+        let mut fds = [nix::poll::PollFd::new(
+            socket.as_fd(),
+            nix::poll::PollFlags::POLLIN,
+        )];
 
-        // Blocking wait for events
-        for event in socket.iter() {
-            if event.event_type() == udev::EventType::Change {
-                if let Ok(new_data) = read_brightness(&device_path) {
-                    if new_data.current != current_value {
-                        current_value = new_data.current;
-                        data.lock_mut().current = new_data.current;
-                        debug!("Brightness changed: {}", new_data.current);
+        loop {
+            // Block until the socket is readable (i.e. an event is pending)
+            if nix::poll::poll(&mut fds, nix::poll::PollTimeout::NONE).is_err() {
+                error!("poll() failed on udev monitor socket");
+                break;
+            }
+
+            // Drain all pending events
+            for event in socket.iter() {
+                if event.event_type() == udev::EventType::Change {
+                    if let Ok(new_data) = read_brightness(&device_path) {
+                        if new_data.current != current_value {
+                            current_value = new_data.current;
+                            data.lock_mut().current = new_data.current;
+                            debug!("Brightness changed: {}", new_data.current);
+                        }
                     }
                 }
             }

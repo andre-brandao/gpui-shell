@@ -16,6 +16,7 @@ mod args;
 mod bar;
 pub mod control_center;
 pub mod launcher;
+pub mod osd;
 mod panel;
 pub mod widgets;
 
@@ -69,6 +70,9 @@ async fn main() {
 
         // Open the status bar
         bar::open(services.clone(), cx);
+
+        // Start the OSD listener for volume/brightness changes
+        osd::start(services.clone(), cx);
 
         // Listen for launcher requests from other instances
         let services_for_shell = services.clone();
