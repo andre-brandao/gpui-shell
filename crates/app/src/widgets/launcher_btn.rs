@@ -19,8 +19,6 @@ impl LauncherBtn {
 
 impl Render for LauncherBtn {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let services = self.services.clone();
-
         div()
             .id("launcher-btn")
             .flex()
@@ -48,15 +46,14 @@ impl Render for LauncherBtn {
                         div()
                             .text_size(px(icon_size::MD))
                             .text_color(text::primary())
-                            .child(""), // nf-oct-apps
-                    )
-                    // Optional label
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text::secondary())
-                            .child("Apps"),
-                    ),
+                            .child(""), // nf-oct-apps
+                    ), // Optional label
+                       // .child(
+                       //     div()
+                       //         .text_size(px(font_size::SM))
+                       //         .text_color(text::secondary())
+                       //         .child("Apps"),
+                       // ),
             )
     }
 }

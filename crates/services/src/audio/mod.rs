@@ -1,10 +1,12 @@
-//! Audio service for volume control via WirePlumber/PipeWire.
+//! Audio service for volume control via PulseAudio/PipeWire.
 //!
 //! This module provides a reactive subscriber for monitoring and controlling
-//! audio sink (output) and source (input) volumes using wpctl for commands
-//! and PulseAudio's subscribe API (via PipeWire-pulse) for event-driven updates.
+//! audio sink (output) and source (input) volumes using libpulse for monitoring
+//! and wpctl for commands.
 
+use std::cell::{Cell, RefCell};
 use std::process::Command;
+use std::rc::Rc;
 use std::thread;
 
 use futures_signals::signal::{Mutable, MutableSignalCloned};
@@ -12,8 +14,9 @@ use libpulse_binding::{
     context::{self, Context, FlagSet, subscribe::InterestMaskSet},
     mainloop::standard::{IterateResult, Mainloop},
     proplist::{Proplist, properties::APPLICATION_NAME},
+    volume::Volume,
 };
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 /// Audio device data.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -77,11 +80,8 @@ pub struct AudioSubscriber {
 impl AudioSubscriber {
     /// Create a new audio subscriber and start monitoring.
     pub fn new() -> Self {
-        let initial_data = fetch_audio_data();
-        let data = Mutable::new(initial_data);
-
+        let data = Mutable::new(AudioData::default());
         start_listener(data.clone());
-
         Self { data }
     }
 
@@ -110,8 +110,6 @@ impl AudioSubscriber {
 
                 if let Err(e) = result {
                     error!("Failed to set sink volume: {}", e);
-                } else {
-                    self.data.lock_mut().sink_volume = volume.min(100);
                 }
             }
             AudioCommand::SetSourceVolume(volume) => {
@@ -126,8 +124,6 @@ impl AudioSubscriber {
 
                 if let Err(e) = result {
                     error!("Failed to set source volume: {}", e);
-                } else {
-                    self.data.lock_mut().source_volume = volume.min(100);
                 }
             }
             AudioCommand::ToggleSinkMute => {
@@ -137,9 +133,6 @@ impl AudioSubscriber {
 
                 if let Err(e) = result {
                     error!("Failed to toggle sink mute: {}", e);
-                } else {
-                    let mut data = self.data.lock_mut();
-                    data.sink_muted = !data.sink_muted;
                 }
             }
             AudioCommand::ToggleSourceMute => {
@@ -149,9 +142,6 @@ impl AudioSubscriber {
 
                 if let Err(e) = result {
                     error!("Failed to toggle source mute: {}", e);
-                } else {
-                    let mut data = self.data.lock_mut();
-                    data.source_muted = !data.source_muted;
                 }
             }
             AudioCommand::AdjustSinkVolume(delta) => {
@@ -161,7 +151,7 @@ impl AudioSubscriber {
                     .args([
                         "set-volume",
                         "-l",
-                        "1.0", // Limit to 100%
+                        "1.0",
                         "@DEFAULT_AUDIO_SINK@",
                         &format!("{:.2}{}", delta_float, sign),
                     ])
@@ -169,9 +159,6 @@ impl AudioSubscriber {
 
                 if let Err(e) = result {
                     error!("Failed to adjust sink volume: {}", e);
-                } else {
-                    let mut data = self.data.lock_mut();
-                    data.sink_volume = (data.sink_volume as i16 + delta as i16).clamp(0, 100) as u8;
                 }
             }
             AudioCommand::AdjustSourceVolume(delta) => {
@@ -181,7 +168,7 @@ impl AudioSubscriber {
                     .args([
                         "set-volume",
                         "-l",
-                        "1.0", // Limit to 100%
+                        "1.0",
                         "@DEFAULT_AUDIO_SOURCE@",
                         &format!("{:.2}{}", delta_float, sign),
                     ])
@@ -189,10 +176,6 @@ impl AudioSubscriber {
 
                 if let Err(e) = result {
                     error!("Failed to adjust source volume: {}", e);
-                } else {
-                    let mut data = self.data.lock_mut();
-                    data.source_volume =
-                        (data.source_volume as i16 + delta as i16).clamp(0, 100) as u8;
                 }
             }
         }
@@ -205,38 +188,26 @@ impl Default for AudioSubscriber {
     }
 }
 
+/// Convert PulseAudio volume to percentage (0-100).
+fn volume_to_percent(volume: Volume) -> u8 {
+    let ratio = volume.0 as f64 / Volume::NORMAL.0 as f64;
+    (ratio * 100.0).round().clamp(0.0, 100.0) as u8
+}
+
 /// Start the PulseAudio event listener thread.
-///
-/// Uses PulseAudio's subscribe API (via PipeWire-pulse) to get instant
-/// notifications on sink/source volume and mute changes, then re-fetches
-/// the actual values via wpctl.
 fn start_listener(data: Mutable<AudioData>) {
     thread::spawn(move || {
-        let mut proplist = match Proplist::new() {
-            Some(p) => p,
-            None => {
-                panic!("Failed to create PulseAudio proplist");
-            }
-        };
+        let mut proplist = Proplist::new().expect("Failed to create PulseAudio proplist");
         let _ = proplist.set_str(APPLICATION_NAME, "gpuishell");
 
-        let mut mainloop = match Mainloop::new() {
-            Some(m) => m,
-            None => {
-                panic!("Failed to create PulseAudio mainloop");
-            }
-        };
+        let mut mainloop = Mainloop::new().expect("Failed to create PulseAudio mainloop");
 
-        let mut context = match Context::new_with_proplist(&mainloop, "gpuishell", &proplist) {
-            Some(c) => c,
-            None => {
-                panic!("Failed to create PulseAudio context");
-            }
-        };
+        let mut context = Context::new_with_proplist(&mainloop, "gpuishell", &proplist)
+            .expect("Failed to create PulseAudio context");
 
-        if context.connect(None, FlagSet::NOFLAGS, None).is_err() {
-            panic!("Failed to connect to PulseAudio");
-        }
+        context
+            .connect(None, FlagSet::NOFLAGS, None)
+            .expect("Failed to connect to PulseAudio");
 
         // Wait for context to be ready
         loop {
@@ -244,19 +215,105 @@ fn start_listener(data: Mutable<AudioData>) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
                     panic!("PulseAudio mainloop error during connect");
                 }
-                IterateResult::Success(_) => {
-                    match context.get_state() {
-                        context::State::Ready => break,
-                        context::State::Failed | context::State::Terminated => {
-                            panic!("PulseAudio context failed or terminated");
-                        }
-                        _ => {} // Still connecting
+                IterateResult::Success(_) => match context.get_state() {
+                    context::State::Ready => break,
+                    context::State::Failed | context::State::Terminated => {
+                        panic!("PulseAudio context failed or terminated");
                     }
-                }
+                    _ => {}
+                },
             }
         }
 
         debug!("PulseAudio connection established");
+
+        // Shared state for tracking pending queries and results
+        let pending_queries = Rc::new(Cell::new(0u32));
+        let local_data: Rc<RefCell<AudioData>> = Rc::new(RefCell::new(AudioData::default()));
+
+        // Query functions that track pending state
+        let query_sink = {
+            let introspector = context.introspect();
+            let local_data = local_data.clone();
+            let pending = pending_queries.clone();
+            move || {
+                pending.set(pending.get() + 1);
+                let local_data = local_data.clone();
+                let pending = pending.clone();
+                introspector.get_sink_info_by_name("@DEFAULT_SINK@", move |result| match result {
+                    libpulse_binding::callbacks::ListResult::Item(sink) => {
+                        let volume = volume_to_percent(sink.volume.avg());
+                        let muted = sink.mute;
+                        let mut data = local_data.borrow_mut();
+                        data.sink_volume = volume;
+                        data.sink_muted = muted;
+                    }
+                    libpulse_binding::callbacks::ListResult::End
+                    | libpulse_binding::callbacks::ListResult::Error => {
+                        pending.set(pending.get().saturating_sub(1));
+                    }
+                });
+            }
+        };
+
+        let query_source = {
+            let introspector = context.introspect();
+            let local_data = local_data.clone();
+            let pending = pending_queries.clone();
+            move || {
+                pending.set(pending.get() + 1);
+                let local_data = local_data.clone();
+                let pending = pending.clone();
+                introspector.get_source_info_by_name("@DEFAULT_SOURCE@", move |result| {
+                    match result {
+                        libpulse_binding::callbacks::ListResult::Item(source) => {
+                            // Skip monitor sources (they mirror sinks)
+                            if source.monitor_of_sink.is_none() {
+                                let volume = volume_to_percent(source.volume.avg());
+                                let muted = source.mute;
+                                let mut data = local_data.borrow_mut();
+                                data.source_volume = volume;
+                                data.source_muted = muted;
+                            }
+                        }
+                        libpulse_binding::callbacks::ListResult::End
+                        | libpulse_binding::callbacks::ListResult::Error => {
+                            pending.set(pending.get().saturating_sub(1));
+                        }
+                    }
+                });
+            }
+        };
+
+        // Fetch initial audio data
+        query_sink();
+        query_source();
+
+        // Process initial queries with non-blocking iterations
+        while pending_queries.get() > 0 {
+            match mainloop.iterate(false) {
+                IterateResult::Quit(_) | IterateResult::Err(_) => {
+                    panic!("PulseAudio mainloop error during initial query");
+                }
+                IterateResult::Success(_) => {}
+            }
+        }
+
+        // Update shared state with initial data
+        {
+            let current = local_data.borrow().clone();
+            debug!(
+                "Initial audio state: sink={}% (muted={}), source={}% (muted={})",
+                current.sink_volume,
+                current.sink_muted,
+                current.source_volume,
+                current.source_muted
+            );
+            *data.lock_mut() = current;
+        }
+
+        // Flag to indicate we need to re-query
+        let needs_refresh = Rc::new(Cell::new(false));
 
         // Subscribe to sink and source changes
         context.subscribe(
@@ -265,80 +322,53 @@ fn start_listener(data: Mutable<AudioData>) {
                 .union(InterestMaskSet::SERVER),
             |success| {
                 if !success {
-                    panic!("PulseAudio subscription failed");
+                    error!("PulseAudio subscription failed");
                 }
             },
         );
 
-        // Set callback: on any change, re-fetch audio data via wpctl
-        context.set_subscribe_callback(Some(Box::new({
-            let data = data.clone();
-            move |_facility, _operation, _idx| {
-                let new_data = fetch_audio_data();
-                let current = data.lock_ref().clone();
-                if new_data != current {
-                    debug!(
-                        "Audio state changed: sink={}% (muted={}), source={}% (muted={})",
-                        new_data.sink_volume,
-                        new_data.sink_muted,
-                        new_data.source_volume,
-                        new_data.source_muted
-                    );
-                    *data.lock_mut() = new_data;
-                }
-            }
+        // Set callback for subscription events - just mark that we need to refresh
+        let needs_refresh_cb = needs_refresh.clone();
+        context.set_subscribe_callback(Some(Box::new(move |_facility, _operation, _idx| {
+            needs_refresh_cb.set(true);
         })));
 
-        // Run the mainloop — blocks and dispatches callbacks
+        // Main event loop
         loop {
-            match mainloop.iterate(true) {
+            // Use non-blocking iteration when queries are pending,
+            // otherwise block waiting for events
+            let has_pending = pending_queries.get() > 0 || needs_refresh.get();
+            match mainloop.iterate(!has_pending) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
-                    panic!("PulseAudio mainloop error after connection");
+                    panic!("PulseAudio mainloop error");
                 }
-                IterateResult::Success(_) => {}
+                IterateResult::Success(_) => {
+                    // Check if we need to refresh due to a subscription event
+                    if needs_refresh.get() {
+                        needs_refresh.set(false);
+
+                        // Fire off queries
+                        query_sink();
+                        query_source();
+                    }
+
+                    // If all pending queries completed, check for changes
+                    if pending_queries.get() == 0 {
+                        let local = local_data.borrow().clone();
+                        let current = data.lock_ref().clone();
+                        if local != current {
+                            debug!(
+                                "Audio state changed: sink={}% (muted={}), source={}% (muted={})",
+                                local.sink_volume,
+                                local.sink_muted,
+                                local.source_volume,
+                                local.source_muted
+                            );
+                            *data.lock_mut() = local;
+                        }
+                    }
+                }
             }
         }
     });
-}
-
-/// Fetch current audio data from wpctl.
-fn fetch_audio_data() -> AudioData {
-    let (sink_volume, sink_muted) = get_volume("@DEFAULT_AUDIO_SINK@");
-    let (source_volume, source_muted) = get_volume("@DEFAULT_AUDIO_SOURCE@");
-
-    AudioData {
-        sink_volume,
-        sink_muted,
-        source_volume,
-        source_muted,
-    }
-}
-
-/// Get volume and mute state for a device.
-fn get_volume(device: &str) -> (u8, bool) {
-    let output = Command::new("wpctl")
-        .args(["get-volume", device])
-        .output()
-        .ok();
-
-    if let Some(output) = output {
-        if !output.status.success() {
-            warn!("wpctl get-volume failed for {}", device);
-            return (0, false);
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        // Format: "Volume: 0.50" or "Volume: 0.50 [MUTED]"
-        let muted = stdout.contains("[MUTED]");
-        let volume = stdout
-            .split_whitespace()
-            .nth(1)
-            .and_then(|v| v.parse::<f32>().ok())
-            .map(|v| (v * 100.0).round() as u8)
-            .unwrap_or(0);
-
-        return (volume, muted);
-    }
-
-    (0, false)
 }
