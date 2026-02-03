@@ -72,7 +72,7 @@ async fn main() {
         bar::open(services.clone(), cx);
 
         // Start the OSD listener for volume/brightness changes
-        osd::start(services.clone(), cx);
+        osd::start(services.clone(), osd::OsdPosition::Right, cx);
 
         // Listen for launcher requests from other instances
         let services_for_shell = services.clone();
