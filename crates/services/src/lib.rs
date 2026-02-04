@@ -12,6 +12,7 @@ pub mod network;
 pub mod privacy;
 pub mod shell;
 pub mod sysinfo;
+pub mod themes;
 pub mod tray;
 pub mod upower;
 
@@ -32,6 +33,7 @@ pub use network::{
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
 pub use shell::{InstanceResult, LauncherRequest, ShellSubscriber};
 pub use sysinfo::{DiskInfo, NetworkInfo, SysInfoData, SysInfoSubscriber};
+pub use themes::{Base16Palette, Base16Scheme, ThemeRepository, load_stylix_scheme};
 pub use tray::{
     MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,
 };

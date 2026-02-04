@@ -14,6 +14,8 @@ pub use theme::{
     ActiveTheme, Colorize, Theme,
     // Color group types (for constructing themes)
     AccentColors, BgColors, BorderColors, InteractiveColors, StatusColors, TextColors,
+    // Base16 conversion
+    Base16Colors,
     // Theme schemes
     ThemeScheme, builtin_schemes,
     // Design constants (non-color)
