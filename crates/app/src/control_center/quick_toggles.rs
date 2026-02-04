@@ -173,6 +173,7 @@ fn render_expandable_toggle(
     let accent_selection = theme.accent.selection;
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
+    let bg_primary = theme.bg.primary;
     let text_primary = theme.text.primary;
     let text_muted = theme.text.muted;
 
@@ -202,7 +203,7 @@ fn render_expandable_toggle(
                 .child(
                     div()
                         .text_size(px(icon_size::MD))
-                        .text_color(text_primary)
+                        .text_color(if active { bg_primary } else { text_primary })
                         .child(icon),
                 ),
         )
@@ -225,7 +226,7 @@ fn render_expandable_toggle(
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
-                        .text_color(text_muted)
+                        .text_color(if expanded { bg_primary } else { text_muted })
                         .child(if expanded {
                             icons::CHEVRON_UP
                         } else {
@@ -249,6 +250,7 @@ fn render_simple_toggle(
     let accent_primary = theme.accent.primary;
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
+    let bg_primary = theme.bg.primary;
     let text_primary = theme.text.primary;
 
     div()
@@ -269,7 +271,7 @@ fn render_simple_toggle(
         .child(
             div()
                 .text_size(px(icon_size::MD))
-                .text_color(text_primary)
+                .text_color(if active { bg_primary } else { text_primary })
                 .child(icon),
         )
 }

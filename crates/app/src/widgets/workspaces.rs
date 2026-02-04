@@ -68,6 +68,7 @@ impl Render for Workspaces {
         let accent_hover = theme.accent.hover;
         let interactive_default = theme.interactive.default;
         let interactive_hover = theme.interactive.hover;
+        let bg_primary = theme.bg.primary;
         let text_primary = theme.text.primary;
         let text_secondary = theme.text.secondary;
         let text_muted = theme.text.muted;
@@ -132,7 +133,7 @@ impl Render for Workspaces {
                             .child(
                                 div()
                                     .text_color(if is_active {
-                                        text_primary
+                                        bg_primary
                                     } else if has_windows {
                                         text_secondary
                                     } else {

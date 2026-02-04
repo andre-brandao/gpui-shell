@@ -231,7 +231,9 @@ fn render_network_item(
         .rounded(px(radius::SM))
         .cursor_pointer()
         .when(connected, move |el| el.bg(accent_selection))
-        .when(!connected, move |el| el.hover(move |s| s.bg(interactive_hover)))
+        .when(!connected, move |el| {
+            el.hover(move |s| s.bg(interactive_hover))
+        })
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
@@ -260,11 +262,7 @@ fn render_network_item(
             el.child(
                 div()
                     .text_size(px(icon_size::SM))
-                    .text_color(if known {
-                        status_success
-                    } else {
-                        text_muted
-                    })
+                    .text_color(if known { status_success } else { text_muted })
                     .child(icons::LOCK),
             )
         })
@@ -406,7 +404,7 @@ fn render_password_input(
                         .child(
                             div()
                                 .text_size(px(font_size::SM))
-                                .text_color(text_primary)
+                                .text_color(bg_primary)
                                 .child(if connecting {
                                     "Connecting..."
                                 } else {

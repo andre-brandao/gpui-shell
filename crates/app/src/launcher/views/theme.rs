@@ -252,6 +252,7 @@ fn render_stylix_card(
 ) -> AnyElement {
     let accent_selection = theme.accent.selection;
     let interactive_hover = theme.interactive.hover;
+    let bg_primary = theme.bg.primary;
     let text_primary = theme.text.primary;
     let text_disabled = theme.text.disabled;
     let border_default = theme.border.default;
@@ -323,7 +324,7 @@ fn render_stylix_card(
                             .rounded(px(radius::SM))
                             .bg(accent_primary)
                             .text_size(px(font_size::XS))
-                            .text_color(text_primary)
+                            .text_color(bg_primary)
                             .font_weight(FontWeight::BOLD)
                             .child("Active"),
                     )
@@ -341,6 +342,7 @@ fn render_theme_card(
 ) -> AnyElement {
     let accent_selection = theme.accent.selection;
     let interactive_hover = theme.interactive.hover;
+    let bg_primary = theme.bg.primary;
     let text_primary = theme.text.primary;
     let text_disabled = theme.text.disabled;
     let border_default = theme.border.default;
@@ -400,7 +402,7 @@ fn render_theme_card(
                             .rounded(px(radius::SM))
                             .bg(accent_primary)
                             .text_size(px(font_size::XS))
-                            .text_color(text_primary)
+                            .text_color(bg_primary)
                             .font_weight(FontWeight::BOLD)
                             .child("Active"),
                     )

@@ -106,7 +106,11 @@ pub fn render_power_section(services: &Services, cx: &App) -> impl IntoElement {
             )
         })
         // Power profiles
-        .child(render_power_profiles(&services_clone, upower.power_profile, cx))
+        .child(render_power_profiles(
+            &services_clone,
+            upower.power_profile,
+            cx,
+        ))
 }
 
 /// Render power profile selector
@@ -192,10 +196,12 @@ fn render_profile_button(
     let accent_primary = theme.accent.primary;
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
+    let bg_primary = theme.bg.primary;
     let text_primary = theme.text.primary;
     let text_muted = theme.text.muted;
 
-    let label_color: Hsla = if active { text_primary } else { text_muted };
+    let fg_color: Hsla = if active { bg_primary } else { text_primary };
+    let label_color: Hsla = if active { bg_primary } else { text_muted };
 
     div()
         .id(id)
@@ -216,7 +222,7 @@ fn render_profile_button(
         .child(
             div()
                 .text_size(px(icon_size::SM))
-                .text_color(text_primary)
+                .text_color(fg_color)
                 .child(icon),
         )
         .child(
