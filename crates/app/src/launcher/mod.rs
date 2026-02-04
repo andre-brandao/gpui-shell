@@ -544,6 +544,26 @@ pub fn toggle(services: Services, cx: &mut App) {
     toggle_with_input(services, None, cx);
 }
 
+pub fn toggle_from_ipc(services: Services, input: Option<String>, cx: &mut App) {
+    let start = std::time::Instant::now();
+    tracing::debug!("toggle_from_ipc: start");
+
+    let mut guard = LAUNCHER_WINDOW.lock().unwrap();
+    tracing::debug!("toggle_from_ipc: acquired lock {:?}", start.elapsed());
+
+    if let Some(handle) = guard.take() {
+        let _ = handle.update(cx, |_, window, _| {
+            window.remove_window();
+        });
+        tracing::debug!("toggle_from_ipc: closed window {:?}", start.elapsed());
+    } else {
+        tracing::debug!("toggle_from_ipc: opening new window {:?}", start.elapsed());
+        drop(guard);
+        toggle_with_input(services, input, cx);
+    }
+    tracing::debug!("toggle_from_ipc: done {:?}", start.elapsed());
+}
+
 /// Toggle the launcher window with optional prefilled input.
 pub fn toggle_with_input(services: Services, input: Option<String>, cx: &mut App) {
     let start = std::time::Instant::now();

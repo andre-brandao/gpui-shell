@@ -63,7 +63,9 @@ async fn main() {
     let shell_receiver = shell.start_listener();
 
     // Create and run the GPUI application
-    Application::new().with_assets(Assets {}).run(move |cx| {
+    let app = Application::new().with_assets(Assets {});
+
+    app.run(move |cx| {
         // Initialize the global theme
         ui::Theme::init(cx);
 
@@ -94,8 +96,8 @@ async fn main() {
                 let input = request.input;
 
                 let _ = cx.update(move |cx| {
-                    tracing::info!("Opening launcher with input: {:?}", input);
-                    launcher::open_with_input(services, input, cx);
+                    tracing::info!("Toggling launcher from IPC: {:?}", input);
+                    launcher::toggle_from_ipc(services, input, cx);
                 });
             }
 
