@@ -22,8 +22,10 @@
 use gpui::{App, Global, Hsla, Pixels, px, rgba};
 
 mod colorize;
+mod schemes;
 
 pub use colorize::Colorize;
+pub use schemes::{ThemeScheme, builtin_schemes};
 
 // =============================================================================
 // Theme Struct and Trait

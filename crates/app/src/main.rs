@@ -64,6 +64,9 @@ async fn main() {
 
     // Create and run the GPUI application
     Application::new().with_assets(Assets {}).run(move |cx| {
+        // Initialize the global theme
+        ui::Theme::init(cx);
+
         // Register keybindings
         launcher::register_keybindings(cx);
         control_center::ControlCenter::register_keybindings(cx);
