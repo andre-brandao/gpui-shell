@@ -54,11 +54,15 @@ packages.
 
 ### Usage
 
+#### Hyprland
+
 ```hyprconf
 exec-once gpuishell
 
 bindr = SUPER, SUPER_L, exec, gpuishell
 ```
+
+#### bash
 
 ```bash
 # Calling again will open the launcher
