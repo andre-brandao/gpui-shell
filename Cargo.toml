@@ -4,9 +4,12 @@ resolver = "2"
 
 [workspace.dependencies]
 gpui = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay", features = ["wayland"] }
-ui = { path = "crates/ui" }
-assets = { path = "crates/assets" }
-services = { path = "crates/services" }
+ui = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+theme = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+settings = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+assets = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+services = { path = "crates/services"}
+
 
 anyhow = "1.0.100"
 tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros", "time"] }
