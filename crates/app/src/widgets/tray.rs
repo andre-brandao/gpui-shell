@@ -3,9 +3,14 @@
 use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
-use gpui::{App, Context, MouseButton, Render, Window, div, layer_shell::Anchor, prelude::*, px};
-use services::{MenuLayout, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use gpui::{
+    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, layer_shell::Anchor,
+    prelude::*, px,
+};
+use services::{
+    MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,
+};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 /// System tray widget that displays tray icons.
 pub struct Tray {
@@ -48,9 +53,10 @@ impl Tray {
         let subscriber = self.subscriber.clone();
         let item_name = item.name.clone();
 
-        // Calculate menu height based on visible items
-        let visible_items = count_visible_menu_items(&menu.2);
-        let menu_height = (visible_items * 32).min(500) as f32 + 16.0;
+        // Calculate menu height based on top-level visible items only (submenus start collapsed)
+        let visible_items = count_top_level_menu_items(&menu.2);
+        // Each item is ~26px (py: 6px * 2 + font ~14px), separators ~9px, plus panel padding 8px
+        let menu_height = (visible_items * 26).min(400) as f32 + 8.0;
 
         let config = PanelConfig {
             width: 250.0,
@@ -60,10 +66,8 @@ impl Tray {
             namespace: "systray-menu".to_string(),
         };
 
-        toggle_panel(&panel_id, config, cx, move |_cx| TrayMenuPanel {
-            menu,
-            item_name,
-            subscriber,
+        toggle_panel(&panel_id, config, cx, move |_cx| {
+            TrayMenuPanel::new(menu, item_name, subscriber)
         });
     }
 }
@@ -77,14 +81,16 @@ impl Render for Tray {
         let interactive_hover = theme.interactive.hover;
         let interactive_active = theme.interactive.active;
         let text_primary = theme.text.primary;
+        let text_muted = theme.text.muted;
 
         div()
             .id("systray")
             .flex()
             .items_center()
-            .gap(px(spacing::XS))
+            .gap(px(2.))
             .children(items.into_iter().map(|item| {
                 let item_clone = item.clone();
+                let has_menu = item.menu.is_some();
 
                 // Get the best icon representation - prefer icon name for nerd font rendering
                 let icon_char = match &item.icon {
@@ -94,8 +100,14 @@ impl Render for Tray {
                 };
 
                 div()
-                    .id(format!("tray-item-{}", item.name))
-                    .p(px(spacing::XS))
+                    .id(ElementId::Name(SharedString::from(format!(
+                        "tray-item-{}",
+                        item.name
+                    ))))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(28.))
                     .rounded(px(radius::SM))
                     .cursor_pointer()
                     .hover(move |s| s.bg(interactive_hover))
@@ -108,21 +120,21 @@ impl Render for Tray {
                     )
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
-                            .text_color(text_primary)
+                            .text_size(px(icon_size::LG))
+                            .text_color(if has_menu { text_primary } else { text_muted })
                             .child(icon_char),
                     )
             }))
     }
 }
 
-/// Count visible menu items for height calculation.
-fn count_visible_menu_items(items: &[MenuLayout]) -> usize {
+/// Count top-level visible menu items for height calculation.
+/// Does not recurse into submenus since they start collapsed.
+fn count_top_level_menu_items(items: &[MenuLayout]) -> usize {
     items
         .iter()
         .filter(|MenuLayout(_, props, _)| props.visible != Some(false))
-        .map(|MenuLayout(_, _, children)| 1 + count_visible_menu_items(children))
-        .sum()
+        .count()
 }
 
 // ============================================================================
@@ -134,9 +146,20 @@ struct TrayMenuPanel {
     menu: MenuLayout,
     item_name: String,
     subscriber: TraySubscriber,
+    /// Track which submenus are expanded (by menu ID)
+    expanded_submenus: Vec<i32>,
 }
 
 impl TrayMenuPanel {
+    fn new(menu: MenuLayout, item_name: String, subscriber: TraySubscriber) -> Self {
+        Self {
+            menu,
+            item_name,
+            subscriber,
+            expanded_submenus: Vec::new(),
+        }
+    }
+
     /// Handle clicking on a menu item.
     fn activate_menu_item(&self, menu_id: i32, window: &mut Window) {
         let subscriber = self.subscriber.clone();
@@ -162,7 +185,22 @@ impl TrayMenuPanel {
         window.remove_window();
     }
 
-    /// Render menu items recursively.
+    /// Toggle submenu expansion state
+    fn toggle_submenu(&mut self, menu_id: i32, cx: &mut Context<Self>) {
+        if let Some(pos) = self.expanded_submenus.iter().position(|&id| id == menu_id) {
+            self.expanded_submenus.remove(pos);
+        } else {
+            self.expanded_submenus.push(menu_id);
+        }
+        cx.notify();
+    }
+
+    /// Check if a submenu is expanded
+    fn is_submenu_expanded(&self, menu_id: i32) -> bool {
+        self.expanded_submenus.contains(&menu_id)
+    }
+
+    /// Render menu items recursively with collapsible submenus.
     fn render_menu_items(
         &self,
         items: &[MenuLayout],
@@ -173,8 +211,12 @@ impl TrayMenuPanel {
         let mut elements = Vec::new();
 
         // Pre-compute colors for closures
-        let border_default = theme.border.default;
+        let border_subtle = theme.border.subtle;
         let interactive_hover = theme.interactive.hover;
+        let text_primary = theme.text.primary;
+        let text_muted = theme.text.muted;
+        let text_disabled = theme.text.disabled;
+        let accent_primary = theme.accent.primary;
 
         for layout in items {
             let MenuLayout(id, props, children) = layout;
@@ -191,87 +233,40 @@ impl TrayMenuPanel {
                 .unwrap_or_default();
 
             // Handle separator
-            if label.is_empty() && children.is_empty() {
-                elements.push(
-                    div()
-                        .h(px(1.))
-                        .w_full()
-                        .bg(border_default)
-                        .my(px(spacing::XS))
-                        .into_any_element(),
-                );
+            if props.type_.as_deref() == Some("separator")
+                || (label.is_empty() && children.is_empty())
+            {
+                elements.push(render_menu_separator(border_subtle).into_any_element());
                 continue;
             }
 
             let menu_id = *id;
             let is_enabled = props.enabled.unwrap_or(true);
             let has_submenu = !children.is_empty();
-            let indent = depth * 16;
-
-            // Checkbox/radio state
-            let toggle_indicator = props.toggle_type.as_ref().map(|toggle_type| {
-                let is_checked = props.toggle_state == Some(1);
-                match toggle_type.as_str() {
-                    "checkmark" => {
-                        if is_checked {
-                            "󰄬 "
-                        } else {
-                            "  "
-                        }
-                    }
-                    "radio" => {
-                        if is_checked {
-                            "󰄴 "
-                        } else {
-                            "󰄱 "
-                        }
-                    }
-                    _ => "",
-                }
-            });
+            let is_expanded = has_submenu && self.is_submenu_expanded(menu_id);
+            let indent = depth as f32 * spacing::MD;
 
             elements.push(
-                div()
-                    .id(format!("menu-item-{}", menu_id))
-                    .w_full()
-                    .pl(px(spacing::MD + indent as f32))
-                    .pr(px(spacing::MD))
-                    .py(px(spacing::SM - 2.0))
-                    .cursor_pointer()
-                    .when(!is_enabled, |s| s.opacity(0.5))
-                    .hover(move |s| {
-                        if is_enabled {
-                            s.bg(interactive_hover)
-                        } else {
-                            s
-                        }
-                    })
-                    .when(is_enabled && !has_submenu, |el| {
-                        el.on_click(cx.listener(move |this, _, window, _cx| {
-                            this.activate_menu_item(menu_id, window);
-                        }))
-                    })
-                    .child(
-                        div()
-                            .flex()
-                            .w_full()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .when_some(toggle_indicator, |this, indicator| {
-                                        this.child(indicator)
-                                    })
-                                    .child(label),
-                            )
-                            .when(has_submenu, |el| el.child("▸")),
-                    )
-                    .into_any_element(),
+                render_menu_item(
+                    menu_id,
+                    &label,
+                    props,
+                    is_enabled,
+                    has_submenu,
+                    is_expanded,
+                    indent,
+                    interactive_hover,
+                    text_primary,
+                    text_muted,
+                    text_disabled,
+                    accent_primary,
+                    cx,
+                )
+                .into_any_element(),
             );
 
-            // Render submenu items inline (expanded)
-            if has_submenu {
+            // Render submenu items if expanded
+            if is_expanded {
                 let submenu_elements = self.render_menu_items(children, depth + 1, cx);
                 elements.extend(submenu_elements);
             }
@@ -279,6 +274,122 @@ impl TrayMenuPanel {
 
         elements
     }
+}
+
+/// Render a separator line
+fn render_menu_separator(border_color: gpui::Hsla) -> impl IntoElement {
+    div()
+        .w_full()
+        .px(px(spacing::SM))
+        .py(px(spacing::XS))
+        .child(div().h(px(1.)).w_full().bg(border_color))
+}
+
+/// Render a single menu item
+fn render_menu_item(
+    menu_id: i32,
+    label: &str,
+    props: &MenuLayoutProps,
+    is_enabled: bool,
+    has_submenu: bool,
+    is_expanded: bool,
+    indent: f32,
+    interactive_hover: gpui::Hsla,
+    text_primary: gpui::Hsla,
+    text_muted: gpui::Hsla,
+    text_disabled: gpui::Hsla,
+    accent_primary: gpui::Hsla,
+    cx: &mut Context<TrayMenuPanel>,
+) -> impl IntoElement {
+    // Checkbox/radio indicator
+    let toggle_indicator = props.toggle_type.as_ref().map(|toggle_type| {
+        let is_checked = props.toggle_state == Some(1);
+        match toggle_type.as_str() {
+            "checkmark" => {
+                if is_checked {
+                    ("󰄬", true)
+                } else {
+                    ("󰄱", false)
+                }
+            }
+            "radio" => {
+                if is_checked {
+                    ("󰄴", true)
+                } else {
+                    ("󰄱", false)
+                }
+            }
+            _ => ("", false),
+        }
+    });
+
+    let label_owned = label.to_string();
+    let text_color = if !is_enabled {
+        text_disabled
+    } else {
+        text_primary
+    };
+
+    div()
+        .id(ElementId::Name(SharedString::from(format!(
+            "menu-item-{}",
+            menu_id
+        ))))
+        .flex()
+        .items_center()
+        .gap(px(spacing::SM))
+        .w_full()
+        .pl(px(spacing::SM + indent))
+        .pr(px(spacing::SM))
+        .py(px(spacing::XS + 2.0))
+        .rounded(px(radius::SM))
+        .mx(px(spacing::XS))
+        .when(is_enabled, |el| {
+            el.cursor_pointer().hover(move |s| s.bg(interactive_hover))
+        })
+        .when(!is_enabled, |el| el.cursor_default())
+        .when(is_enabled && !has_submenu, |el| {
+            el.on_click(cx.listener(move |this, _, window, _cx| {
+                this.activate_menu_item(menu_id, window);
+            }))
+        })
+        .when(has_submenu, |el| {
+            el.on_click(cx.listener(move |this, _, _window, cx| {
+                this.toggle_submenu(menu_id, cx);
+            }))
+        })
+        // Toggle indicator (checkbox/radio)
+        .when_some(toggle_indicator, |el, (icon, is_checked)| {
+            el.child(
+                div()
+                    .text_size(px(font_size::SM))
+                    .text_color(if is_checked {
+                        accent_primary
+                    } else {
+                        text_muted
+                    })
+                    .child(icon),
+            )
+        })
+        // Label
+        .child(
+            div()
+                .flex_1()
+                .text_size(px(font_size::SM))
+                .text_color(text_color)
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(label_owned),
+        )
+        // Submenu indicator with rotation animation
+        .when(has_submenu, |el| {
+            el.child(
+                div()
+                    .text_size(px(font_size::XS))
+                    .text_color(text_muted)
+                    .child(if is_expanded { "󰅀" } else { "󰅂" }),
+            )
+        })
 }
 
 impl Render for TrayMenuPanel {
@@ -289,14 +400,14 @@ impl Render for TrayMenuPanel {
         div()
             .id("systray-menu-panel")
             .size_full()
-            .bg(theme.bg.primary)
+            .bg(theme.bg.elevated)
             .border_1()
             .border_color(theme.border.default)
             .rounded(px(radius::LG))
-            .py(px(spacing::SM))
+            .py(px(spacing::XS))
             .text_color(theme.text.primary)
-            .overflow_hidden()
-            .children(menu_items)
+            .overflow_y_scroll()
+            .child(div().flex().flex_col().gap(px(1.)).children(menu_items))
     }
 }
 
