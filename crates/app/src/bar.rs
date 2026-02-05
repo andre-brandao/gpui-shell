@@ -112,13 +112,19 @@ impl Render for Bar {
 }
 
 /// Returns the window options for the bar.
-pub fn window_options(display_id: Option<DisplayId>) -> WindowOptions {
+pub fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
+    let width = display_id
+        .and_then(|id| cx.find_display(id))
+        .or_else(|| cx.primary_display())
+        .map(|display| display.bounds().size.width)
+        .unwrap_or_else(|| px(1920.));
+
     WindowOptions {
         display_id: display_id,
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: point(px(0.), px(0.)),
-            size: Size::new(px(1920.), px(BAR_HEIGHT)),
+            size: Size::new(width, px(BAR_HEIGHT)),
         })),
         app_id: Some("gpuishell-bar".to_string()),
         window_background: WindowBackgroundAppearance::Transparent,
@@ -182,7 +188,7 @@ pub fn open_with_config(
     display_id: Option<DisplayId>,
     cx: &mut App,
 ) {
-    cx.open_window(window_options(display_id), move |_, cx| {
+    cx.open_window(window_options(display_id, cx), move |_, cx| {
         cx.new(|cx| Bar::new(services, config, cx))
     })
     .unwrap();
