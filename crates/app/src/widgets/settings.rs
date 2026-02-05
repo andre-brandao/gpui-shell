@@ -8,6 +8,7 @@
 //! - Power profile
 //! - Battery icon + percentage
 
+use crate::control_center::ControlCenter;
 use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use gpui::{
@@ -172,17 +173,17 @@ impl Settings {
     }
 
     fn toggle_panel(&self, cx: &mut App) {
-        let summary = self.summary_strings();
         let config = PanelConfig {
-            width: 320.0,
-            height: 260.0,
+            width: 360.0,
+            height: 420.0,
             anchor: Anchor::TOP | Anchor::RIGHT,
             margin: (0.0, 8.0, 0.0, 0.0),
             namespace: "control-center".to_string(),
         };
 
+        let services = self.services.clone();
         toggle_panel("control-center", config, cx, move |cx| {
-            ControlCenterStub::new(summary.clone(), cx)
+            ControlCenter::new(services, cx)
         });
     }
 
@@ -416,35 +417,5 @@ impl Render for Settings {
                     }),
             )
             .tooltip(ui::Tooltip::text("Open Control Center"))
-    }
-}
-
-/// Minimal placeholder control center panel showing quick status summary.
-struct ControlCenterStub {
-    summary: Vec<String>,
-}
-
-impl ControlCenterStub {
-    fn new(summary: Vec<String>, _cx: &mut Context<Self>) -> Self {
-        Self { summary }
-    }
-}
-
-impl Render for ControlCenterStub {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let colors = cx.theme().colors();
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(8.0))
-            .p(px(12.0))
-            .bg(colors.background)
-            .text_color(colors.text)
-            .children(self.summary.iter().map(|line| {
-                div()
-                    .text_size(rems(0.9))
-                    .text_color(colors.text_muted)
-                    .child(line.clone())
-            }))
     }
 }

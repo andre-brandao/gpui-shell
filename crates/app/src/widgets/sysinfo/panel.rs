@@ -119,7 +119,7 @@ impl SysInfoPanel {
 
         div()
             .w_full()
-            .h(px(4.0))
+            .h(px(3.0))
             .rounded(px(2.0))
             .bg(colors.element_background)
             .child(
@@ -143,12 +143,12 @@ impl SysInfoPanel {
 
         div()
             .w_full()
-            .p(px(14.0))
+            .p(px(8.0))
             .bg(colors.surface_background)
-            .rounded(px(10.0))
+            .rounded(px(8.0))
             .flex()
             .flex_col()
-            .gap(px(8.0))
+            .gap(px(6.0))
             .child(
                 div()
                     .flex()
@@ -244,22 +244,22 @@ impl Render for SysInfoPanel {
             .id("sysinfo-panel")
             .w_full()
             .h_full()
-            .p(px(16.0))
+            .p(px(6.0))
             .bg(colors.background)
             .border_1()
             .border_color(colors.border)
-            .rounded(px(12.0))
+            .rounded(px(10.0))
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
             .flex()
             .flex_col()
-            .gap(px(12.0))
+            .gap(px(4.0))
             // Header
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.0))
+                    .gap(px(6.0))
                     .child(
                         div()
                             .text_size(rems(1.2))
@@ -274,104 +274,152 @@ impl Render for SysInfoPanel {
                             .child("System Information"),
                     ),
             )
-            // CPU Section
-            .child(Self::render_usage_section(
-                cpu_icon,
-                "CPU Usage",
-                cpu_usage,
-                "Processor load",
-                cx,
-            ))
-            // Memory Section
-            .child(Self::render_usage_section(
-                icons::MEMORY,
-                "Memory Usage",
-                memory_usage,
-                &memory_details,
-                cx,
-            ))
-            // Swap Section (only show if swap is being used)
+            .child(div().w_full().h(px(1.0)).bg(colors.border))
+            // CPU / Memory row
+            .child(
+                div()
+                    .flex()
+                    .gap(px(4.0))
+                    .child(div().flex_1().child(Self::render_usage_section(
+                        cpu_icon,
+                        "CPU",
+                        cpu_usage,
+                        "Processor load",
+                        cx,
+                    )))
+                    .child(div().flex_1().child(Self::render_usage_section(
+                        icons::MEMORY,
+                        "Memory",
+                        memory_usage,
+                        &memory_details,
+                        cx,
+                    ))),
+            )
+            // Swap (optional)
             .when(swap_usage > 0, |el| {
                 el.child(Self::render_usage_section(
                     icons::SWAP,
-                    "Swap Usage",
+                    "Swap",
                     swap_usage,
                     "Swap memory",
                     cx,
                 ))
             })
-            // Divider
             .child(div().w_full().h(px(1.0)).bg(colors.border))
-            // Temperature
-            .child(Self::render_info_row(
-                temp_icon,
-                "Temperature",
-                &temp_str,
-                temp_color,
-                cx,
-            ))
-            // Network section
+            // Temperature + Network row
             .child(
                 div()
-                    .w_full()
-                    .p(px(12.0))
-                    .bg(colors.surface_background)
-                    .rounded(px(10.0))
                     .flex()
-                    .flex_col()
-                    .gap(px(8.0))
+                    .gap(px(4.0))
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.0))
-                            .child(
-                                div()
-                                    .text_size(rems(1.05))
-                                    .text_color(colors.text)
-                                    .child(icons::NETWORK),
-                            )
-                            .child(
-                                div()
-                                    .text_size(rems(0.95))
-                                    .text_color(colors.text)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child("Network"),
-                            ),
+                        div().flex_1().child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .p(px(8.0))
+                                .bg(colors.surface_background)
+                                .rounded(px(8.0))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(4.0))
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.95))
+                                                .text_color(colors.text)
+                                                .child(temp_icon),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.84))
+                                                .text_color(colors.text)
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .child("Temperature"),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(rems(0.84))
+                                        .text_color(temp_color.unwrap_or(colors.text))
+                                        .font_weight(FontWeight::BOLD)
+                                        .child(temp_str.clone()),
+                                ),
+                        ),
                     )
-                    .child(Self::render_info_row(
-                        icons::IP,
-                        "IP Address",
-                        &ip_str,
-                        None,
-                        cx,
-                    ))
-                    .child(Self::render_info_row(
-                        icons::DOWNLOAD,
-                        "Download",
-                        &download_str,
-                        None,
-                        cx,
-                    ))
-                    .child(Self::render_info_row(
-                        icons::UPLOAD,
-                        "Upload",
-                        &upload_str,
-                        None,
-                        cx,
-                    )),
+                    .child(
+                        div().flex_1().child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .p(px(8.0))
+                                .bg(colors.surface_background)
+                                .rounded(px(8.0))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(4.0))
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.9))
+                                                .text_color(colors.text)
+                                                .child(icons::NETWORK),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.84))
+                                                .text_color(colors.text)
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .child("Network"),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.0))
+                                        .text_size(rems(0.82))
+                                        .text_color(colors.text)
+                                        .child(icons::IP)
+                                        .child(ip_str.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.0))
+                                        .text_size(rems(0.82))
+                                        .text_color(colors.text)
+                                        .child(icons::DOWNLOAD)
+                                        .child(download_str),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.0))
+                                        .text_size(rems(0.82))
+                                        .text_color(colors.text)
+                                        .child(icons::UPLOAD)
+                                        .child(upload_str),
+                                ),
+                        ),
+                    ),
             )
             // Disks section
             .when(!disks.is_empty(), |el| {
                 el.child(
                     div()
                         .w_full()
-                        .p(px(12.0))
+                        .p(px(8.0))
                         .bg(colors.surface_background)
-                        .rounded(px(10.0))
+                        .rounded(px(8.0))
                         .flex()
                         .flex_col()
-                        .gap(px(8.0))
+                        .gap(px(6.0))
                         .child(
                             div()
                                 .flex()

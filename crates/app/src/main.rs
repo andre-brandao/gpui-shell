@@ -14,7 +14,7 @@ use tracing_subscriber::EnvFilter;
 
 mod args;
 mod bar;
-// pub mod control_center;
+pub mod control_center;
 // pub mod launcher;
 // pub mod osd;
 mod panel;
