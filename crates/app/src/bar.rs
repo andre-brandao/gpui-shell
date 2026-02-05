@@ -4,8 +4,9 @@
 //! status, anchored to the top of the screen using the layer shell protocol.
 
 use gpui::{
-    AnyElement, App, Bounds, Context, FontWeight, Size, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, div, layer_shell::*, point, prelude::*, px, rems,
+    AnyElement, App, Bounds, Context, DisplayId, FontWeight, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
+    point, prelude::*, px, rems,
 };
 use services::Services;
 use ui::{ActiveTheme, spacing};
@@ -111,8 +112,9 @@ impl Render for Bar {
 }
 
 /// Returns the window options for the bar.
-pub fn window_options() -> WindowOptions {
+pub fn window_options(display_id: Option<DisplayId>) -> WindowOptions {
     WindowOptions {
+        display_id: display_id,
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: point(px(0.), px(0.)),
@@ -135,12 +137,52 @@ pub fn window_options() -> WindowOptions {
 
 /// Open the bar with default configuration.
 pub fn open(services: Services, cx: &mut App) {
-    open_with_config(services, BarConfig::default(), cx);
+    cx.spawn(async move |cx| {
+        // Small delay to allow Wayland to enumerate displays
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(100))
+            .await;
+        tracing::info!("Bar opened");
+        cx.update(|cx: &mut App| {
+            // cx.update(|cx: &mut App| {
+            // })
+            let displays = cx.displays();
+            if displays.is_empty() {
+                // No displays enumerated yet, open on default display
+                tracing::info!("No displays found, opening bar on default display");
+                open_with_config(services, BarConfig::default(), None, cx);
+            } else {
+                tracing::info!("Opening bar on {} displays", displays.len());
+                for d in displays {
+                    tracing::info!("Opening bar on display {:?}", d.id());
+                    open_with_config(services.clone(), BarConfig::default(), Some(d.id()), cx);
+                }
+            }
+        })
+    })
+    .detach();
+    // let displays = cx.displays();
+    // if displays.is_empty() {
+    //     // No displays enumerated yet, open on default display
+    //     tracing::info!("No displays found, opening bar on default display");
+    //     open_with_config(services, BarConfig::default(), None, cx);
+    // } else {
+    //     tracing::info!("Opening bar on {} displays", displays.len());
+    //     for d in displays {
+    //         tracing::info!("Opening bar on display {:?}", d.id());
+    //         open_with_config(services.clone(), BarConfig::default(), Some(d.id()), cx);
+    //     }
+    // }
 }
 
 /// Open the bar with custom configuration.
-pub fn open_with_config(services: Services, config: BarConfig, cx: &mut App) {
-    cx.open_window(window_options(), move |_, cx| {
+pub fn open_with_config(
+    services: Services,
+    config: BarConfig,
+    display_id: Option<DisplayId>,
+    cx: &mut App,
+) {
+    cx.open_window(window_options(display_id), move |_, cx| {
         cx.new(|cx| Bar::new(services, config, cx))
     })
     .unwrap();

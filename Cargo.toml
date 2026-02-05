@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland"] }
+gpui = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay", features = ["wayland"] }
 ui = { path = "crates/ui" }
 assets = { path = "crates/assets" }
 services = { path = "crates/services" }
