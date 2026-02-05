@@ -9,19 +9,18 @@
 
 use assets::Assets;
 use gpui::Application;
-use services::{InstanceResult, Services, ShellSubscriber};
+use services::Services;
 use tracing_subscriber::EnvFilter;
 
 mod args;
-// mod bar;
+mod bar;
 // pub mod control_center;
 // pub mod launcher;
 // pub mod osd;
-// mod panel;
-// pub mod widgets;
-mod bar_poc;
+mod panel;
+pub mod widgets;
 
-use args::Args;
+// use args::Args;
 
 #[tokio::main]
 async fn main() {
@@ -66,7 +65,7 @@ async fn main() {
         settings::init(cx);
         theme::init(theme::LoadThemes::JustBase, cx);
 
-        bar_poc::open(cx);
+        bar::open(services.clone(), cx);
 
         // osd::start(services.clone(), osd::OsdPosition::Right, cx);
 
