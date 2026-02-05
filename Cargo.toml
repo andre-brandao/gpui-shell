@@ -1,11 +1,13 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/app", "crates/services"]
 resolver = "2"
 
 [workspace.dependencies]
 gpui = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay", features = ["wayland"] }
-ui = { path = "crates/ui" }
-assets = { path = "crates/assets" }
+ui = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+theme = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+settings = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
+assets = { git = "https://github.com/andre-brandao/zed", branch = "fix/target_dispay" }
 services = { path = "crates/services" }
 
 anyhow = "1.0.100"

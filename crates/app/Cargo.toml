@@ -10,6 +10,8 @@ path = "src/main.rs"
 [dependencies]
 gpui.workspace = true
 ui.workspace = true
+theme.workspace = true
+settings.workspace = true
 assets.workspace = true
 services.workspace = true
 zbus.workspace = true
