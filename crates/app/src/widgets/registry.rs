@@ -7,7 +7,9 @@ use gpui::{AnyElement, Context, Entity, prelude::*};
 
 use services::Services;
 
-use super::{Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces};
+use super::{
+    ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces,
+};
 
 /// Wrapper enum for all possible widget types.
 ///
@@ -15,6 +17,7 @@ use super::{Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray
 /// This allows heterogeneous widgets to be stored in collections
 /// and rendered uniformly.
 pub enum Widget {
+    ActiveWindow(Entity<ActiveWindow>),
     Clock(Entity<Clock>),
     Battery(Entity<Battery>),
     Workspaces(Entity<Workspaces>),
@@ -31,6 +34,7 @@ impl Widget {
     /// This allows uniform rendering regardless of the underlying widget type.
     pub fn render(&self) -> AnyElement {
         match self {
+            Widget::ActiveWindow(e) => e.clone().into_any_element(),
             Widget::Clock(e) => e.clone().into_any_element(),
             Widget::Battery(e) => e.clone().into_any_element(),
             Widget::Workspaces(e) => e.clone().into_any_element(),
@@ -56,6 +60,11 @@ impl Widget {
         cx: &mut Context<V>,
     ) -> Option<Widget> {
         match name {
+            "ActiveWindow" | "WindowTitle" => {
+                Some(Widget::ActiveWindow(cx.new(|cx| {
+                    ActiveWindow::new(services.compositor.clone(), cx)
+                })))
+            }
             "Clock" => Some(Widget::Clock(cx.new(Clock::new))),
             "Battery" => Some(Widget::Battery(
                 cx.new(|cx| Battery::new(services.upower.clone(), cx)),

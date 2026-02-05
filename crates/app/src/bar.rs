@@ -33,8 +33,9 @@ impl Default for BarConfig {
                 "Workspaces".to_string(),
                 "SysInfo".to_string(),
             ],
-            center: vec!["Clock".to_string()],
+            center: vec!["ActiveWindow".to_string()],
             right: vec![
+                "Clock".to_string(),
                 "Systray".to_string(),
                 "KeyboardLayout".to_string(),
                 "Settings".to_string(),

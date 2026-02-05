@@ -1,5 +1,6 @@
 //! Bar widgets for displaying system information.
 
+mod active_window;
 mod battery;
 mod clock;
 mod keyboard_layout;
@@ -10,6 +11,7 @@ pub mod sysinfo;
 mod tray;
 mod workspaces;
 
+pub use active_window::ActiveWindow;
 pub use battery::Battery;
 pub use clock::Clock;
 pub use keyboard_layout::KeyboardLayout;
