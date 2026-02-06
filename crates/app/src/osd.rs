@@ -334,7 +334,7 @@ fn schedule_dismiss(cx: &mut App) {
     let generation = DISMISS_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
 
     cx.spawn(async move |cx| {
-        tokio::time::sleep(OSD_TIMEOUT).await;
+        cx.background_executor().timer(OSD_TIMEOUT).await;
 
         // Only dismiss if no newer show_osd call happened
         let current = DISMISS_GENERATION.load(std::sync::atomic::Ordering::SeqCst);
