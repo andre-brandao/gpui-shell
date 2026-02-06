@@ -5,6 +5,7 @@
   rustPlatform,
   rustToolchain,
 
+  cmake,
   makeWrapper,
 
   freetype,
@@ -60,6 +61,7 @@ let
       cargoLock = ../Cargo.lock;
 
       nativeBuildInputs = [
+        cmake
         pkg-config
         rustPlatform.bindgenHook
         makeWrapper

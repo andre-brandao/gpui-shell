@@ -8,6 +8,7 @@
   llvmPackages,
   glibc,
 
+  cmake,
   freetype,
   fontconfig,
   libpulseaudio,
@@ -37,6 +38,7 @@ mkShell rec {
   ];
 
   nativeBuildInputs = [
+    cmake
     pkg-config
     llvmPackages.libclang
   ];
