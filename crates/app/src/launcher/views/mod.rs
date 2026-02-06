@@ -3,6 +3,7 @@
 mod apps;
 mod help;
 mod shell;
+mod wallpaper;
 mod web;
 
 use gpui::{AppContext, Context};
@@ -28,11 +29,13 @@ pub fn register_views(services: &Services, cx: &mut Context<Launcher>) -> Vec<Vi
     let apps = cx.new(|_cx| apps::AppsView::new(services.clone()));
     let shell = cx.new(|_cx| shell::ShellView::new());
     let web = cx.new(|_cx| web::WebSearchView::new());
+    let wp = cx.new(|_cx| wallpaper::WallpaperView::new());
 
     let metas: Vec<ViewMeta> = vec![
         apps.read(cx).meta(),
         shell.read(cx).meta(),
         web.read(cx).meta(),
+        wp.read(cx).meta(),
     ];
 
     let help = cx.new(|_cx| help::HelpView::new(metas, services.clone()));
@@ -41,6 +44,7 @@ pub fn register_views(services: &Services, cx: &mut Context<Launcher>) -> Vec<Vi
         register_view(apps, cx),
         register_view(shell, cx),
         register_view(web, cx),
+        register_view(wp, cx),
         register_view(help, cx),
     ]
 }

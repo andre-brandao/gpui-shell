@@ -18,7 +18,7 @@ impl Render for LauncherBtn {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let services = self.services.clone();
 
-        Button::new("launcher", "Launcher")
+        Button::new("launcher", "")
             .style(ButtonStyle::Subtle)
             .icon(IconName::Menu)
             .icon_size(IconSize::Small)

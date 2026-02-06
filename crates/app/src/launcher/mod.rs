@@ -158,6 +158,7 @@ impl Launcher {
             } else {
                 self.selected_index - 1
             };
+            self.scroll_to_selected(cx);
         }
     }
 
@@ -165,6 +166,7 @@ impl Launcher {
         let count = self.active_view().match_count(cx);
         if count > 0 {
             self.selected_index = (self.selected_index + 1) % count;
+            self.scroll_to_selected(cx);
         }
     }
 
@@ -172,6 +174,7 @@ impl Launcher {
         let count = self.active_view().match_count(cx);
         if count > 0 {
             self.selected_index = self.selected_index.saturating_sub(ITEMS_PER_PAGE);
+            self.scroll_to_selected(cx);
         }
     }
 
@@ -180,6 +183,7 @@ impl Launcher {
         if count > 0 {
             self.selected_index =
                 (self.selected_index + ITEMS_PER_PAGE).min(count.saturating_sub(1));
+            self.scroll_to_selected(cx);
         }
     }
 
@@ -264,25 +268,37 @@ impl Launcher {
             0
         };
 
+        let header = view.render_header(cx);
+        let footer = view.render_footer(cx);
+        let content = view.render_content(cx);
+
+        // Items are direct children of the scroll container so that
+        // scroll_to_item(index) maps correctly.
         div()
             .id("view-content")
             .flex_1()
+            .flex()
+            .flex_col()
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
             .py(px(4.))
-            .child(div().flex().flex_col().map(|el| {
-                if let Some(content) = view.render_content(cx) {
-                    // Content view: header + full content + footer
-                    el.when_some(view.render_header(cx), |el, header| el.child(header))
-                        .child(content)
-                        .when_some(view.render_footer(cx), |el, footer| el.child(footer))
+            .when_some(header, |el, header| el.child(header))
+            .map(|el| {
+                if let Some(content) = content {
+                    el.child(content)
                 } else {
-                    // List view: header + items + footer
-                    el.when_some(view.render_header(cx), |el, header| el.child(header))
-                        .children((0..count).map(|i| view.render_item(i, i == selected, cx)))
-                        .when_some(view.render_footer(cx), |el, footer| el.child(footer))
+                    el.children((0..count).map(|i| view.render_item(i, i == selected, cx)))
                 }
-            }))
+            })
+            .when_some(footer, |el, footer| el.child(footer))
+    }
+
+    /// Ensure the selected item is scrolled into view.
+    /// The header (if present) is the first child, so item indices are offset by 1.
+    fn scroll_to_selected(&self, cx: &App) {
+        let has_header = self.active_view().render_header(cx).is_some();
+        let child_index = self.selected_index + if has_header { 1 } else { 0 };
+        self.scroll_handle.scroll_to_item(child_index);
     }
 
     fn render_footer_bar(&self, cx: &App) -> impl IntoElement {
