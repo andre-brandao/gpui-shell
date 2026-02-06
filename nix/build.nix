@@ -13,6 +13,7 @@
   libpulseaudio,
   libxkbcommon,
   openssl,
+  protobuf,
   pkg-config,
   vulkan-loader,
   wayland,
@@ -62,6 +63,7 @@ let
 
       nativeBuildInputs = [
         cmake
+        protobuf
         pkg-config
         rustPlatform.bindgenHook
         makeWrapper

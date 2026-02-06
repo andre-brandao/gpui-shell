@@ -14,6 +14,7 @@
   libpulseaudio,
   libxkbcommon,
   openssl,
+  protobuf,
   pkg-config,
   rustToolchain,
   vulkan-loader,
@@ -39,6 +40,7 @@ mkShell rec {
 
   nativeBuildInputs = [
     cmake
+    protobuf
     pkg-config
     llvmPackages.libclang
   ];
