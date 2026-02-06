@@ -16,7 +16,7 @@ mod args;
 mod bar;
 pub mod control_center;
 // pub mod launcher;
-// pub mod osd;
+pub mod osd;
 mod panel;
 pub mod widgets;
 
@@ -63,11 +63,11 @@ async fn main() {
 
     app.run(move |cx| {
         settings::init(cx);
-        theme::init(theme::LoadThemes::JustBase, cx);
+        theme::init(theme::LoadThemes::All(Box::new(Assets {})), cx);
 
         bar::open(services.clone(), cx);
 
-        // osd::start(services.clone(), osd::OsdPosition::Right, cx);
+        osd::open(services.clone(), osd::OsdPosition::Right, cx);
 
         // // Listen for launcher requests from other instances
         // let services_for_shell = services.clone();
