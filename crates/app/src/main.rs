@@ -15,7 +15,7 @@ use tracing_subscriber::EnvFilter;
 mod args;
 mod bar;
 pub mod control_center;
-// pub mod launcher;
+pub mod launcher;
 pub mod osd;
 mod panel;
 pub mod widgets;
@@ -64,6 +64,8 @@ async fn main() {
     app.run(move |cx| {
         settings::init(cx);
         theme::init(theme::LoadThemes::All(Box::new(Assets {})), cx);
+
+        launcher::register_keybindings(cx);
 
         bar::open(services.clone(), cx);
 
