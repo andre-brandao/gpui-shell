@@ -24,3 +24,4 @@ tracing-subscriber.workspace = true
 chrono.workspace = true
 hyprland.workspace = true
 tokio.workspace = true
+serde_json.workspace = true

@@ -2762,6 +2762,7 @@ dependencies = [
  "futures-util",
  "gpui",
  "hyprland",
+ "serde_json",
  "services",
  "settings",
  "theme",

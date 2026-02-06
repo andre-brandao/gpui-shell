@@ -4,6 +4,7 @@
 //! - Searching and launching applications (`@` prefix, or default)
 //! - Running shell commands (`$` prefix)
 //! - Web search with multiple providers (`!` prefix)
+//! - Browsing and applying themes (`~` prefix)
 //! - Viewing help and available commands (`?` prefix)
 
 pub mod view;
@@ -239,7 +240,7 @@ impl Launcher {
                     .color(Color::Muted),
             )
             .child(div().flex_1().text_size(px(15.)).child(if is_empty {
-                Label::new("Search apps or type @, $, !, ? for commands...")
+                Label::new("Search apps or type @, $, !, ~, ? for commands...")
                     .color(Color::Placeholder)
             } else {
                 Label::new(self.query.clone()).color(Color::Default)
@@ -314,7 +315,7 @@ impl Launcher {
             .justify_between()
             .child(
                 div().flex().items_center().gap(px(8.)).children(
-                    ["@apps", "$shell", "!web", "?help"]
+                    ["@apps", "$shell", "!web", "~themes", "?help"]
                         .iter()
                         .enumerate()
                         .flat_map(|(i, hint)| {
