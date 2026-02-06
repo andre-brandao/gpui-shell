@@ -9,7 +9,7 @@
 
 use assets::Assets;
 use gpui::Application;
-use services::Services;
+use services::{InstanceResult, Services, ShellSubscriber};
 use tracing_subscriber::EnvFilter;
 
 mod args;
@@ -20,7 +20,7 @@ pub mod osd;
 mod panel;
 pub mod widgets;
 
-// use args::Args;
+use args::Args;
 
 #[tokio::main]
 async fn main() {
@@ -32,27 +32,34 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    // // Parse command-line arguments
-    // let args = Args::parse();
+    // Parse command-line arguments
+    let args = Args::parse();
 
-    // // Try to acquire single-instance lock or signal existing instance
-    // // The secondary path (signaling existing instance) is fast and exits immediately
-    // let mut shell = match ShellSubscriber::acquire(args.input) {
-    //     InstanceResult::Primary(subscriber) => subscriber,
-    //     InstanceResult::Secondary => {
-    //         // Another instance is running and was signaled, exit immediately
-    //         return;
-    //     }
-    //     InstanceResult::Error(e) => {
-    //         tracing::error!("Shell service error: {}", e);
-    //         tracing::warn!("Running without single-instance support");
-    //         match ShellSubscriber::acquire(None) {
-    //             InstanceResult::Primary(s) => s,
-    //             _ => panic!("Failed to acquire shell service"),
-    //         }
-    //     }
-    // };
-    // let shell_receiver = shell.start_listener();
+    // Try to acquire single-instance lock or signal existing instance.
+    // The secondary path (signaling existing instance) is fast and exits immediately.
+    let mut shell = match ShellSubscriber::acquire(args.input) {
+        InstanceResult::Primary(subscriber) => subscriber,
+        InstanceResult::Secondary => {
+            // Another instance is running and was signaled, exit immediately.
+            return;
+        }
+        InstanceResult::Error(e) => {
+            tracing::error!("Shell service error: {}", e);
+            tracing::warn!("Running without single-instance support");
+            match ShellSubscriber::acquire(None) {
+                InstanceResult::Primary(subscriber) => subscriber,
+                InstanceResult::Secondary => {
+                    tracing::error!("Shell service refused secondary without input");
+                    return;
+                }
+                InstanceResult::Error(e) => {
+                    tracing::error!("Failed to acquire shell service: {}", e);
+                    return;
+                }
+            }
+        }
+    };
+    let shell_receiver = shell.start_listener();
 
     // Initialize services (requires async)
     let services = Services::new()
@@ -71,30 +78,30 @@ async fn main() {
 
         osd::open(services.clone(), osd::OsdPosition::Right, cx);
 
-        // // Listen for launcher requests from other instances
-        // let services_for_shell = services.clone();
-        // let mut receiver = shell_receiver;
-        // cx.spawn(async move |cx| {
-        //     tracing::info!("Shell request listener started");
+        // Listen for launcher requests from other instances.
+        let services_for_shell = services.clone();
+        let mut receiver = shell_receiver;
+        cx.spawn(async move |cx| {
+            tracing::info!("Shell request listener started");
 
-        //     while let Some(request) = receiver.recv().await {
-        //         tracing::info!(
-        //             "Processing launcher request: id={}, input={:?}",
-        //             request.id,
-        //             request.input
-        //         );
+            while let Some(request) = receiver.recv().await {
+                tracing::info!(
+                    "Processing launcher request: id={}, input={:?}",
+                    request.id,
+                    request.input
+                );
 
-        //         let services = services_for_shell.clone();
-        //         let input = request.input;
+                let services = services_for_shell.clone();
+                let input = request.input;
 
-        //         let _ = cx.update(move |cx| {
-        //             tracing::info!("Toggling launcher from IPC: {:?}", input);
-        //             launcher::toggle_from_ipc(services, input, cx);
-        //         });
-        //     }
+                let _ = cx.update(move |cx| {
+                    tracing::info!("Toggling launcher from IPC: {:?}", input);
+                    launcher::toggle_from_ipc(services, input, cx);
+                });
+            }
 
-        //     tracing::warn!("Shell request listener ended unexpectedly");
-        // })
-        // .detach();
+            tracing::warn!("Shell request listener ended unexpectedly");
+        })
+        .detach();
     });
 }

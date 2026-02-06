@@ -6,6 +6,8 @@ use ui::{ActiveTheme, ListItem, ListItemSpacing, prelude::*};
 
 use crate::launcher::view::{LauncherView, ViewEvent};
 
+const APP_DESCRIPTION_MAX_CHARS: usize = 75;
+
 pub struct AppsView {
     services: Services,
     query: String,
@@ -101,13 +103,11 @@ impl LauncherView for AppsView {
                     .flex_col()
                     .gap(px(1.))
                     .child(Label::new(app.name.clone()).size(LabelSize::Default))
-                    .when_some(app.description.as_ref(), |el, desc| {
-                        el.child(
-                            Label::new(desc.clone())
-                                .size(LabelSize::Small)
-                                .color(Color::Muted),
-                        )
-                    }),
+                    .child(
+                        Label::new(display_description(app.description.as_deref()))
+                            .size(LabelSize::Small)
+                            .color(Color::Muted),
+                    ),
             )
             .into_any_element()
     }
@@ -117,6 +117,29 @@ impl LauncherView for AppsView {
             launch_app(&app.exec);
             cx.emit(ViewEvent::Close);
         }
+    }
+}
+
+fn truncate_description(description: &str, maximum_characters: usize) -> String {
+    if description.chars().count() <= maximum_characters {
+        return description.to_string();
+    }
+
+    let visible_characters = maximum_characters.saturating_sub(3);
+    let mut truncated = String::with_capacity(maximum_characters);
+
+    for character in description.chars().take(visible_characters) {
+        truncated.push(character);
+    }
+
+    truncated.push_str("...");
+    truncated
+}
+
+fn display_description(description: Option<&str>) -> String {
+    match description.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) => truncate_description(value, APP_DESCRIPTION_MAX_CHARS),
+        None => "...".to_string(),
     }
 }
 
