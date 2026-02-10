@@ -54,8 +54,8 @@ impl ActiveWindow {
             return String::new();
         }
 
-        if title.len() > MAX_TITLE_LENGTH {
-            format!("{}…", &title[..MAX_TITLE_LENGTH])
+        if let Some((cutoff, _)) = title.char_indices().nth(MAX_TITLE_LENGTH) {
+            format!("{}…", &title[..cutoff])
         } else {
             title.to_string()
         }
