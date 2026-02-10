@@ -18,7 +18,7 @@ use gpui::{
 };
 use services::Services;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
-use view::{InputResult, LIST_ITEM_HEIGHT, LauncherView, ViewContext, ViewInput, is_special_char};
+use view::{InputResult, LauncherView, ViewContext, ViewInput, is_special_char};
 use views::{HelpView, all_views};
 
 actions!(launcher, [Escape, Enter]);
@@ -26,8 +26,6 @@ actions!(launcher, [Escape, Enter]);
 const LAUNCHER_WIDTH: f32 = 600.0;
 const LAUNCHER_HEIGHT: f32 = 450.0;
 
-/// Visible height of the content area (approximate).
-const VISIBLE_HEIGHT: f32 = 350.0;
 /// Number of items to jump when using Page Up/Down.
 const ITEMS_PER_PAGE: usize = 7;
 
@@ -36,7 +34,6 @@ pub struct Launcher {
     services: Services,
     search_query: String,
     selected_index: usize,
-    item_count: usize,
     focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
     views: Vec<Box<dyn LauncherView>>,
@@ -99,7 +96,6 @@ impl Launcher {
             services,
             search_query: initial_input.unwrap_or_default(),
             selected_index: 0,
-            item_count: 0,
             focus_handle,
             scroll_handle,
             views,
@@ -119,28 +115,13 @@ impl Launcher {
         self.scroll_handle.set_offset(gpui::point(px(0.), px(0.)));
     }
 
-    /// Scroll to keep the selected item visible.
-    fn scroll_to_selected(&self) {
-        let selected_top = px(self.selected_index as f32 * LIST_ITEM_HEIGHT);
-        let selected_bottom = selected_top + px(LIST_ITEM_HEIGHT);
-
-        let current_offset = self.scroll_handle.offset();
-        let scroll_top = -current_offset.y;
-        let scroll_bottom = scroll_top + px(VISIBLE_HEIGHT);
-
-        let new_offset_y = if selected_top < scroll_top {
-            // Item is above visible area, scroll up
-            -selected_top
-        } else if selected_bottom > scroll_bottom {
-            // Item is below visible area, scroll down
-            -(selected_bottom - px(VISIBLE_HEIGHT))
-        } else {
-            // Item is already visible
-            return;
-        };
-
-        self.scroll_handle
-            .set_offset(gpui::point(px(0.), new_offset_y));
+    /// Ensure the selected item is scrolled into view.
+    /// The header (if present) is the first child, so item indices are offset by 1.
+    fn scroll_to_selected(&self, cx: &App) {
+        let vx = self.view_context();
+        let has_header = self.current_view().render_header(&vx, cx).is_some();
+        let child_index = self.selected_index + if has_header { 1 } else { 0 };
+        self.scroll_handle.scroll_to_item(child_index);
     }
 
     /// Parse the search query to find which view should handle it.
@@ -224,6 +205,7 @@ impl Launcher {
     fn handle_input(&mut self, input: ViewInput, cx: &mut App) -> bool {
         let vx = self.view_context();
         let view = self.current_view();
+        let item_count = view.match_count(&vx, cx);
 
         match view.handle_input(&input, &vx, cx) {
             InputResult::Handled { query, close } => {
@@ -256,33 +238,33 @@ impl Launcher {
                         self.reset_scroll();
                     }
                     ViewInput::Up => {
-                        if self.item_count > 0 {
+                        if item_count > 0 {
                             self.selected_index = if self.selected_index == 0 {
-                                self.item_count - 1
+                                item_count - 1
                             } else {
                                 self.selected_index - 1
                             };
-                            self.scroll_to_selected();
+                            self.scroll_to_selected(cx);
                         }
                     }
                     ViewInput::Down => {
-                        if self.item_count > 0 {
-                            self.selected_index = (self.selected_index + 1) % self.item_count;
-                            self.scroll_to_selected();
+                        if item_count > 0 {
+                            self.selected_index = (self.selected_index + 1) % item_count;
+                            self.scroll_to_selected(cx);
                         }
                     }
                     ViewInput::PageUp => {
-                        if self.item_count > 0 {
+                        if item_count > 0 {
                             self.selected_index =
                                 self.selected_index.saturating_sub(ITEMS_PER_PAGE);
-                            self.scroll_to_selected();
+                            self.scroll_to_selected(cx);
                         }
                     }
                     ViewInput::PageDown => {
-                        if self.item_count > 0 {
+                        if item_count > 0 {
                             self.selected_index = (self.selected_index + ITEMS_PER_PAGE)
-                                .min(self.item_count.saturating_sub(1));
-                            self.scroll_to_selected();
+                                .min(item_count.saturating_sub(1));
+                            self.scroll_to_selected(cx);
                         }
                     }
                     ViewInput::Enter => {
@@ -337,17 +319,24 @@ impl Render for Launcher {
         let placeholder = self.placeholder();
         let is_empty = self.search_query.is_empty();
 
-        // Render current view
+        // Compute item count and clamp selected index before borrowing self
+        {
+            let vx = self.view_context();
+            let item_count = self.current_view().match_count(&vx, cx);
+            if self.selected_index >= item_count && item_count > 0 {
+                self.selected_index = item_count - 1;
+            }
+        }
+
+        // Now render with the clamped selection
         let vx = self.view_context();
         let current_view = self.current_view();
-        let (view_content, item_count) = current_view.render(&vx, cx);
+        let item_count = current_view.match_count(&vx, cx);
         let footer_actions = current_view.footer_actions(&vx);
-        self.item_count = item_count;
-
-        // Clamp selected index
-        if self.selected_index >= item_count && item_count > 0 {
-            self.selected_index = item_count - 1;
-        }
+        let selected_index = self.selected_index;
+        let header = current_view.render_header(&vx, cx);
+        let footer = current_view.render_footer(&vx, cx);
+        let content = current_view.render_content(&vx, cx);
 
         // Pre-compute colors for closures
         let text_primary = theme.text.primary;
@@ -456,15 +445,30 @@ impl Render for Launcher {
             )
             // Divider line
             .child(div().w_full().h(px(1.)).bg(border_default))
-            // View content with scroll support
+            // View content with scroll support — items are direct children
+            // so that scroll_handle.scroll_to_item(index) works correctly.
             .child(
                 div()
                     .id("view-content")
                     .flex_1()
+                    .flex()
+                    .flex_col()
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll_handle)
                     .py(px(spacing::XS))
-                    .child(view_content),
+                    .when_some(header, |el, h| el.child(h))
+                    .map(|el| {
+                        if let Some(content) = content {
+                            el.child(content)
+                        } else {
+                            el.children(
+                                (0..item_count).map(|i| {
+                                    current_view.render_item(i, i == selected_index, &vx, cx)
+                                }),
+                            )
+                        }
+                    })
+                    .when_some(footer, |el, f| el.child(f)),
             )
             // Bottom footer bar
             .child(div().w_full().h(px(1.)).bg(border_default))

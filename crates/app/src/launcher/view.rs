@@ -2,13 +2,18 @@
 //!
 //! This module defines the interface for launcher views and provides
 //! helper functions for rendering common UI patterns.
+//!
+//! Views come in two flavours:
+//!
+//! - **List views** (e.g. apps, workspaces, help) — implement `render_item()` to render
+//!   individual selectable rows. The launcher iterates `match_count()` times.
+//!
+//! - **Content views** (e.g. shell, web) — override `render_content()` to
+//!   return a single element for their entire body. When this returns `Some`,
+//!   the launcher skips the item loop.
 
-use gpui::{AnyElement, App, FontWeight, MouseButton, div, prelude::*, px};
+use gpui::{AnyElement, App};
 use services::Services;
-use ui::{ActiveTheme, font_size, radius, spacing};
-
-/// Height of each list item in pixels.
-pub const LIST_ITEM_HEIGHT: f32 = 48.0;
 
 /// Special characters that trigger view matching.
 /// When a query starts with one of these, we look for a matching view.
@@ -91,8 +96,29 @@ pub trait LauncherView: Send + Sync {
         true
     }
 
-    /// Render the view content. Returns the element and number of selectable items.
-    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize);
+    /// How many selectable items the view currently has.
+    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize;
+
+    /// Render a single list item at `index`. `selected` is true if the
+    /// launcher's selection cursor is on this item.
+    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement;
+
+    /// Optional header rendered above the item list.
+    fn render_header(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+        None
+    }
+
+    /// Optional section rendered below the item list.
+    fn render_footer(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+        None
+    }
+
+    /// Full-content rendering for non-list views. When this returns `Some`,
+    /// `render_item()` is not called and the returned element is used as
+    /// the view body instead.
+    fn render_content(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+        None
+    }
 
     /// Handle input. Return InputResult::Handled to consume the input.
     fn handle_input(&self, _input: &ViewInput, _vx: &ViewContext, _cx: &mut App) -> InputResult {
@@ -115,82 +141,4 @@ pub trait LauncherView: Send + Sync {
 /// Check if a character is a special prefix character.
 pub fn is_special_char(c: char) -> bool {
     SPECIAL_CHARS.contains(&c)
-}
-
-/// Helper to render a standard list item.
-pub fn render_list_item(
-    id: impl Into<String>,
-    icon: &str,
-    title: &str,
-    subtitle: Option<&str>,
-    is_selected: bool,
-    on_click: impl Fn(&mut App) + 'static,
-    cx: &App,
-) -> AnyElement {
-    let theme = cx.theme();
-
-    // Pre-compute colors for closures
-    let accent_selection = theme.accent.selection;
-    let interactive_hover = theme.interactive.hover;
-    let interactive_default = theme.interactive.default;
-    let text_primary = theme.text.primary;
-    let text_disabled = theme.text.disabled;
-
-    div()
-        .id(id.into())
-        .w_full()
-        .h(px(LIST_ITEM_HEIGHT))
-        .mx(px(spacing::SM))
-        .px(px(spacing::SM))
-        .rounded(px(radius::SM))
-        .cursor_pointer()
-        .flex()
-        .items_center()
-        .when(is_selected, move |el| el.bg(accent_selection))
-        .when(!is_selected, move |el| {
-            el.hover(move |s| s.bg(interactive_hover))
-        })
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            on_click(cx);
-        })
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(spacing::SM + 2.0))
-                .child(
-                    div()
-                        .w(px(28.))
-                        .h(px(28.))
-                        .rounded(px(radius::SM))
-                        .bg(interactive_default)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(font_size::MD))
-                        .child(icon.to_string()),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(1.))
-                        .child(
-                            div()
-                                .text_size(px(font_size::BASE))
-                                .text_color(text_primary)
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(title.to_string()),
-                        )
-                        .when_some(subtitle, |el, sub| {
-                            el.child(
-                                div()
-                                    .text_size(px(font_size::SM))
-                                    .text_color(text_disabled)
-                                    .child(sub.to_string()),
-                            )
-                        }),
-                ),
-        )
-        .into_any_element()
 }

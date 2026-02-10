@@ -1,9 +1,13 @@
 //! Help view showing available launcher commands and system information.
 
-use crate::launcher::view::{LIST_ITEM_HEIGHT, LauncherView, ViewContext};
+use gpui::{AnyElement, App, div, prelude::*, px};
+use ui::{
+    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, font_size,
+    icon_size, spacing,
+};
+
+use crate::launcher::view::{LauncherView, ViewContext};
 use crate::widgets::sysinfo::icons;
-use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, font_size, icon_size, spacing};
 
 /// Help view - shows available commands and system status.
 pub struct HelpView {
@@ -58,7 +62,7 @@ impl HelpView {
         let battery_icon = if let Some(ref battery) = upower.battery {
             battery.icon()
         } else {
-            "󰂃" // No battery icon
+            "󰂃"
         };
 
         let battery_text = if let Some(ref battery) = upower.battery {
@@ -69,7 +73,6 @@ impl HelpView {
 
         let text_muted = theme.text.muted;
 
-        // Single compact row with system info
         div()
             .w_full()
             .px(px(spacing::MD))
@@ -160,101 +163,6 @@ impl HelpView {
             .into_any_element()
     }
 
-    fn render_commands(&self, vx: &ViewContext, cx: &App) -> AnyElement {
-        let theme = cx.theme();
-        let query_lower = vx.query.to_lowercase();
-
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-
-        let filtered: Vec<_> = self
-            .entries
-            .iter()
-            .filter(|entry| {
-                if vx.query.is_empty() {
-                    return true;
-                }
-                entry.prefix.to_lowercase().contains(&query_lower)
-                    || entry.name.to_lowercase().contains(&query_lower)
-                    || entry.description.to_lowercase().contains(&query_lower)
-            })
-            .collect();
-
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(4.))
-            .children(filtered.into_iter().enumerate().map(|(i, entry)| {
-                let is_selected = i == vx.selected_index;
-
-                div()
-                    .id(format!("cmd-{}", entry.prefix))
-                    .w_full()
-                    .h(px(LIST_ITEM_HEIGHT))
-                    .px(px(spacing::MD))
-                    .rounded(px(6.))
-                    .cursor_pointer()
-                    .flex()
-                    .items_center()
-                    .when(is_selected, |el| el.bg(rgba(0x3b82f6ff)))
-                    .when(!is_selected, |el| el.hover(|s| s.bg(rgba(0x333333ff))))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(spacing::MD))
-                            .child(
-                                div()
-                                    .w(px(32.))
-                                    .h(px(32.))
-                                    .rounded(px(6.))
-                                    .bg(rgba(0x444444ff))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_size(px(font_size::LG))
-                                    .child(entry.icon.clone()),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(2.))
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(spacing::SM))
-                                            .child(
-                                                div()
-                                                    .px(px(6.))
-                                                    .py(px(2.))
-                                                    .rounded(px(4.))
-                                                    .bg(rgba(0x555555ff))
-                                                    .text_size(px(font_size::SM))
-                                                    .font_weight(FontWeight::MEDIUM)
-                                                    .child(entry.prefix.clone()),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_size(px(font_size::BASE))
-                                                    .text_color(text_primary)
-                                                    .font_weight(FontWeight::MEDIUM)
-                                                    .child(entry.name.clone()),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size::SM))
-                                            .text_color(text_muted)
-                                            .child(entry.description.clone()),
-                                    ),
-                            ),
-                    )
-            }))
-            .into_any_element()
-    }
-
     fn filtered_count(&self, query: &str) -> usize {
         let query_lower = query.to_lowercase();
         self.entries
@@ -268,22 +176,6 @@ impl HelpView {
                     || entry.description.to_lowercase().contains(&query_lower)
             })
             .count()
-    }
-
-    /// Get a filtered entry by index.
-    fn get_filtered_entry(&self, query: &str, index: usize) -> Option<&HelpEntry> {
-        let query_lower = query.to_lowercase();
-        self.entries
-            .iter()
-            .filter(|entry| {
-                if query.is_empty() {
-                    return true;
-                }
-                entry.prefix.to_lowercase().contains(&query_lower)
-                    || entry.name.to_lowercase().contains(&query_lower)
-                    || entry.description.to_lowercase().contains(&query_lower)
-            })
-            .nth(index)
     }
 }
 
@@ -305,82 +197,136 @@ impl LauncherView for HelpView {
     }
 
     fn show_in_help(&self) -> bool {
-        // Don't show help in its own list (it would be redundant)
         false
     }
 
-    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
-        let theme = cx.theme();
-        let count = self.filtered_count(vx.query);
-
-        let text_disabled = theme.text.disabled;
-        let text_muted = theme.text.muted;
-
-        let element = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .gap(px(spacing::LG))
-            .p(px(spacing::SM))
-            // System info header
-            .child(self.render_system_info(vx, cx))
-            // Section title
-            .child(
-                div()
-                    .px(px(spacing::SM))
-                    .text_size(px(font_size::XS))
-                    .text_color(text_disabled)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child("COMMANDS"),
-            )
-            // Commands list
-            .child(self.render_commands(vx, cx))
-            // Usage hint
-            .child(
-                div()
-                    .px(px(spacing::SM))
-                    .pt(px(spacing::SM))
-                    .flex()
-                    .flex_col()
-                    .gap(px(spacing::XS))
-                    .child(
-                        div()
-                            .text_size(px(font_size::XS))
-                            .text_color(text_disabled)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child("USAGE"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .child("• Type a prefix (like @, $, !) to switch to that view"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .child("• Type without prefix to search apps directly"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .child("• Press ? anytime to return to this help"),
-                    ),
-            )
-            .into_any_element();
-
-        (element, count)
+    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
+        self.filtered_count(vx.query)
     }
 
-    fn on_select(&self, index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
-        // When selecting a command, we don't close - the launcher will handle
-        // switching to the selected view's prefix
-        if let Some(_entry) = self.get_filtered_entry(_vx.query, index) {
-            // Return false to not close; the launcher's execute_selected
-            // will handle switching to the view
-        }
+    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
+        let query_lower = vx.query.to_lowercase();
+        let filtered: Vec<_> = self
+            .entries
+            .iter()
+            .filter(|entry| {
+                if vx.query.is_empty() {
+                    return true;
+                }
+                entry.prefix.to_lowercase().contains(&query_lower)
+                    || entry.name.to_lowercase().contains(&query_lower)
+                    || entry.description.to_lowercase().contains(&query_lower)
+            })
+            .collect();
+
+        let Some(entry) = filtered.get(index) else {
+            return div().into_any_element();
+        };
+
+        let theme = cx.theme();
+        let interactive_default = theme.interactive.default;
+
+        ListItem::new(format!("cmd-{}", entry.prefix))
+            .spacing(ListItemSpacing::Sparse)
+            .toggle_state(selected)
+            .start_slot(
+                div()
+                    .w(px(32.))
+                    .h(px(32.))
+                    .rounded(px(6.))
+                    .bg(interactive_default)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(font_size::LG))
+                    .child(entry.icon.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(spacing::SM))
+                            .child(
+                                div()
+                                    .px(px(6.))
+                                    .py(px(2.))
+                                    .rounded(px(4.))
+                                    .bg(interactive_default)
+                                    .child(
+                                        Label::new(entry.prefix.clone())
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted),
+                                    ),
+                            )
+                            .child(Label::new(entry.name.clone()).size(LabelSize::Default)),
+                    )
+                    .child(
+                        Label::new(entry.description.clone())
+                            .size(LabelSize::Small)
+                            .color(Color::Muted),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_header(&self, vx: &ViewContext, cx: &App) -> Option<AnyElement> {
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(spacing::LG))
+                .p(px(spacing::SM))
+                .child(self.render_system_info(vx, cx))
+                .child(
+                    div().px(px(spacing::SM)).child(
+                        Label::new("COMMANDS")
+                            .size(LabelSize::XSmall)
+                            .color(Color::Disabled),
+                    ),
+                )
+                .into_any_element(),
+        )
+    }
+
+    fn render_footer(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+        Some(
+            div()
+                .px(px(spacing::SM))
+                .pt(px(spacing::SM))
+                .pb(px(spacing::SM))
+                .flex()
+                .flex_col()
+                .gap(px(spacing::XS))
+                .child(
+                    Label::new("USAGE")
+                        .size(LabelSize::XSmall)
+                        .color(Color::Disabled),
+                )
+                .child(
+                    Label::new("• Type a prefix (like @, $, !) to switch to that view")
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .child(
+                    Label::new("• Type without prefix to search apps directly")
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .child(
+                    Label::new("• Press ? anytime to return to this help")
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .into_any_element(),
+        )
+    }
+
+    fn on_select(&self, _index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
         false
     }
 }

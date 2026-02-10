@@ -5,24 +5,20 @@
 //! - `!yt query` - YouTube
 //! - `!gh query` - GitHub
 //! - `!nix query` - Nixpkgs
-//! - `!ddg query` - DuckDuckGo
-//! - `! query` - Default provider (DuckDuckGo)
+//! - `!ddg query` - DuckDuckGo (default)
+//! - `! query` - Default provider
+
+use gpui::{AnyElement, App, div, prelude::*, px, rgba};
+use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, font_size, radius, spacing};
 
 use crate::launcher::view::{LauncherView, ViewContext};
-use gpui::{AnyElement, App, FontWeight, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, font_size, radius, spacing};
 
 /// A search provider with its shebang and URL template.
 struct SearchProvider {
-    /// The shebang identifier (e.g., "g", "yt", "gh").
     shebang: &'static str,
-    /// Display name.
     name: &'static str,
-    /// Icon (Nerd font).
     icon: &'static str,
-    /// URL template with `{query}` placeholder.
     url_template: &'static str,
-    /// Whether this is the default provider.
     is_default: bool,
 }
 
@@ -37,21 +33,21 @@ const PROVIDERS: &[SearchProvider] = &[
     SearchProvider {
         shebang: "yt",
         name: "YouTube",
-        icon: "",
+        icon: "",
         url_template: "https://www.youtube.com/results?search_query={query}",
         is_default: false,
     },
     SearchProvider {
         shebang: "gh",
         name: "GitHub",
-        icon: "",
+        icon: "",
         url_template: "https://github.com/search?q={query}",
         is_default: false,
     },
     SearchProvider {
         shebang: "nix",
         name: "Nixpkgs",
-        icon: "",
+        icon: "",
         url_template: "https://search.nixos.org/packages?query={query}",
         is_default: false,
     },
@@ -72,14 +68,14 @@ const PROVIDERS: &[SearchProvider] = &[
     SearchProvider {
         shebang: "rs",
         name: "crates.io",
-        icon: "",
+        icon: "",
         url_template: "https://crates.io/search?q={query}",
         is_default: false,
     },
     SearchProvider {
         shebang: "r",
         name: "Reddit",
-        icon: "",
+        icon: "",
         url_template: "https://www.reddit.com/search?q={query}",
         is_default: false,
     },
@@ -90,37 +86,24 @@ pub struct WebSearchView;
 
 impl WebSearchView {
     /// Parse the query to extract provider and search terms.
-    /// Returns (provider, search_query).
     fn parse_query<'a>(&self, query: &'a str) -> (&'static SearchProvider, &'a str) {
         let query = query.trim();
 
-        // Check for shebang at the start
         for provider in PROVIDERS {
             let prefix = provider.shebang;
             if query.starts_with(prefix) {
                 let rest = &query[prefix.len()..];
-                // Check if followed by space or end of string
                 if rest.is_empty() || rest.starts_with(' ') {
                     return (provider, rest.trim());
                 }
             }
         }
 
-        // No shebang found, use default provider
         let default = PROVIDERS
             .iter()
             .find(|p| p.is_default)
             .unwrap_or(&PROVIDERS[0]);
         (default, query)
-    }
-
-    /// Get the default provider.
-    #[allow(dead_code)]
-    fn default_provider(&self) -> &'static SearchProvider {
-        PROVIDERS
-            .iter()
-            .find(|p| p.is_default)
-            .unwrap_or(&PROVIDERS[0])
     }
 }
 
@@ -141,205 +124,207 @@ impl LauncherView for WebSearchView {
         "Search the web (!g, !yt, !gh, !nix, !ddg)"
     }
 
-    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
+    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
+        let (_, search_query) = self.parse_query(vx.query);
+        if search_query.is_empty() { 0 } else { 1 }
+    }
+
+    fn render_item(
+        &self,
+        _index: usize,
+        _selected: bool,
+        _vx: &ViewContext,
+        _cx: &App,
+    ) -> AnyElement {
+        div().into_any_element()
+    }
+
+    fn render_content(&self, vx: &ViewContext, cx: &App) -> Option<AnyElement> {
         let theme = cx.theme();
         let (provider, search_query) = self.parse_query(vx.query);
         let has_query = !search_query.is_empty();
 
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-        let text_disabled = theme.text.disabled;
-        let text_placeholder = theme.text.placeholder;
         let bg_secondary = theme.bg.secondary;
         let interactive_default = theme.interactive.default;
+        let accent_selection = theme.accent.selection;
+        let interactive_hover = theme.interactive.hover;
 
-        let element = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .gap(px(spacing::MD))
-            .p(px(spacing::MD))
-            // Search preview
-            .child(
-                div()
-                    .w_full()
-                    .p(px(spacing::MD))
-                    .bg(bg_secondary)
-                    .rounded(px(radius::MD))
-                    .flex()
-                    .flex_col()
-                    .gap(px(spacing::SM))
-                    // Provider header with search action
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
+        Some(
+            div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .gap(px(spacing::MD))
+                .p(px(spacing::MD))
+                // Search preview
+                .child(
+                    div()
+                        .w_full()
+                        .p(px(spacing::MD))
+                        .bg(bg_secondary)
+                        .rounded(px(radius::MD))
+                        .flex()
+                        .flex_col()
+                        .gap(px(spacing::SM))
+                        // Provider header with search action
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(spacing::SM))
+                                        .child(
+                                            Label::new(provider.icon)
+                                                .size(LabelSize::Large)
+                                                .color(Color::Default),
+                                        )
+                                        .child(Label::new(provider.name).size(LabelSize::Default))
+                                        .child(
+                                            div()
+                                                .px(px(6.))
+                                                .py(px(2.))
+                                                .rounded(px(4.))
+                                                .bg(interactive_default)
+                                                .child(
+                                                    Label::new(format!("!{}", provider.shebang))
+                                                        .size(LabelSize::XSmall)
+                                                        .color(Color::Muted),
+                                                ),
+                                        ),
+                                )
+                                // Search hint
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(spacing::SM))
+                                        .px(px(spacing::SM))
+                                        .py(px(4.))
+                                        .rounded(px(radius::SM))
+                                        .when(has_query && vx.selected_index == 0, move |el| {
+                                            el.bg(accent_selection)
+                                        })
+                                        .when(has_query && vx.selected_index != 0, move |el| {
+                                            el.bg(interactive_hover)
+                                        })
+                                        .when(!has_query, |el| el.bg(rgba(0x00000033)))
+                                        .child(if has_query {
+                                            Label::new("Search").size(LabelSize::Small)
+                                        } else {
+                                            Label::new("Search")
+                                                .size(LabelSize::Small)
+                                                .color(Color::Disabled)
+                                        })
+                                        .child(
+                                            div()
+                                                .px(px(4.))
+                                                .py(px(2.))
+                                                .rounded(px(3.))
+                                                .bg(rgba(0x00000044))
+                                                .child(if has_query {
+                                                    Label::new("Enter")
+                                                        .size(LabelSize::XSmall)
+                                                        .color(Color::Muted)
+                                                } else {
+                                                    Label::new("Enter")
+                                                        .size(LabelSize::XSmall)
+                                                        .color(Color::Disabled)
+                                                }),
+                                        ),
+                                ),
+                        )
+                        // Search query display
+                        .child(
+                            div()
+                                .w_full()
+                                .p(px(spacing::SM))
+                                .bg(rgba(0x00000066))
+                                .rounded(px(radius::SM))
+                                .text_size(px(font_size::BASE))
+                                .child(if has_query {
+                                    Label::new(format!("\"{}\"", search_query))
+                                        .color(Color::Default)
+                                } else {
+                                    Label::new("Type your search query...")
+                                        .color(Color::Placeholder)
+                                }),
+                        ),
+                )
+                // Provider list
+                .child(
+                    div()
+                        .w_full()
+                        .pt(px(spacing::SM))
+                        .flex()
+                        .flex_col()
+                        .gap(px(spacing::XS))
+                        .child(
+                            Label::new("AVAILABLE PROVIDERS")
+                                .size(LabelSize::XSmall)
+                                .color(Color::Disabled),
+                        )
+                        .child(div().flex().flex_wrap().gap(px(spacing::SM)).children(
+                            PROVIDERS.iter().map(|p| {
+                                let is_active = p.shebang == provider.shebang;
                                 div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(spacing::SM))
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size::XL))
-                                            .text_color(text_primary)
-                                            .child(provider.icon),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size::BASE))
-                                            .text_color(text_primary)
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .child(provider.name),
-                                    )
-                                    .child(
-                                        div()
-                                            .px(px(6.))
-                                            .py(px(2.))
-                                            .rounded(px(4.))
-                                            .bg(rgba(0x555555ff))
-                                            .text_size(px(font_size::XS))
-                                            .child(format!("!{}", provider.shebang)),
-                                    ),
-                            )
-                            // Search hint (always visible, changes appearance when query exists)
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(spacing::SM))
                                     .px(px(spacing::SM))
                                     .py(px(4.))
                                     .rounded(px(radius::SM))
-                                    .when(has_query && vx.selected_index == 0, |el| {
-                                        el.bg(rgba(0x3b82f6ff))
-                                    })
-                                    .when(has_query && vx.selected_index != 0, move |el| {
-                                        el.bg(interactive_default)
-                                    })
-                                    .when(!has_query, |el| el.bg(rgba(0x00000033)))
+                                    .when(is_active, move |el| el.bg(accent_selection))
+                                    .when(!is_active, move |el| el.bg(interactive_default))
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(4.))
                                     .child(
-                                        div()
-                                            .text_size(px(font_size::SM))
-                                            .text_color(if has_query {
-                                                text_primary
-                                            } else {
-                                                text_disabled
-                                            })
-                                            .child("Search"),
+                                        Label::new(p.icon)
+                                            .size(LabelSize::Small)
+                                            .color(Color::Default),
                                     )
                                     .child(
-                                        div()
-                                            .px(px(4.))
-                                            .py(px(2.))
-                                            .rounded(px(3.))
-                                            .bg(rgba(0x00000044))
-                                            .text_size(px(font_size::XS))
-                                            .text_color(if has_query {
-                                                text_muted
-                                            } else {
-                                                text_disabled
-                                            })
-                                            .child("Enter"),
-                                    ),
-                            ),
-                    )
-                    // Search query display
-                    .child(
-                        div()
-                            .w_full()
-                            .p(px(spacing::SM))
-                            .bg(rgba(0x00000066))
-                            .rounded(px(radius::SM))
-                            .text_size(px(font_size::BASE))
-                            .text_color(if has_query {
-                                text_primary
-                            } else {
-                                text_placeholder
-                            })
-                            .child(if has_query {
-                                format!("\"{}\"", search_query)
-                            } else {
-                                "Type your search query...".to_string()
+                                        Label::new(format!("!{}", p.shebang))
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted),
+                                    )
                             }),
-                    ),
-            )
-            // Provider list (when no query or showing alternatives)
-            .child(
-                div()
-                    .w_full()
-                    .pt(px(spacing::SM))
-                    .flex()
-                    .flex_col()
-                    .gap(px(spacing::XS))
-                    .child(
-                        div()
-                            .text_size(px(font_size::XS))
-                            .text_color(text_disabled)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child("AVAILABLE PROVIDERS"),
-                    )
-                    .child(div().flex().flex_wrap().gap(px(spacing::SM)).children(
-                        PROVIDERS.iter().map(|p| {
-                            let is_active = p.shebang == provider.shebang;
-                            div()
-                                .px(px(spacing::SM))
-                                .py(px(4.))
-                                .rounded(px(radius::SM))
-                                .when(is_active, |el| el.bg(rgba(0x3b82f6ff)))
-                                .when(!is_active, move |el| el.bg(interactive_default))
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .child(div().text_size(px(font_size::SM)).child(p.icon))
-                                .child(
-                                    div()
-                                        .text_size(px(font_size::SM))
-                                        .child(format!("!{}", p.shebang)),
-                                )
-                        }),
-                    )),
-            )
-            // Help text
-            .child(
-                div()
-                    .w_full()
-                    .pt(px(spacing::MD))
-                    .flex()
-                    .flex_col()
-                    .gap(px(spacing::XS))
-                    .child(
-                        div()
-                            .text_size(px(font_size::XS))
-                            .text_color(text_disabled)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child("USAGE"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .child("• Type !<shebang> <query> to search specific provider"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .child("• Example: !g rust programming, !yt music"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .child("• Just ! with query uses the default provider (DuckDuckGo)"),
-                    ),
-            )
-            .into_any_element();
-
-        // 1 selectable item when there's a query, 0 otherwise
-        let count = if has_query { 1 } else { 0 };
-        (element, count)
+                        )),
+                )
+                // Help text
+                .child(
+                    div()
+                        .w_full()
+                        .pt(px(spacing::MD))
+                        .flex()
+                        .flex_col()
+                        .gap(px(spacing::XS))
+                        .child(
+                            Label::new("USAGE")
+                                .size(LabelSize::XSmall)
+                                .color(Color::Disabled),
+                        )
+                        .child(
+                            Label::new("• Type !<shebang> <query> to search specific provider")
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        )
+                        .child(
+                            Label::new("• Example: !g rust programming, !yt music")
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        )
+                        .child(
+                            Label::new(
+                                "• Just ! with query uses the default provider (DuckDuckGo)",
+                            )
+                            .size(LabelSize::Small)
+                            .color(Color::Muted),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 
     fn on_select(&self, _index: usize, vx: &ViewContext, _cx: &mut App) -> bool {
@@ -350,7 +335,7 @@ impl LauncherView for WebSearchView {
 
         let url = provider
             .url_template
-            .replace("{query}", &urlencoding::encode(search_query));
+            .replace("{query}", &url_encode(search_query));
         open_url(&url);
         true // Close launcher
     }
@@ -365,31 +350,25 @@ impl LauncherView for WebSearchView {
     }
 }
 
-/// Open a URL in the default browser.
+fn url_encode(s: &str) -> String {
+    let mut encoded = String::new();
+    for c in s.chars() {
+        match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => encoded.push(c),
+            ' ' => encoded.push_str("%20"),
+            _ => {
+                for byte in c.to_string().as_bytes() {
+                    encoded.push_str(&format!("%{:02X}", byte));
+                }
+            }
+        }
+    }
+    encoded
+}
+
 fn open_url(url: &str) {
     let url = url.to_string();
     std::thread::spawn(move || {
         let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     });
-}
-
-/// URL encoding helper module.
-mod urlencoding {
-    pub fn encode(s: &str) -> String {
-        let mut encoded = String::new();
-        for c in s.chars() {
-            match c {
-                'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => {
-                    encoded.push(c);
-                }
-                ' ' => encoded.push_str("%20"),
-                _ => {
-                    for byte in c.to_string().as_bytes() {
-                        encoded.push_str(&format!("%{:02X}", byte));
-                    }
-                }
-            }
-        }
-        encoded
-    }
 }

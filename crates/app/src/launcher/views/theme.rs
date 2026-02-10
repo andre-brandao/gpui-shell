@@ -36,45 +36,44 @@ impl LauncherView for ThemeView {
         "Browse and apply themes"
     }
 
-    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
+    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
+        let stylix_offset = if stylix_scheme().is_some() { 1 } else { 0 };
+        1 + stylix_offset + all_schemes(vx.query).len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
         let theme = cx.theme();
-        let stylix = stylix_scheme();
-        let schemes = all_schemes(vx.query);
-
-        // Layout: [fetch] [stylix?] [schemes...]
-        let has_stylix = stylix.is_some();
-        let stylix_offset = if has_stylix { 1 } else { 0 };
-        let count = 1 + stylix_offset + schemes.len();
-
         let current_accent = theme.accent.primary;
         let current_bg = theme.bg.primary;
 
-        let element = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .gap(px(spacing::SM))
-            .p(px(spacing::SM))
-            // Fetch action card
-            .child(render_fetch_card(vx.selected_index == 0, theme))
-            // Stylix card (if available)
-            .when_some(stylix, |el, scheme| {
-                let is_selected = vx.selected_index == 1;
-                let is_active = colors_match(scheme.theme.accent.primary, current_accent)
-                    && colors_match(scheme.theme.bg.primary, current_bg);
-                el.child(render_stylix_card(&scheme, is_selected, is_active, theme))
-            })
-            // Theme cards
-            .children(schemes.into_iter().enumerate().map(|(i, scheme)| {
-                let list_index = i + 1 + stylix_offset;
-                let is_selected = list_index == vx.selected_index;
-                let is_active = colors_match(scheme.theme.accent.primary, current_accent)
-                    && colors_match(scheme.theme.bg.primary, current_bg);
-                render_theme_card(&scheme, is_selected, is_active, theme)
-            }))
-            .into_any_element();
+        // Index 0 = fetch card
+        if index == 0 {
+            return render_fetch_card(selected, theme);
+        }
 
-        (element, count)
+        let stylix = stylix_scheme();
+        let has_stylix = stylix.is_some();
+        let stylix_offset = if has_stylix { 1 } else { 0 };
+
+        // Index 1 = stylix card (if present)
+        if index == 1 {
+            if let Some(scheme) = stylix {
+                let is_active = colors_match(scheme.theme.accent.primary, current_accent)
+                    && colors_match(scheme.theme.bg.primary, current_bg);
+                return render_stylix_card(&scheme, selected, is_active, theme);
+            }
+        }
+
+        // Remaining indices = scheme cards
+        let schemes = all_schemes(vx.query);
+        let scheme_index = index - 1 - stylix_offset;
+        if let Some(scheme) = schemes.get(scheme_index) {
+            let is_active = colors_match(scheme.theme.accent.primary, current_accent)
+                && colors_match(scheme.theme.bg.primary, current_bg);
+            render_theme_card(scheme, selected, is_active, theme)
+        } else {
+            div().into_any_element()
+        }
     }
 
     fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {

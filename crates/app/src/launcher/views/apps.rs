@@ -1,7 +1,9 @@
 //! Applications view for searching and launching desktop applications.
 
-use crate::launcher::view::{LauncherView, ViewContext, render_list_item};
 use gpui::{AnyElement, App, div, prelude::*, px};
+use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
+
+use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Applications view - searches and launches desktop applications.
 pub struct AppsView;
@@ -27,33 +29,55 @@ impl LauncherView for AppsView {
         true
     }
 
-    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
+    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
+        let query_lower = vx.query.to_lowercase();
+        vx.services.applications.search(&query_lower).len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
         let query_lower = vx.query.to_lowercase();
         let apps = vx.services.applications.search(&query_lower);
-        let count = apps.len();
+        let Some(app) = apps.get(index) else {
+            return div().into_any_element();
+        };
 
-        let element = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .gap(px(4.))
-            .children(apps.into_iter().enumerate().map(|(i, app)| {
-                let exec = app.exec.clone();
-                render_list_item(
-                    format!("app-{}", app.name),
-                    "",
-                    &app.name,
-                    app.description.as_deref(),
-                    i == vx.selected_index,
-                    move |_cx| {
-                        launch_app(&exec);
-                    },
-                    cx,
-                )
-            }))
-            .into_any_element();
+        let theme = cx.theme();
+        let exec = app.exec.clone();
+        let interactive_default = theme.interactive.default;
 
-        (element, count)
+        ListItem::new(format!("app-{}", app.name))
+            .spacing(ListItemSpacing::Sparse)
+            .toggle_state(selected)
+            .start_slot(
+                div()
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(6.))
+                    .bg(interactive_default)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(14.))
+                    .child(""),
+            )
+            .on_click(move |_, _, _cx| {
+                launch_app(&exec);
+            })
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(1.))
+                    .child(Label::new(app.name.clone()).size(LabelSize::Default))
+                    .when_some(app.description.as_ref(), |el, desc| {
+                        el.child(
+                            Label::new(desc.clone())
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        )
+                    }),
+            )
+            .into_any_element()
     }
 
     fn on_select(&self, index: usize, vx: &ViewContext, _cx: &mut App) -> bool {

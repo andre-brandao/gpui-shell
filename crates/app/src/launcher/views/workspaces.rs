@@ -1,11 +1,37 @@
 //! Workspaces view for switching between compositor workspaces.
 
-use crate::launcher::view::{LauncherView, ViewContext, render_list_item};
 use gpui::{AnyElement, App, div, prelude::*, px};
 use services::CompositorCommand;
+use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
+
+use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Workspaces view - displays and switches between workspaces.
 pub struct WorkspacesView;
+
+impl WorkspacesView {
+    fn filtered_workspaces(&self, vx: &ViewContext) -> Vec<services::compositor::Workspace> {
+        let compositor = vx.services.compositor.get();
+        let query_lower = vx.query.to_lowercase();
+        compositor
+            .workspaces
+            .into_iter()
+            .filter(|ws| !ws.is_special)
+            .filter(|ws| {
+                if vx.query.is_empty() {
+                    return true;
+                }
+                let title = if ws.name.is_empty() {
+                    format!("Workspace {}", ws.id)
+                } else {
+                    ws.name.clone()
+                };
+                title.to_lowercase().contains(&query_lower)
+                    || ws.monitor.to_lowercase().contains(&query_lower)
+            })
+            .collect()
+    }
+}
 
 impl LauncherView for WorkspacesView {
     fn prefix(&self) -> &'static str {
@@ -24,92 +50,68 @@ impl LauncherView for WorkspacesView {
         "Switch between workspaces"
     }
 
-    fn render(&self, vx: &ViewContext, cx: &App) -> (AnyElement, usize) {
-        let compositor = vx.services.compositor.get();
-        let query_lower = vx.query.to_lowercase();
+    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
+        self.filtered_workspaces(vx).len()
+    }
 
-        let filtered: Vec<_> = compositor
-            .workspaces
-            .iter()
-            .filter(|ws| !ws.is_special)
-            .filter(|ws| {
-                if vx.query.is_empty() {
-                    return true;
-                }
-                let title = if ws.name.is_empty() {
-                    format!("Workspace {}", ws.id)
-                } else {
-                    ws.name.clone()
-                };
-                title.to_lowercase().contains(&query_lower)
-                    || ws.monitor.to_lowercase().contains(&query_lower)
+    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
+        let filtered = self.filtered_workspaces(vx);
+        let Some(ws) = filtered.get(index) else {
+            return div().into_any_element();
+        };
+
+        let theme = cx.theme();
+        let title = if ws.name.is_empty() {
+            format!("Workspace {}", ws.id)
+        } else {
+            ws.name.clone()
+        };
+        let subtitle = format!("{} windows on {}", ws.windows, ws.monitor);
+        let ws_id = ws.id;
+        let compositor_clone = vx.services.compositor.clone();
+        let interactive_default = theme.interactive.default;
+
+        ListItem::new(format!("ws-{}", ws.id))
+            .spacing(ListItemSpacing::Sparse)
+            .toggle_state(selected)
+            .start_slot(
+                div()
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(6.))
+                    .bg(interactive_default)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(14.))
+                    .child(""),
+            )
+            .on_click(move |_, _, _cx| {
+                let _ = compositor_clone.dispatch(CompositorCommand::FocusWorkspace(ws_id));
             })
-            .collect();
-
-        let count = filtered.len();
-        let compositor_sub = vx.services.compositor.clone();
-
-        let element = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .gap(px(4.))
-            .children(filtered.into_iter().enumerate().map(|(i, ws)| {
-                let title = if ws.name.is_empty() {
-                    format!("Workspace {}", ws.id)
-                } else {
-                    ws.name.clone()
-                };
-                let subtitle = format!("{} windows on {}", ws.windows, ws.monitor);
-                let ws_id = ws.id;
-                let compositor_clone = compositor_sub.clone();
-
-                render_list_item(
-                    format!("ws-{}", ws.id),
-                    "",
-                    &title,
-                    Some(&subtitle),
-                    i == vx.selected_index,
-                    move |_cx| {
-                        let _ = compositor_clone.dispatch(CompositorCommand::FocusWorkspace(ws_id));
-                    },
-                    cx,
-                )
-            }))
-            .into_any_element();
-
-        (element, count)
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(1.))
+                    .child(Label::new(title).size(LabelSize::Default))
+                    .child(
+                        Label::new(subtitle)
+                            .size(LabelSize::Small)
+                            .color(Color::Muted),
+                    ),
+            )
+            .into_any_element()
     }
 
     fn on_select(&self, index: usize, vx: &ViewContext, _cx: &mut App) -> bool {
-        let compositor = vx.services.compositor.get();
-        let query_lower = vx.query.to_lowercase();
-
-        let filtered: Vec<_> = compositor
-            .workspaces
-            .iter()
-            .filter(|ws| !ws.is_special)
-            .filter(|ws| {
-                if vx.query.is_empty() {
-                    return true;
-                }
-                let title = if ws.name.is_empty() {
-                    format!("Workspace {}", ws.id)
-                } else {
-                    ws.name.clone()
-                };
-                title.to_lowercase().contains(&query_lower)
-                    || ws.monitor.to_lowercase().contains(&query_lower)
-            })
-            .collect();
-
+        let filtered = self.filtered_workspaces(vx);
         if let Some(ws) = filtered.get(index) {
-            let ws_id = ws.id;
             let _ = vx
                 .services
                 .compositor
-                .dispatch(CompositorCommand::FocusWorkspace(ws_id));
-            true // Close launcher
+                .dispatch(CompositorCommand::FocusWorkspace(ws.id));
+            true
         } else {
             false
         }
