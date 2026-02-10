@@ -1,23 +1,36 @@
 //! Theme browser view for the launcher.
 //!
 //! Lists available theme schemes with color preview swatches.
-//! Selecting a theme applies it globally. Includes a "Fetch themes"
-//! action to download Base16 schemes from a remote repository.
+//! Supports multiple GitHub theme providers with download/update actions.
+//! Stylix system theme and provider actions are shown in the header.
 
 use std::sync::Mutex;
 
 use crate::launcher::view::{LauncherView, ViewContext};
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
-use services::{ThemeRepository, load_stylix_scheme};
+use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
 use ui::{
     ActiveTheme, Base16Colors, Theme, ThemeScheme, builtin_schemes, font_size, radius, spacing,
 };
+
+/// Maximum number of theme cards to render at once.
+const MAX_VISIBLE_THEMES: usize = 50;
 
 /// Cached scheme data. `None` means not yet loaded; populated on first access.
 static CACHED_SCHEMES: Mutex<Option<Vec<ThemeScheme>>> = Mutex::new(None);
 
 /// Launcher view for browsing and applying themes.
 pub struct ThemeView;
+
+impl ThemeView {
+    /// Get filtered and capped schemes for the current query.
+    fn visible_schemes(query: &str) -> Vec<ThemeScheme> {
+        all_schemes(query)
+            .into_iter()
+            .take(MAX_VISIBLE_THEMES)
+            .collect()
+    }
+}
 
 impl LauncherView for ThemeView {
     fn prefix(&self) -> &'static str {
@@ -37,37 +50,43 @@ impl LauncherView for ThemeView {
     }
 
     fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        let stylix_offset = if stylix_scheme().is_some() { 1 } else { 0 };
-        1 + stylix_offset + all_schemes(vx.query).len()
+        Self::visible_schemes(vx.query).len()
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
+    fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
         let theme = cx.theme();
         let current_accent = theme.accent.primary;
         let current_bg = theme.bg.primary;
 
-        // Index 0 = fetch card
-        if index == 0 {
-            return render_fetch_card(selected, theme);
+        let mut header = div()
+            .flex()
+            .flex_col()
+            .gap(px(spacing::SM))
+            .p(px(spacing::SM));
+
+        // Stylix card (if available)
+        if let Some(stylix) = stylix_scheme() {
+            let is_active = colors_match(stylix.theme.accent.primary, current_accent)
+                && colors_match(stylix.theme.bg.primary, current_bg);
+            header = header.child(render_stylix_card(&stylix, is_active, theme));
         }
 
-        let stylix = stylix_scheme();
-        let has_stylix = stylix.is_some();
-        let stylix_offset = if has_stylix { 1 } else { 0 };
-
-        // Index 1 = stylix card (if present)
-        if index == 1 {
-            if let Some(scheme) = stylix {
-                let is_active = colors_match(scheme.theme.accent.primary, current_accent)
-                    && colors_match(scheme.theme.bg.primary, current_bg);
-                return render_stylix_card(&scheme, selected, is_active, theme);
-            }
+        // Provider cards
+        for provider in THEME_PROVIDERS {
+            let repo = ThemeRepository::new(provider);
+            header = header.child(render_provider_card(provider, repo.is_cached(), theme));
         }
 
-        // Remaining indices = scheme cards
-        let schemes = all_schemes(vx.query);
-        let scheme_index = index - 1 - stylix_offset;
-        if let Some(scheme) = schemes.get(scheme_index) {
+        Some(header.into_any_element())
+    }
+
+    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
+        let theme = cx.theme();
+        let schemes = Self::visible_schemes(vx.query);
+        let current_accent = theme.accent.primary;
+        let current_bg = theme.bg.primary;
+
+        if let Some(scheme) = schemes.get(index) {
             let is_active = colors_match(scheme.theme.accent.primary, current_accent)
                 && colors_match(scheme.theme.bg.primary, current_bg);
             render_theme_card(scheme, selected, is_active, theme)
@@ -77,46 +96,22 @@ impl LauncherView for ThemeView {
     }
 
     fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        if index == 0 {
-            // Fetch themes action
-            let repo = ThemeRepository::new(None, None);
-            match repo.fetch_and_cache() {
-                Ok(schemes) => {
-                    tracing::info!("Fetched {} Base16 schemes", schemes.len());
-                    invalidate_schemes_cache();
-                }
-                Err(e) => {
-                    tracing::error!("Failed to fetch themes: {}", e);
-                }
-            }
-            return false;
-        }
-
-        let stylix = stylix_scheme();
-        let has_stylix = stylix.is_some();
-        let stylix_offset = if has_stylix { 1 } else { 0 };
-
-        if has_stylix && index == 1 {
-            if let Some(scheme) = stylix {
-                Theme::set(scheme.theme, cx);
-            }
-            return false;
-        }
-
-        let schemes = all_schemes(vx.query);
-        let theme_index = index - 1 - stylix_offset;
-        if let Some(scheme) = schemes.get(theme_index) {
+        let schemes = Self::visible_schemes(vx.query);
+        if let Some(scheme) = schemes.get(index) {
             Theme::set(scheme.theme.clone(), cx);
         }
         false
     }
 
     fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-        vec![("Apply/Fetch", "Enter"), ("Close", "Esc")]
+        vec![("Apply", "Enter"), ("Close", "Esc")]
     }
 }
 
-/// Load the Stylix system theme, if available.
+// =============================================================================
+// Stylix
+// =============================================================================
+
 fn stylix_scheme() -> Option<ThemeScheme> {
     let b16 = load_stylix_scheme()?;
     let p = &b16.palette;
@@ -133,39 +128,44 @@ fn stylix_scheme() -> Option<ThemeScheme> {
     })
 }
 
-/// Build the full scheme list from builtins + Base16 repo.
+// =============================================================================
+// Scheme Loading
+// =============================================================================
+
 fn build_schemes() -> Vec<ThemeScheme> {
     let mut schemes = builtin_schemes();
 
-    let repo = ThemeRepository::new(None, None);
-    let base16 = repo.load_cached();
-    for b16 in base16 {
-        let p = &b16.palette;
-        let colors = match Base16Colors::from_hex(&[
-            &p.base00, &p.base01, &p.base02, &p.base03, &p.base04, &p.base05, &p.base06, &p.base07,
-            &p.base08, &p.base09, &p.base0a, &p.base0b, &p.base0c, &p.base0d, &p.base0e, &p.base0f,
-        ]) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
+    for provider in THEME_PROVIDERS {
+        let repo = ThemeRepository::new(provider);
+        for b16 in repo.load_cached() {
+            let p = &b16.palette;
+            let colors = match Base16Colors::from_hex(&[
+                &p.base00, &p.base01, &p.base02, &p.base03, &p.base04, &p.base05, &p.base06,
+                &p.base07, &p.base08, &p.base09, &p.base0a, &p.base0b, &p.base0c, &p.base0d,
+                &p.base0e, &p.base0f,
+            ]) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
 
-        schemes.push(ThemeScheme {
-            name: Box::leak(b16.name.into_boxed_str()),
-            description: Box::leak(format!("Base16 — {}", b16.author).into_boxed_str()),
-            theme: colors.to_theme(),
-        });
+            schemes.push(ThemeScheme {
+                name: Box::leak(b16.name.into_boxed_str()),
+                description: Box::leak(
+                    format!("{} — {}", provider.name, b16.author).into_boxed_str(),
+                ),
+                theme: colors.to_theme(),
+            });
+        }
     }
 
     schemes
 }
 
-/// Invalidate the cached scheme list so it reloads from disk on next access.
 fn invalidate_schemes_cache() {
     let mut cache = CACHED_SCHEMES.lock().unwrap();
     *cache = None;
 }
 
-/// Get schemes filtered by query, loading from disk only on first call or after invalidation.
 fn all_schemes(query: &str) -> Vec<ThemeScheme> {
     let mut cache = CACHED_SCHEMES.lock().unwrap();
     let schemes = cache.get_or_insert_with(build_schemes);
@@ -185,136 +185,73 @@ fn all_schemes(query: &str) -> Vec<ThemeScheme> {
         .collect()
 }
 
-/// Compare two Hsla colors with tolerance for floating-point differences.
+// =============================================================================
+// Rendering
+// =============================================================================
+
 fn colors_match(a: gpui::Hsla, b: gpui::Hsla) -> bool {
     (a.h - b.h).abs() < 0.01 && (a.s - b.s).abs() < 0.01 && (a.l - b.l).abs() < 0.01
 }
 
-fn render_fetch_card(is_selected: bool, theme: &Theme) -> AnyElement {
-    let accent_selection = theme.accent.selection;
-    let interactive_hover = theme.interactive.hover;
-    let text_primary = theme.text.primary;
-    let text_disabled = theme.text.disabled;
-    let border_default = theme.border.default;
-    let accent_primary = theme.accent.primary;
-
-    div()
-        .id("theme-fetch")
-        .w_full()
-        .p(px(spacing::MD))
-        .rounded(px(radius::LG))
-        .border_1()
-        .cursor_pointer()
-        .when(is_selected, move |el| {
-            el.bg(accent_selection).border_color(accent_primary)
-        })
-        .when(!is_selected, move |el| {
-            el.border_color(border_default)
-                .hover(move |s| s.bg(interactive_hover))
-        })
-        .flex()
-        .items_center()
-        .gap(px(spacing::SM))
-        .child(
-            div()
-                .text_size(px(font_size::LG))
-                .text_color(accent_primary)
-                .child("󰇚"),
-        )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(
-                    div()
-                        .text_size(px(font_size::MD))
-                        .text_color(text_primary)
-                        .font_weight(FontWeight::MEDIUM)
-                        .child("Fetch themes from GitHub"),
-                )
-                .child(
-                    div()
-                        .text_size(px(font_size::SM))
-                        .text_color(text_disabled)
-                        .child("Download Base16 schemes from tinted-theming/schemes"),
-                ),
-        )
-        .into_any_element()
-}
-
-fn render_stylix_card(
-    scheme: &ThemeScheme,
-    is_selected: bool,
-    is_active: bool,
-    theme: &Theme,
-) -> AnyElement {
-    let accent_selection = theme.accent.selection;
-    let interactive_hover = theme.interactive.hover;
+fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> AnyElement {
+    let bg_secondary = theme.bg.secondary;
     let bg_primary = theme.bg.primary;
     let text_primary = theme.text.primary;
     let text_disabled = theme.text.disabled;
-    let border_default = theme.border.default;
     let accent_primary = theme.accent.primary;
-
     let preview_colors = scheme.preview_colors();
-    let name = scheme.name;
-    let description = scheme.description;
+    let stylix_theme = scheme.theme.clone();
 
     div()
-        .id("theme-stylix")
+        .id("stylix-card")
         .w_full()
         .p(px(spacing::MD))
         .rounded(px(radius::LG))
-        .border_1()
+        .bg(bg_secondary)
         .cursor_pointer()
-        .when(is_selected, move |el| {
-            el.bg(accent_selection).border_color(accent_primary)
-        })
-        .when(!is_selected, move |el| {
-            el.border_color(border_default)
-                .hover(move |s| s.bg(interactive_hover))
+        .on_click(move |_, _, cx| {
+            Theme::set(stylix_theme.clone(), cx);
         })
         .flex()
-        .flex_col()
-        .gap(px(spacing::SM))
+        .items_center()
+        .justify_between()
         .child(
             div()
                 .flex()
                 .items_center()
-                .justify_between()
+                .gap(px(spacing::SM))
+                .child(
+                    div()
+                        .text_size(px(font_size::LG))
+                        .text_color(accent_primary)
+                        .child(""),
+                )
                 .child(
                     div()
                         .flex()
-                        .items_center()
-                        .gap(px(spacing::SM))
-                        // NixOS snowflake icon
+                        .flex_col()
+                        .gap(px(1.))
                         .child(
                             div()
-                                .text_size(px(font_size::LG))
-                                .text_color(accent_primary)
-                                .child(""),
+                                .text_size(px(font_size::MD))
+                                .text_color(text_primary)
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(scheme.name),
                         )
                         .child(
                             div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(2.))
-                                .child(
-                                    div()
-                                        .text_size(px(font_size::MD))
-                                        .text_color(text_primary)
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(name),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(font_size::SM))
-                                        .text_color(text_disabled)
-                                        .child(description),
-                                ),
+                                .text_size(px(font_size::XS))
+                                .text_color(text_disabled)
+                                .child(scheme.description),
                         ),
-                )
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(spacing::SM))
+                .child(render_color_strip(&preview_colors))
                 .when(is_active, move |el| {
                     el.child(
                         div()
@@ -329,7 +266,81 @@ fn render_stylix_card(
                     )
                 }),
         )
-        .child(render_color_strip(&preview_colors))
+        .into_any_element()
+}
+
+fn render_provider_card(
+    provider: &'static ThemeProvider,
+    is_downloaded: bool,
+    theme: &Theme,
+) -> AnyElement {
+    let bg_secondary = theme.bg.secondary;
+    let text_primary = theme.text.primary;
+    let text_disabled = theme.text.disabled;
+    let accent_primary = theme.accent.primary;
+    let interactive_hover = theme.interactive.hover;
+
+    let (icon, action) = if is_downloaded {
+        ("󰚰", format!("Update {}", provider.name))
+    } else {
+        ("󰇚", format!("Download {}", provider.name))
+    };
+
+    let provider_id = provider.id;
+
+    div()
+        .id(format!("provider-{}", provider_id))
+        .w_full()
+        .px(px(spacing::MD))
+        .py(px(spacing::SM))
+        .rounded(px(radius::LG))
+        .bg(bg_secondary)
+        .cursor_pointer()
+        .hover(move |s| s.bg(interactive_hover))
+        .on_click(move |_, _, _cx| {
+            // Find the provider and fetch in a background thread
+            let provider = THEME_PROVIDERS.iter().find(|p| p.id == provider_id);
+            if let Some(provider) = provider {
+                let repo = ThemeRepository::new(provider);
+                match repo.fetch_and_cache() {
+                    Ok(schemes) => {
+                        tracing::info!("Fetched {} schemes from {}", schemes.len(), provider.name);
+                        invalidate_schemes_cache();
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to fetch from {}: {}", provider.name, e);
+                    }
+                }
+            }
+        })
+        .flex()
+        .items_center()
+        .gap(px(spacing::SM))
+        .child(
+            div()
+                .text_size(px(font_size::LG))
+                .text_color(accent_primary)
+                .child(icon),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(1.))
+                .child(
+                    div()
+                        .text_size(px(font_size::SM))
+                        .text_color(text_primary)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(action),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size::XS))
+                        .text_color(text_disabled)
+                        .child(provider.repo),
+                ),
+        )
         .into_any_element()
 }
 
@@ -354,7 +365,8 @@ fn render_theme_card(
     div()
         .id(format!("theme-{}", name))
         .w_full()
-        .p(px(spacing::MD))
+        .px(px(spacing::MD))
+        .py(px(spacing::SM))
         .rounded(px(radius::LG))
         .border_1()
         .cursor_pointer()
@@ -366,33 +378,33 @@ fn render_theme_card(
                 .hover(move |s| s.bg(interactive_hover))
         })
         .flex()
-        .flex_col()
-        .gap(px(spacing::SM))
-        // Header row: name + active badge
+        .items_center()
+        .justify_between()
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(1.))
+                .child(
+                    div()
+                        .text_size(px(font_size::SM))
+                        .text_color(text_primary)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(name),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size::XS))
+                        .text_color(text_disabled)
+                        .child(description),
+                ),
+        )
         .child(
             div()
                 .flex()
                 .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .child(
-                            div()
-                                .text_size(px(font_size::MD))
-                                .text_color(text_primary)
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(name),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(font_size::SM))
-                                .text_color(text_disabled)
-                                .child(description),
-                        ),
-                )
+                .gap(px(spacing::SM))
+                .child(render_color_strip(&preview_colors))
                 .when(is_active, move |el| {
                     el.child(
                         div()
@@ -407,24 +419,18 @@ fn render_theme_card(
                     )
                 }),
         )
-        // Color preview strip
-        .child(render_color_strip(&preview_colors))
         .into_any_element()
 }
 
 fn render_color_strip(colors: &[gpui::Hsla]) -> AnyElement {
-    let swatch_size = 20.0;
-
     div()
         .flex()
         .items_center()
-        .gap(px(spacing::XS))
-        .children(colors.iter().map(|&color| {
-            div()
-                .w(px(swatch_size))
-                .h(px(swatch_size))
-                .rounded(px(radius::SM))
-                .bg(color)
-        }))
+        .gap(px(2.))
+        .children(
+            colors
+                .iter()
+                .map(|&color| div().w(px(14.)).h(px(14.)).rounded(px(3.)).bg(color)),
+        )
         .into_any_element()
 }

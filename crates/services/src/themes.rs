@@ -77,37 +77,68 @@ struct Base16PaletteYaml {
 }
 
 // =============================================================================
+// Theme Providers
+// =============================================================================
+
+/// A GitHub repository that provides Base16 theme schemes.
+#[derive(Debug, Clone)]
+pub struct ThemeProvider {
+    /// Unique identifier used as cache directory name.
+    pub id: &'static str,
+    /// Display name.
+    pub name: &'static str,
+    /// GitHub "owner/repo".
+    pub repo: &'static str,
+    /// Git branch to clone.
+    pub branch: &'static str,
+    /// Subdirectory inside the clone containing YAML scheme files.
+    pub subdirectory: &'static str,
+}
+
+/// Known theme providers.
+pub const PROVIDERS: &[ThemeProvider] = &[ThemeProvider {
+    id: "tinted-theming",
+    name: "Tinted Theming",
+    repo: "tinted-theming/schemes",
+    branch: "spec-0.11",
+    subdirectory: "base16",
+}];
+
+// =============================================================================
 // Theme Repository
 // =============================================================================
 
 /// Repository for fetching and caching Base16 theme schemes.
 ///
-/// Maintains a shallow git clone of the schemes repository and reads
-/// Base16 YAML files from its `base16/` subdirectory.
+/// Each provider gets its own shallow git clone under the cache directory.
 #[derive(Debug, Clone)]
 pub struct ThemeRepository {
     repo: String,
     branch: String,
+    subdirectory: String,
     cache_dir: PathBuf,
 }
 
 impl ThemeRepository {
-    /// Create a new theme repository.
-    ///
-    /// - `repo`: GitHub "owner/repo" (default: "tinted-theming/schemes")
-    /// - `branch`: Git branch (default: "spec-0.11")
-    pub fn new(repo: Option<String>, branch: Option<String>) -> Self {
-        let cache_dir = cache_directory();
+    /// Create a repository handle for the given provider.
+    pub fn new(provider: &ThemeProvider) -> Self {
+        let cache_dir = base_cache_directory().join(provider.id);
         Self {
-            repo: repo.unwrap_or_else(|| "tinted-theming/schemes".to_string()),
-            branch: branch.unwrap_or_else(|| "spec-0.11".to_string()),
+            repo: provider.repo.to_string(),
+            branch: provider.branch.to_string(),
+            subdirectory: provider.subdirectory.to_string(),
             cache_dir,
         }
     }
 
+    /// Whether this provider has already been cloned locally.
+    pub fn is_cached(&self) -> bool {
+        self.cache_dir.join(".git").exists()
+    }
+
     /// Directory containing Base16 YAML files inside the cloned repo.
     fn schemes_dir(&self) -> PathBuf {
-        self.cache_dir.join("base16")
+        self.cache_dir.join(&self.subdirectory)
     }
 
     /// Load all cached Base16 schemes from the local clone.
@@ -276,7 +307,7 @@ pub fn load_stylix_scheme() -> Option<Base16Scheme> {
 // Helpers
 // =============================================================================
 
-fn cache_directory() -> PathBuf {
+fn base_cache_directory() -> PathBuf {
     let base = std::env::var("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {

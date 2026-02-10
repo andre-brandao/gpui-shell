@@ -33,7 +33,10 @@ pub use network::{
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
 pub use shell::{InstanceResult, LauncherRequest, ShellSubscriber};
 pub use sysinfo::{DiskInfo, NetworkInfo, SysInfoData, SysInfoSubscriber};
-pub use themes::{Base16Palette, Base16Scheme, ThemeRepository, load_stylix_scheme};
+pub use themes::{
+    Base16Palette, Base16Scheme, PROVIDERS as THEME_PROVIDERS, ThemeProvider, ThemeRepository,
+    load_stylix_scheme,
+};
 pub use tray::{
     MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,
 };
