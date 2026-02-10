@@ -215,7 +215,7 @@ dependencies = [
 [[package]]
 name = "askpass"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "futures",
@@ -232,7 +232,7 @@ dependencies = [
 [[package]]
 name = "assets"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "gpui",
@@ -990,7 +990,7 @@ dependencies = [
 [[package]]
 name = "clock"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "serde",
  "smallvec",
@@ -1079,7 +1079,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "indexmap",
  "rustc-hash 2.1.1",
@@ -1104,7 +1104,7 @@ dependencies = [
 [[package]]
 name = "component"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "collections",
  "gpui",
@@ -1664,7 +1664,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1954,7 +1954,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2250,7 +2250,7 @@ dependencies = [
 [[package]]
 name = "fs"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "ashpd",
@@ -2520,7 +2520,7 @@ checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 [[package]]
 name = "git"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "askpass",
@@ -2640,7 +2640,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2742,7 +2742,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2919,7 +2919,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2997,7 +2997,7 @@ dependencies = [
 [[package]]
 name = "icons"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "serde",
  "strum 0.27.2",
@@ -3731,7 +3731,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -3779,7 +3779,7 @@ dependencies = [
 [[package]]
 name = "menu"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "gpui",
 ]
@@ -3802,7 +3802,7 @@ dependencies = [
 [[package]]
 name = "migrator"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "collections",
@@ -3903,7 +3903,7 @@ dependencies = [
 [[package]]
 name = "net"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "async-io",
@@ -4019,7 +4019,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4478,7 +4478,7 @@ dependencies = [
 [[package]]
 name = "paths"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "dirs 4.0.0",
  "ignore",
@@ -4504,7 +4504,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "perf"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "collections",
  "serde",
@@ -4870,7 +4870,7 @@ dependencies = [
 [[package]]
 name = "proto"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "prost",
@@ -5180,7 +5180,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "derive_refineable",
 ]
@@ -5231,7 +5231,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 [[package]]
 name = "release_channel"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "gpui",
  "semver",
@@ -5263,7 +5263,7 @@ dependencies = [
 [[package]]
 name = "rope"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "arrayvec",
  "log",
@@ -5366,7 +5366,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5428,7 +5428,7 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "async-task",
  "backtrace",
@@ -5691,7 +5691,7 @@ dependencies = [
 [[package]]
 name = "settings"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "collections",
@@ -5720,7 +5720,7 @@ dependencies = [
 [[package]]
 name = "settings_content"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "collections",
@@ -5740,7 +5740,7 @@ dependencies = [
 [[package]]
 name = "settings_json"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "serde",
@@ -5755,7 +5755,7 @@ dependencies = [
 [[package]]
 name = "settings_macros"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "quote",
  "syn 2.0.114",
@@ -6046,7 +6046,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "arrayvec",
  "log",
@@ -6295,7 +6295,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.3",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6321,7 +6321,7 @@ dependencies = [
 [[package]]
 name = "text"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "clock",
@@ -6339,7 +6339,7 @@ dependencies = [
 [[package]]
 name = "theme"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "collections",
@@ -6788,7 +6788,7 @@ dependencies = [
 [[package]]
 name = "ui"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "chrono",
  "component",
@@ -6812,7 +6812,7 @@ dependencies = [
 [[package]]
 name = "ui_macros"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "quote",
  "syn 2.0.114",
@@ -6969,7 +6969,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "async-fs",
@@ -7007,7 +7007,7 @@ dependencies = [
 [[package]]
 name = "util_macros"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "perf",
  "quote",
@@ -7595,7 +7595,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8500,7 +8500,7 @@ dependencies = [
 [[package]]
 name = "zlog"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8517,7 +8517,7 @@ checksum = "3ff05f8caa9038894637571ae6b9e29466c1f4f829d26c9b28f869a29cbe3445"
 [[package]]
 name = "ztracing"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -8528,7 +8528,7 @@ dependencies = [
 [[package]]
 name = "ztracing_macro"
 version = "0.1.0"
-source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#a01f6be42351c9a172be2b07c9022f7c7b71841f"
+source = "git+https://github.com/andre-brandao/zed?branch=fix%2Ftarget_dispay#f1a79e2a32d2c7d517787c91233274d6799da8b9"
 
 [[package]]
 name = "zune-core"
