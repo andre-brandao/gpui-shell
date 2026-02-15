@@ -39,7 +39,6 @@ pub enum ViewInput {
 }
 
 /// Result of handling input.
-#[allow(dead_code)]
 pub enum InputResult {
     /// Input was handled, optionally update the query and/or close.
     Handled {

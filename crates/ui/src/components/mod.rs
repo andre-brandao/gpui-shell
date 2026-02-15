@@ -1,11 +1,9 @@
-mod icon;
 pub mod label;
 pub mod list;
 mod slider;
 mod stack;
 mod switch;
 
-pub use icon::Icon;
 pub use label::{Color, Label, LabelCommon, LabelSize};
 pub use list::{EmptyMessage, List, ListItem, ListItemSpacing, ListSeparator};
 pub use slider::{Slider, SliderEvent};

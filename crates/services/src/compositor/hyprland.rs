@@ -86,8 +86,8 @@ pub fn fetch_full_state() -> Result<CompositorState> {
             special_workspace_id: m.special_workspace.id,
             width: m.width as u32,
             height: m.height as u32,
-            x: m.x as i32,
-            y: m.y as i32,
+            x: m.x,
+            y: m.y,
             scale: m.scale,
         })
         .collect();

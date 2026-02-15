@@ -241,14 +241,13 @@ fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
 
             // Drain all pending events
             for event in socket.iter() {
-                if event.event_type() == udev::EventType::Change {
-                    if let Ok(new_data) = read_brightness(&device_path) {
-                        if new_data.current != current_value {
-                            current_value = new_data.current;
-                            data.lock_mut().current = new_data.current;
-                            debug!("Brightness changed: {}", new_data.current);
-                        }
-                    }
+                if event.event_type() == udev::EventType::Change
+                    && let Ok(new_data) = read_brightness(&device_path)
+                    && new_data.current != current_value
+                {
+                    current_value = new_data.current;
+                    data.lock_mut().current = new_data.current;
+                    debug!("Brightness changed: {}", new_data.current);
                 }
             }
         }

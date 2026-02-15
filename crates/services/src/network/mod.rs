@@ -198,11 +198,11 @@ async fn run_listener(data: Mutable<NetworkData>, conn: Connection) -> anyhow::R
             let data = data_ac.clone();
             let conn = conn_ac.clone();
             async move {
-                if let Ok(nm) = NetworkManager::new(&conn).await {
-                    if let Ok(connections) = nm.active_connections().await {
-                        data.lock_mut().active_connections = connections;
-                        debug!("Active connections changed");
-                    }
+                if let Ok(nm) = NetworkManager::new(&conn).await
+                    && let Ok(connections) = nm.active_connections().await
+                {
+                    data.lock_mut().active_connections = connections;
+                    debug!("Active connections changed");
                 }
             }
         })

@@ -91,11 +91,10 @@ impl WebSearchView {
 
         for provider in PROVIDERS {
             let prefix = provider.shebang;
-            if query.starts_with(prefix) {
-                let rest = &query[prefix.len()..];
-                if rest.is_empty() || rest.starts_with(' ') {
-                    return (provider, rest.trim());
-                }
+            if let Some(rest) = query.strip_prefix(prefix)
+                && (rest.is_empty() || rest.starts_with(' '))
+            {
+                return (provider, rest.trim());
             }
         }
 

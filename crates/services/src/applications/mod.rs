@@ -143,18 +143,18 @@ fn scan_applications() -> Vec<Application> {
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map(|e| e == "desktop").unwrap_or(false) {
-                    if let Some(app) = parse_desktop_file(&path) {
-                        // Use name as key to deduplicate (user entries override system)
-                        seen.insert(app.name.clone(), app);
-                    }
+                if path.extension().map(|e| e == "desktop").unwrap_or(false)
+                    && let Some(app) = parse_desktop_file(&path)
+                {
+                    // Use name as key to deduplicate (user entries override system)
+                    seen.insert(app.name.clone(), app);
                 }
             }
         }
     }
 
     let mut apps: Vec<_> = seen.into_values().collect();
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     apps
 }
 

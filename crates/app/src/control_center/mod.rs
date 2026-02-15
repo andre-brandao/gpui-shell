@@ -260,7 +260,7 @@ impl Render for ControlCenter {
         let on_toggle_section = {
             let entity = entity.clone();
             move |section: ExpandedSection, cx: &mut App| {
-                let _ = entity.update(cx, |this, cx| {
+                entity.update(cx, |this, cx| {
                     this.toggle_section(section);
                     cx.notify();
                 });
@@ -288,7 +288,7 @@ impl Render for ControlCenter {
                             ap.device_path.clone().into();
                         let password = if pwd.is_empty() { None } else { Some(pwd) };
 
-                        let _ = entity.update(cx, |this, cx| {
+                        entity.update(cx, |this, cx| {
                             this.wifi_password.connecting = true;
                             cx.notify();
                         });
@@ -305,7 +305,7 @@ impl Render for ControlCenter {
                                     })
                                     .await;
 
-                                let _ = entity.update(cx, |this, cx| {
+                                entity.update(cx, |this, cx| {
                                     this.wifi_password.connecting = false;
                                     if result.is_ok() {
                                         this.wifi_password.clear();
@@ -321,7 +321,7 @@ impl Render for ControlCenter {
                     }
                 } else {
                     // Need password - prompt for one
-                    let _ = entity.update(cx, |this, cx| {
+                    entity.update(cx, |this, cx| {
                         this.wifi_password.start_for(ssid);
                         cx.notify();
                     });
@@ -332,7 +332,7 @@ impl Render for ControlCenter {
         let on_password_change = {
             let entity = entity.clone();
             move |password: String, cx: &mut App| {
-                let _ = entity.update(cx, |this, cx| {
+                entity.update(cx, |this, cx| {
                     this.wifi_password.password = password;
                     cx.notify();
                 });
@@ -342,7 +342,7 @@ impl Render for ControlCenter {
         let on_cancel_password = {
             let entity = entity.clone();
             move |cx: &mut App| {
-                let _ = entity.update(cx, |this, cx| {
+                entity.update(cx, |this, cx| {
                     this.wifi_password.clear();
                     cx.notify();
                 });
@@ -370,7 +370,7 @@ impl Render for ControlCenter {
             .on_action({
                 let entity = entity.clone();
                 move |_: &Backspace, _window, cx| {
-                    let _ = entity.update(cx, |this, cx| {
+                    entity.update(cx, |this, cx| {
                         if this.wifi_password.ssid.is_some() {
                             this.wifi_password.password.pop();
                             cx.notify();
@@ -381,7 +381,7 @@ impl Render for ControlCenter {
             .on_action({
                 let entity = entity.clone();
                 move |_: &Cancel, _window, cx| {
-                    let _ = entity.update(cx, |this, cx| {
+                    entity.update(cx, |this, cx| {
                         this.wifi_password.clear();
                         cx.notify();
                     });
@@ -393,7 +393,7 @@ impl Render for ControlCenter {
                 move |_: &Submit, _window, cx| {
                     let entity = entity.clone();
                     let services = services.clone();
-                    let _ = entity.update(cx, |this, cx| {
+                    entity.update(cx, |this, cx| {
                         if let Some(ssid) = this.wifi_password.ssid.clone() {
                             let password = this.wifi_password.password.clone();
                             let network = services.network.get();
@@ -427,7 +427,7 @@ impl Render for ControlCenter {
                                             })
                                             .await;
 
-                                        let _ = entity.update(cx, |this, cx| {
+                                        entity.update(cx, |this, cx| {
                                             this.wifi_password.connecting = false;
                                             if result.is_ok() {
                                                 this.wifi_password.clear();
@@ -453,7 +453,7 @@ impl Render for ControlCenter {
                     if key.len() == 1 && !event.keystroke.modifiers.control {
                         let ch = key.chars().next().unwrap();
                         if ch.is_ascii_graphic() || ch == ' ' {
-                            let _ = entity.update(cx, |this, cx| {
+                            entity.update(cx, |this, cx| {
                                 if this.wifi_password.ssid.is_some() {
                                     this.wifi_password.password.push(ch);
                                     cx.notify();

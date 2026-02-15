@@ -11,8 +11,7 @@ const MAX_TITLE_LENGTH: usize = 60;
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
-    #[allow(dead_code)]
-    compositor: CompositorSubscriber,
+    _compositor: CompositorSubscriber,
     state: CompositorState,
 }
 
@@ -38,7 +37,10 @@ impl ActiveWindow {
         })
         .detach();
 
-        Self { compositor, state }
+        Self {
+            _compositor: compositor,
+            state,
+        }
     }
 
     /// Get the display title, truncated if necessary.

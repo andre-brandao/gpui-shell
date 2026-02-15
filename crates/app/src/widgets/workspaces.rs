@@ -69,7 +69,6 @@ impl Render for Workspaces {
         let interactive_default = theme.interactive.default;
         let interactive_hover = theme.interactive.hover;
         let bg_primary = theme.bg.primary;
-        let text_primary = theme.text.primary;
         let text_secondary = theme.text.secondary;
         let text_muted = theme.text.muted;
         let transparent = gpui::transparent_black();

@@ -34,6 +34,8 @@ impl SwitchSize {
     }
 }
 
+type ClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
+
 /// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]
 pub struct Switch {
@@ -42,7 +44,7 @@ pub struct Switch {
     disabled: bool,
     label: Option<SharedString>,
     label_side: LabelSide,
-    on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
+    on_click: Option<ClickHandler>,
     size: SwitchSize,
     tooltip: Option<SharedString>,
 }
@@ -148,7 +150,11 @@ impl RenderOnce for Switch {
             (bg_color, toggle_bg)
         };
 
-        let label_color = if self.disabled { text_disabled } else { text_primary };
+        let label_color = if self.disabled {
+            text_disabled
+        } else {
+            text_primary
+        };
 
         let (bg_width, bg_height, bar_width) = self.size.dimensions();
         let inset = px(2.);
@@ -190,8 +196,7 @@ impl RenderOnce for Switch {
                                             let toggle_state = toggle_state.clone();
                                             async move |cx| {
                                                 cx.background_executor().timer(duration).await;
-                                                _ = toggle_state
-                                                    .update(cx, |this, _| *this = checked);
+                                                toggle_state.update(cx, |this, _| *this = checked);
                                             }
                                         })
                                         .detach();
@@ -239,7 +244,7 @@ impl RenderOnce for Switch {
                         let toggle_state = toggle_state.clone();
                         this.on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
                             cx.stop_propagation();
-                            _ = toggle_state.update(cx, |this, _| *this = checked);
+                            toggle_state.update(cx, |this, _| *this = checked);
                             on_click(&!checked, window, cx);
                         })
                     },

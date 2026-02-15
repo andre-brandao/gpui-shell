@@ -95,7 +95,7 @@ pub fn toggle_panel<V: Render + 'static>(
 }
 
 /// Close any open panel.
-#[allow(unused)]
+#[allow(dead_code)]
 pub fn close_panel(cx: &mut App) {
     let mut guard = ACTIVE_PANEL.lock().unwrap();
     if let Some((_, handle)) = guard.take() {
@@ -106,7 +106,7 @@ pub fn close_panel(cx: &mut App) {
 }
 
 /// Check if a specific panel is open.
-#[allow(unused)]
+#[allow(dead_code)]
 pub fn is_panel_open(panel_id: &str) -> bool {
     ACTIVE_PANEL
         .lock()
@@ -120,7 +120,7 @@ pub fn is_panel_open(panel_id: &str) -> bool {
 }
 
 /// Get the ID of the currently open panel, if any.
-#[allow(unused)]
+#[allow(dead_code)]
 pub fn active_panel_id() -> Option<String> {
     ACTIVE_PANEL
         .lock()

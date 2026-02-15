@@ -120,7 +120,7 @@ pub fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions 
         .unwrap_or_else(|| px(1920.));
 
     WindowOptions {
-        display_id: display_id,
+        display_id,
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: point(px(0.), px(0.)),

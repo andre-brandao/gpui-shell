@@ -107,10 +107,10 @@ impl ShellSubscriber {
 
         // No existing instance, become the primary
         // Remove stale socket if it exists
-        if path.exists() {
-            if let Err(e) = std::fs::remove_file(&path) {
-                warn!("Failed to remove stale socket: {}", e);
-            }
+        if path.exists()
+            && let Err(e) = std::fs::remove_file(&path)
+        {
+            warn!("Failed to remove stale socket: {}", e);
         }
 
         // Create the Unix listener

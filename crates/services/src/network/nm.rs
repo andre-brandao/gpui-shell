@@ -202,10 +202,10 @@ impl<'a> NetworkManager<'a> {
                     // Get the SSID from the settings
                     if let Some(ssid_value) = wifi_settings.get("ssid") {
                         // SSID is stored as an array of bytes
-                        if let Ok(ssid_bytes) = <Vec<u8>>::try_from(ssid_value.clone()) {
-                            if let Ok(ssid) = String::from_utf8(ssid_bytes) {
-                                known_ssids.insert(ssid);
-                            }
+                        if let Ok(ssid_bytes) = <Vec<u8>>::try_from(ssid_value.clone())
+                            && let Ok(ssid) = String::from_utf8(ssid_bytes)
+                        {
+                            known_ssids.insert(ssid);
                         }
                     }
                 }
@@ -259,10 +259,10 @@ impl<'a> NetworkManager<'a> {
                 let strength = ap_proxy.strength().await?;
 
                 // Keep the strongest signal for each SSID
-                if let Some(existing) = aps.get(&ssid) {
-                    if existing.strength >= strength {
-                        continue;
-                    }
+                if let Some(existing) = aps.get(&ssid)
+                    && existing.strength >= strength
+                {
+                    continue;
                 }
 
                 let known = known_ssids.contains(&ssid);
@@ -286,7 +286,7 @@ impl<'a> NetworkManager<'a> {
         }
 
         // Sort by signal strength (strongest first)
-        all_access_points.sort_by(|a, b| b.strength.cmp(&a.strength));
+        all_access_points.sort_by_key(|b| std::cmp::Reverse(b.strength));
 
         Ok(all_access_points)
     }

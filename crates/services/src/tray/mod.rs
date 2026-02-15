@@ -349,47 +349,47 @@ async fn run_listener(data: &Mutable<TrayData>, conn: &zbus::Connection) -> anyh
             .destination(dest.to_owned())
             .and_then(|b| b.path(path.to_owned()));
 
-        if let Ok(builder) = item_proxy_result {
-            if let Ok(proxy) = builder.build().await {
-                let name = item.name.clone();
-                let data_icon = data.clone();
+        if let Ok(builder) = item_proxy_result
+            && let Ok(proxy) = builder.build().await
+        {
+            let name = item.name.clone();
+            let data_icon = data.clone();
 
-                icon_streams.push(
-                    proxy
-                        .receive_icon_pixmap_changed()
-                        .await
-                        .filter_map(move |icon_change| {
-                            let name = name.clone();
-                            let data = data_icon.clone();
-                            async move {
-                                if let Ok(icons) = icon_change.get().await {
-                                    let icons: Vec<dbus::IconPixmap> = icons;
-                                    if let Some(mut icon) =
-                                        icons.into_iter().max_by_key(|i| (i.width, i.height))
+            icon_streams.push(
+                proxy
+                    .receive_icon_pixmap_changed()
+                    .await
+                    .filter_map(move |icon_change| {
+                        let name = name.clone();
+                        let data = data_icon.clone();
+                        async move {
+                            if let Ok(icons) = icon_change.get().await {
+                                let icons: Vec<dbus::IconPixmap> = icons;
+                                if let Some(mut icon) =
+                                    icons.into_iter().max_by_key(|i| (i.width, i.height))
+                                {
+                                    for pixel in icon.bytes.chunks_exact_mut(4) {
+                                        pixel.rotate_left(1);
+                                    }
+                                    let tray_icon = TrayIcon::Pixmap {
+                                        width: icon.width as u32,
+                                        height: icon.height as u32,
+                                        data: Arc::new(icon.bytes),
+                                    };
+
+                                    let mut guard = data.lock_mut();
+                                    if let Some(item) =
+                                        guard.items.iter_mut().find(|i| i.name == name)
                                     {
-                                        for pixel in icon.bytes.chunks_exact_mut(4) {
-                                            pixel.rotate_left(1);
-                                        }
-                                        let tray_icon = TrayIcon::Pixmap {
-                                            width: icon.width as u32,
-                                            height: icon.height as u32,
-                                            data: Arc::new(icon.bytes),
-                                        };
-
-                                        let mut guard = data.lock_mut();
-                                        if let Some(item) =
-                                            guard.items.iter_mut().find(|i| i.name == name)
-                                        {
-                                            item.icon = Some(tray_icon);
-                                        }
+                                        item.icon = Some(tray_icon);
                                     }
                                 }
-                                Some(())
                             }
-                        })
-                        .boxed(),
-                );
-            }
+                            Some(())
+                        }
+                    })
+                    .boxed(),
+            );
         }
 
         // Menu layout changes
@@ -398,36 +398,34 @@ async fn run_listener(data: &Mutable<TrayData>, conn: &zbus::Connection) -> anyh
                 .destination(item.dest.clone())
                 .and_then(|b| b.path(item.menu_path.clone()));
 
-            if let Ok(builder) = menu_proxy_result {
-                if let Ok(proxy) = builder.build().await {
-                    if let Ok(layout_stream) = proxy.receive_layout_updated().await {
-                        let name = item.name.clone();
-                        let data_menu = data.clone();
-                        let proxy_clone = proxy.clone();
+            if let Ok(builder) = menu_proxy_result
+                && let Ok(proxy) = builder.build().await
+                && let Ok(layout_stream) = proxy.receive_layout_updated().await
+            {
+                let name = item.name.clone();
+                let data_menu = data.clone();
+                let proxy_clone = proxy.clone();
 
-                        menu_streams.push(
-                            layout_stream
-                                .filter_map(move |_| {
-                                    let name = name.clone();
-                                    let data = data_menu.clone();
-                                    let proxy = proxy_clone.clone();
-                                    async move {
-                                        if let Ok((_, layout)) = proxy.get_layout(0, -1, &[]).await
-                                        {
-                                            let mut guard = data.lock_mut();
-                                            if let Some(item) =
-                                                guard.items.iter_mut().find(|i| i.name == name)
-                                            {
-                                                item.menu = Some(layout);
-                                            }
-                                        }
-                                        Some(())
+                menu_streams.push(
+                    layout_stream
+                        .filter_map(move |_| {
+                            let name = name.clone();
+                            let data = data_menu.clone();
+                            let proxy = proxy_clone.clone();
+                            async move {
+                                if let Ok((_, layout)) = proxy.get_layout(0, -1, &[]).await {
+                                    let mut guard = data.lock_mut();
+                                    if let Some(item) =
+                                        guard.items.iter_mut().find(|i| i.name == name)
+                                    {
+                                        item.menu = Some(layout);
                                     }
-                                })
-                                .boxed(),
-                        );
-                    }
-                }
+                                }
+                                Some(())
+                            }
+                        })
+                        .boxed(),
+                );
             }
         }
     }

@@ -232,10 +232,8 @@ async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> a
             }
         };
 
-        if event_occurred {
-            if let Ok(new_data) = fetch_bluetooth_data(&conn).await {
-                *data.lock_mut() = new_data;
-            }
+        if event_occurred && let Ok(new_data) = fetch_bluetooth_data(&conn).await {
+            *data.lock_mut() = new_data;
         }
     }
 }

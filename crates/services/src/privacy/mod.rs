@@ -143,19 +143,19 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
     let _listener = registry
         .add_listener_local()
         .global(move |global| {
-            if let Some(props) = global.props {
-                if let Some(media_class) = props.get("media.class") {
-                    let is_video = media_class == "Stream/Input/Video";
-                    let is_audio = media_class == "Stream/Input/Audio";
+            if let Some(props) = global.props
+                && let Some(media_class) = props.get("media.class")
+            {
+                let is_video = media_class == "Stream/Input/Video";
+                let is_audio = media_class == "Stream/Input/Audio";
 
-                    if is_video || is_audio {
-                        debug!("New media node: id={}, class={}", global.id, media_class);
-                        let node = ApplicationNode {
-                            id: global.id,
-                            media: if is_video { Media::Video } else { Media::Audio },
-                        };
-                        data_add.lock_mut().nodes.push(node);
-                    }
+                if is_video || is_audio {
+                    debug!("New media node: id={}, class={}", global.id, media_class);
+                    let node = ApplicationNode {
+                        id: global.id,
+                        media: if is_video { Media::Video } else { Media::Audio },
+                    };
+                    data_add.lock_mut().nodes.push(node);
                 }
             }
         })
@@ -245,10 +245,10 @@ fn is_device_in_use(target: &str) -> i32 {
             // Check file descriptors in each process folder
             if let Ok(fd_entries) = fs::read_dir(&fd_path) {
                 for fd_entry in fd_entries.flatten() {
-                    if let Ok(link_path) = fs::read_link(fd_entry.path()) {
-                        if link_path == Path::new(target) {
-                            used_by += 1;
-                        }
+                    if let Ok(link_path) = fs::read_link(fd_entry.path())
+                        && link_path == Path::new(target)
+                    {
+                        used_by += 1;
                     }
                 }
             }

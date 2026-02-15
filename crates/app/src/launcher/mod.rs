@@ -162,11 +162,11 @@ impl Launcher {
 
         // Check if starts with a special char but no matching prefix
         // In this case, show help view
-        if let Some(first_char) = query.chars().next() {
-            if is_special_char(first_char) {
-                // Unknown special prefix - show help
-                return (Some(&self.help_view), query);
-            }
+        if let Some(first_char) = query.chars().next()
+            && is_special_char(first_char)
+        {
+            // Unknown special prefix - show help
+            return (Some(&self.help_view), query);
         }
 
         // No prefix, use default view with full query as search

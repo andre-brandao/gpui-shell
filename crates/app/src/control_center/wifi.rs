@@ -196,6 +196,7 @@ pub fn render_wifi_section(
 }
 
 /// Render a single network item in the list
+#[allow(clippy::too_many_arguments)]
 fn render_network_item(
     index: usize,
     ssid: &str,
@@ -278,6 +279,7 @@ fn render_network_item(
 }
 
 /// Render password input row for a network
+#[allow(clippy::too_many_arguments)]
 fn render_password_input(
     index: usize,
     ssid: &str,

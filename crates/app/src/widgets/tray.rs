@@ -286,6 +286,7 @@ fn render_menu_separator(border_color: gpui::Hsla) -> impl IntoElement {
 }
 
 /// Render a single menu item
+#[allow(clippy::too_many_arguments)]
 fn render_menu_item(
     menu_id: i32,
     label: &str,
