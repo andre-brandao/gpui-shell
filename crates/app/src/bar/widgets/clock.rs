@@ -40,7 +40,7 @@ impl Clock {
 impl Render for Clock {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let is_vertical = cx.config().bar.orientation.is_vertical();
+        let is_vertical = cx.config().bar.is_vertical();
 
         if is_vertical {
             let time = self.formatted_time_compact();

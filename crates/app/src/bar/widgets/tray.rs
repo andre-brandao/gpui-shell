@@ -10,18 +10,20 @@ use gpui::{
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
-use crate::config::{ActiveConfig, Config};
+use crate::bar::widgets::WidgetSlot;
+use crate::config::{ActiveConfig, BarPosition, Config};
 use crate::state::AppState;
 
 /// System tray widget that displays tray icons.
 pub struct Tray {
+    slot: WidgetSlot,
     subscriber: services::TraySubscriber,
     data: TrayData,
 }
 
 impl Tray {
     /// Create a new system tray widget.
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
         let subscriber = AppState::services(cx).tray.clone();
         let data = subscriber.get();
 
@@ -42,7 +44,11 @@ impl Tray {
         })
         .detach();
 
-        Self { subscriber, data }
+        Self {
+            slot,
+            subscriber,
+            data,
+        }
     }
 
     /// Handle clicking on a tray item - opens a panel with the menu.
@@ -59,18 +65,47 @@ impl Tray {
         let visible_items = count_top_level_menu_items(&menu.2);
         // Each item is ~26px (py: 6px * 2 + font ~14px), separators ~9px, plus panel padding 8px
         let menu_height = (visible_items * 26).min(400) as f32 + 8.0;
-        let is_vertical = Config::global(cx).bar.orientation.is_vertical();
-        let (anchor, margin) = if is_vertical {
-            (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
-        } else {
-            (Anchor::TOP | Anchor::RIGHT, (0.0, 8.0, 0.0, 0.0))
+        let config = Config::global(cx);
+        let (anchor, margin) = match config.bar.position {
+            BarPosition::Left => {
+                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::BOTTOM
+                } else {
+                    Anchor::TOP
+                };
+                (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Right => {
+                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::BOTTOM
+                } else {
+                    Anchor::TOP
+                };
+                (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Top => {
+                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::RIGHT
+                } else {
+                    Anchor::LEFT
+                };
+                (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Bottom => {
+                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::RIGHT
+                } else {
+                    Anchor::LEFT
+                };
+                (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            }
         };
 
         let config = PanelConfig {
             width: 250.0,
             height: menu_height,
             anchor,
-            margin, // Compositor handles reserved bar space via exclusive zone
+            margin,
             namespace: "systray-menu".to_string(),
         };
 
@@ -83,7 +118,7 @@ impl Tray {
 impl Render for Tray {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let is_vertical = cx.config().bar.orientation.is_vertical();
+        let is_vertical = cx.config().bar.is_vertical();
         let items: Vec<_> = self.data.items.clone();
 
         // Pre-compute colors for closures

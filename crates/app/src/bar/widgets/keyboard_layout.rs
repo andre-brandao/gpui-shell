@@ -115,7 +115,7 @@ impl KeyboardLayout {
 impl Render for KeyboardLayout {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let is_vertical = cx.config().bar.orientation.is_vertical();
+        let is_vertical = cx.config().bar.is_vertical();
         let short_name = self.short_layout_name();
 
         // Pre-compute colors for closures

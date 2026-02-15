@@ -6,7 +6,7 @@ use gpui::{Context, Render, Window, div, prelude::*, px};
 use services::CompositorState;
 use ui::{ActiveTheme, font_size, spacing};
 
-use crate::config::{ActiveConfig, BarOrientation};
+use crate::config::ActiveConfig;
 use crate::state::AppState;
 
 /// Maximum characters to display before truncating the title.
@@ -49,7 +49,7 @@ impl ActiveWindow {
     }
 
     /// Get the display title, truncated if necessary.
-    fn display_title(&self, orientation: BarOrientation) -> String {
+    fn display_title(&self, is_vertical: bool) -> String {
         let title = self
             .state
             .active_window
@@ -61,7 +61,7 @@ impl ActiveWindow {
             return String::new();
         }
 
-        let max_length = if orientation.is_vertical() {
+        let max_length = if is_vertical {
             MAX_TITLE_LENGTH_VERTICAL
         } else {
             MAX_TITLE_LENGTH_HORIZONTAL
@@ -78,10 +78,10 @@ impl ActiveWindow {
 impl Render for ActiveWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let orientation = cx.config().bar.orientation;
-        let title = self.display_title(orientation);
+        let is_vertical = cx.config().bar.is_vertical();
+        let title = self.display_title(is_vertical);
 
-        if orientation.is_vertical() {
+        if is_vertical {
             div()
                 .id("active-window")
                 .w_full()

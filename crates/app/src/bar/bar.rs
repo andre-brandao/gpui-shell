@@ -1,7 +1,6 @@
 //! Status bar using layer shell for Wayland.
 //!
-//! This module provides a configurable shell bar that supports horizontal
-//! and vertical orientations.
+//! This module provides a configurable shell bar for any screen edge.
 
 use gpui::{
     AnyElement, App, Bounds, Context, DisplayId, FontWeight, Size, Window,
@@ -10,12 +9,12 @@ use gpui::{
 };
 use ui::{ActiveTheme, spacing};
 
-use super::widgets::Widget;
-use crate::config::{ActiveConfig, BarOrientation};
+use super::widgets::{Widget, WidgetSlot};
+use crate::config::{ActiveConfig, BarPosition};
 
 /// The main bar view.
 struct Bar {
-    orientation: BarOrientation,
+    position: BarPosition,
     start_widgets: Vec<Widget>,
     center_widgets: Vec<Widget>,
     end_widgets: Vec<Widget>,
@@ -25,23 +24,19 @@ impl Bar {
     /// Create a bar with configuration.
     fn new(cx: &mut Context<Self>) -> Self {
         let config = cx.config().bar.clone();
-        let orientation = config.orientation;
+        let position = config.position;
         Self {
-            orientation,
-            start_widgets: Widget::create_many(&config.start, cx),
-            center_widgets: Widget::create_many(&config.center, cx),
-            end_widgets: Widget::create_many(&config.end, cx),
+            position,
+            start_widgets: Widget::create_many(&config.start, WidgetSlot::Start, cx),
+            center_widgets: Widget::create_many(&config.center, WidgetSlot::Center, cx),
+            end_widgets: Widget::create_many(&config.end, WidgetSlot::End, cx),
         }
     }
 
-    fn render_section(
-        orientation: BarOrientation,
-        gap: f32,
-        children: Vec<AnyElement>,
-    ) -> impl IntoElement {
+    fn render_section(is_vertical: bool, gap: f32, children: Vec<AnyElement>) -> impl IntoElement {
         let section = div();
 
-        if orientation.is_vertical() {
+        if is_vertical {
             section
                 .flex()
                 .flex_col()
@@ -61,6 +56,7 @@ impl Bar {
 impl Render for Bar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = self.position.is_vertical();
 
         let start_elements: Vec<AnyElement> =
             self.start_widgets.iter().map(|w| w.render()).collect();
@@ -78,45 +74,47 @@ impl Render for Bar {
             .bg(theme.bg.primary)
             .border_color(theme.border.default);
 
-        if self.orientation.is_vertical() {
+        if is_vertical {
             root.flex_col()
                 .items_center()
                 .py(px(spacing::LG))
-                .border_r_1()
+                .when(matches!(self.position, BarPosition::Left), |this| {
+                    this.border_r_1()
+                })
+                .when(matches!(self.position, BarPosition::Right), |this| {
+                    this.border_l_1()
+                })
                 .child(Self::render_section(
-                    self.orientation,
+                    is_vertical,
                     spacing::SM,
                     start_elements,
                 ))
                 .child(Self::render_section(
-                    self.orientation,
+                    is_vertical,
                     spacing::SM,
                     center_elements,
                 ))
-                .child(Self::render_section(
-                    self.orientation,
-                    spacing::MD,
-                    end_elements,
-                ))
+                .child(Self::render_section(is_vertical, spacing::MD, end_elements))
         } else {
             root.items_center()
                 .px(px(spacing::LG))
-                .border_b_1()
+                .when(matches!(self.position, BarPosition::Top), |this| {
+                    this.border_b_1()
+                })
+                .when(matches!(self.position, BarPosition::Bottom), |this| {
+                    this.border_t_1()
+                })
                 .child(Self::render_section(
-                    self.orientation,
+                    is_vertical,
                     spacing::SM,
                     start_elements,
                 ))
                 .child(Self::render_section(
-                    self.orientation,
+                    is_vertical,
                     spacing::SM,
                     center_elements,
                 ))
-                .child(Self::render_section(
-                    self.orientation,
-                    spacing::MD,
-                    end_elements,
-                ))
+                .child(Self::render_section(is_vertical, spacing::MD, end_elements))
         }
     }
 }
@@ -133,16 +131,23 @@ pub fn window_options(
         .map(|display| display.bounds().size)
         .unwrap_or_else(|| Size::new(px(1920.), px(1080.)));
     let config = cx.config();
-    let (window_size, anchor) = if config.bar.orientation.is_vertical() {
-        (
+    let (window_size, anchor) = match config.bar.position {
+        BarPosition::Left => (
             Size::new(px(config.bar.size), display_size.height),
             Anchor::LEFT | Anchor::TOP | Anchor::BOTTOM,
-        )
-    } else {
-        (
+        ),
+        BarPosition::Right => (
+            Size::new(px(config.bar.size), display_size.height),
+            Anchor::RIGHT | Anchor::TOP | Anchor::BOTTOM,
+        ),
+        BarPosition::Top => (
             Size::new(display_size.width, px(config.bar.size)),
             Anchor::LEFT | Anchor::RIGHT | Anchor::TOP,
-        )
+        ),
+        BarPosition::Bottom => (
+            Size::new(display_size.width, px(config.bar.size)),
+            Anchor::LEFT | Anchor::RIGHT | Anchor::BOTTOM,
+        ),
     };
 
     WindowOptions {

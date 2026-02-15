@@ -11,6 +11,14 @@ use super::{
     ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces,
 };
 
+/// Slot of a widget within the bar layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidgetSlot {
+    Start,
+    Center,
+    End,
+}
+
 /// Wrapper enum for all possible widget types.
 ///
 /// Each variant holds an Entity handle to a specific widget type.
@@ -49,17 +57,19 @@ impl Widget {
     /// Create a widget by name.
     ///
     /// Returns `None` if the widget name is unknown.
-    pub fn create<V: 'static>(name: &str, cx: &mut Context<V>) -> Option<Widget> {
+    pub fn create<V: 'static>(name: &str, slot: WidgetSlot, cx: &mut Context<V>) -> Option<Widget> {
         match name {
             "ActiveWindow" | "WindowTitle" => Some(Widget::ActiveWindow(cx.new(ActiveWindow::new))),
             "Clock" => Some(Widget::Clock(cx.new(Clock::new))),
             "Battery" => Some(Widget::Battery(cx.new(Battery::new))),
             "Workspaces" => Some(Widget::Workspaces(cx.new(Workspaces::new))),
             "KeyboardLayout" => Some(Widget::KeyboardLayout(cx.new(KeyboardLayout::new))),
-            "Systray" | "Tray" => Some(Widget::Tray(cx.new(Tray::new))),
-            "SysInfo" => Some(Widget::SysInfo(cx.new(SysInfo::new))),
+            "Systray" | "Tray" => Some(Widget::Tray(cx.new(|cx| Tray::new(slot, cx)))),
+            "SysInfo" => Some(Widget::SysInfo(cx.new(|cx| SysInfo::new(slot, cx)))),
             "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(cx.new(LauncherBtn::new))),
-            "Settings" | "Info" | "ControlCenter" => Some(Widget::Settings(cx.new(Settings::new))),
+            "Settings" | "Info" | "ControlCenter" => {
+                Some(Widget::Settings(cx.new(|cx| Settings::new(slot, cx))))
+            }
             _ => {
                 tracing::warn!("Unknown widget: {}", name);
                 None
@@ -68,10 +78,14 @@ impl Widget {
     }
 
     /// Create multiple widgets from a config list.
-    pub fn create_many<V: 'static>(widgets: &[WidgetConfig], cx: &mut Context<V>) -> Vec<Widget> {
+    pub fn create_many<V: 'static>(
+        widgets: &[WidgetConfig],
+        slot: WidgetSlot,
+        cx: &mut Context<V>,
+    ) -> Vec<Widget> {
         widgets
             .iter()
-            .filter_map(|widget| Widget::create(&widget.name, cx))
+            .filter_map(|widget| Widget::create(&widget.name, slot, cx))
             .collect()
     }
 }

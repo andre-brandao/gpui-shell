@@ -8,7 +8,8 @@ use gpui::{App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude:
 use services::SysInfoData;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
-use crate::config::{ActiveConfig, Config};
+use crate::bar::widgets::WidgetSlot;
+use crate::config::{ActiveConfig, BarPosition, Config};
 use crate::state::AppState;
 
 mod panel;
@@ -44,13 +45,14 @@ pub mod icons {
 
 /// SysInfo widget showing CPU and memory usage in the bar.
 pub struct SysInfo {
+    slot: WidgetSlot,
     subscriber: services::SysInfoSubscriber,
     data: SysInfoData,
 }
 
 impl SysInfo {
     /// Create a new SysInfo widget.
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
         let subscriber = AppState::services(cx).sysinfo.clone();
         let initial_data = subscriber.get();
 
@@ -76,6 +78,7 @@ impl SysInfo {
         .detach();
 
         SysInfo {
+            slot,
             subscriber,
             data: initial_data,
         }
@@ -83,11 +86,40 @@ impl SysInfo {
 
     fn toggle_panel(&mut self, cx: &mut App) {
         let subscriber = self.subscriber.clone();
-        let is_vertical = Config::global(cx).bar.orientation.is_vertical();
-        let (anchor, margin) = if is_vertical {
-            (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
-        } else {
-            (Anchor::TOP | Anchor::LEFT, (0.0, 0.0, 0.0, 8.0))
+        let config = Config::global(cx);
+        let (anchor, margin) = match config.bar.position {
+            BarPosition::Left => {
+                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::BOTTOM
+                } else {
+                    Anchor::TOP
+                };
+                (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Right => {
+                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::BOTTOM
+                } else {
+                    Anchor::TOP
+                };
+                (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Top => {
+                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::RIGHT
+                } else {
+                    Anchor::LEFT
+                };
+                (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Bottom => {
+                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::RIGHT
+                } else {
+                    Anchor::LEFT
+                };
+                (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            }
         };
         let config = PanelConfig {
             width: 350.0,
@@ -122,7 +154,7 @@ impl SysInfo {
 impl Render for SysInfo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let is_vertical = cx.config().bar.orientation.is_vertical();
+        let is_vertical = cx.config().bar.is_vertical();
 
         let cpu_usage = self.data.cpu_usage;
         let memory_usage = self.data.memory_usage;

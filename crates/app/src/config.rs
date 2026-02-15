@@ -56,20 +56,24 @@ impl ActiveConfig for App {
     }
 }
 
-/// Bar orientation.
+/// Bar screen position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BarOrientation {
-    /// Horizontal bar (typically top of screen).
+pub enum BarPosition {
+    /// Left edge of the screen.
     #[default]
-    Horizontal,
-    /// Vertical bar (typically left side of screen).
-    Vertical,
+    Left,
+    /// Right edge of the screen.
+    Right,
+    /// Top edge of the screen.
+    Top,
+    /// Bottom edge of the screen.
+    Bottom,
 }
 
-impl BarOrientation {
+impl BarPosition {
     #[inline(always)]
     pub fn is_vertical(self) -> bool {
-        matches!(self, Self::Vertical)
+        matches!(self, Self::Left | Self::Right)
     }
 }
 
@@ -102,8 +106,8 @@ impl From<String> for WidgetConfig {
 pub struct BarConfig {
     /// Main axis thickness in px (height for horizontal, width for vertical).
     pub size: f32,
-    /// Bar axis orientation.
-    pub orientation: BarOrientation,
+    /// Screen edge where the bar is placed.
+    pub position: BarPosition,
     /// Start section widgets (left for horizontal, top for vertical).
     pub start: Vec<WidgetConfig>,
     /// Center section widgets.
@@ -116,7 +120,7 @@ impl Default for BarConfig {
     fn default() -> Self {
         Self {
             size: 32.0,
-            orientation: BarOrientation::Vertical,
+            position: BarPosition::Left,
             start: vec!["LauncherBtn".into(), "Workspaces".into(), "SysInfo".into()],
             center: vec!["ActiveWindow".into()],
             end: vec![
@@ -126,5 +130,12 @@ impl Default for BarConfig {
                 "Settings".into(),
             ],
         }
+    }
+}
+
+impl BarConfig {
+    #[inline(always)]
+    pub fn is_vertical(&self) -> bool {
+        self.position.is_vertical()
     }
 }

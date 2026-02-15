@@ -18,7 +18,8 @@ use services::{
 };
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
-use crate::config::{ActiveConfig, Config};
+use crate::bar::widgets::WidgetSlot;
+use crate::config::{ActiveConfig, BarPosition, Config};
 use crate::control_center::ControlCenter;
 use crate::panel::{PanelConfig, toggle_panel};
 use crate::state::AppState;
@@ -50,6 +51,7 @@ mod icons {
 
 /// Settings widget for the bar that shows system status icons.
 pub struct Settings {
+    slot: WidgetSlot,
     audio: AudioData,
     bluetooth: BluetoothData,
     network: NetworkData,
@@ -59,7 +61,7 @@ pub struct Settings {
 
 impl Settings {
     /// Create a new settings widget.
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
         let services = AppState::services(cx).clone();
         let audio = services.audio.get();
         let bluetooth = services.bluetooth.get();
@@ -168,6 +170,7 @@ impl Settings {
         .detach();
 
         Settings {
+            slot,
             audio,
             bluetooth,
             network,
@@ -177,19 +180,48 @@ impl Settings {
     }
 
     /// Toggle the control center panel.
-    fn toggle_panel(cx: &mut gpui::App) {
+    fn toggle_panel(&self, cx: &mut gpui::App) {
         let services = AppState::services(cx).clone();
-        let is_vertical = Config::global(cx).bar.orientation.is_vertical();
-        let (anchor, margin) = if is_vertical {
-            (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
-        } else {
-            (Anchor::TOP | Anchor::RIGHT, (0.0, 8.0, 0.0, 0.0))
+        let config = Config::global(cx);
+        let (anchor, margin) = match config.bar.position {
+            BarPosition::Left => {
+                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::BOTTOM
+                } else {
+                    Anchor::TOP
+                };
+                (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Right => {
+                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::BOTTOM
+                } else {
+                    Anchor::TOP
+                };
+                (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Top => {
+                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::RIGHT
+                } else {
+                    Anchor::LEFT
+                };
+                (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            }
+            BarPosition::Bottom => {
+                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
+                    Anchor::RIGHT
+                } else {
+                    Anchor::LEFT
+                };
+                (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            }
         };
         let config = PanelConfig {
             width: 300.0,
             height: 380.0,
             anchor,
-            margin, // Compositor handles reserved bar space via exclusive zone
+            margin,
             namespace: "control-center".to_string(),
         };
 
@@ -294,7 +326,7 @@ impl Settings {
 impl Render for Settings {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let is_vertical = cx.config().bar.orientation.is_vertical();
+        let is_vertical = cx.config().bar.is_vertical();
 
         let privacy_icons = self.privacy_icons();
         let volume_icon = self.volume_icon();
@@ -340,8 +372,8 @@ impl Render for Settings {
             .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|_, _, _, cx| {
-                    Self::toggle_panel(cx);
+                cx.listener(|this, _, _, cx| {
+                    this.toggle_panel(cx);
                 }),
             )
             // Privacy icons (red, only shown when active)

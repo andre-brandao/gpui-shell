@@ -98,7 +98,7 @@ impl Battery {
 impl Render for Battery {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let is_vertical = cx.config().bar.orientation.is_vertical();
+        let is_vertical = cx.config().bar.is_vertical();
 
         let icon = self.battery_icon();
         let text = self.battery_text();
