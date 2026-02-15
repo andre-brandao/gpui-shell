@@ -5,8 +5,6 @@
 
 use gpui::{AnyElement, Context, Entity, prelude::*};
 
-use services::Services;
-
 use crate::config::WidgetConfig;
 
 use super::{
@@ -51,41 +49,17 @@ impl Widget {
     /// Create a widget by name.
     ///
     /// Returns `None` if the widget name is unknown.
-    pub fn create<V: 'static>(
-        name: &str,
-        services: &Services,
-        cx: &mut Context<V>,
-    ) -> Option<Widget> {
+    pub fn create<V: 'static>(name: &str, cx: &mut Context<V>) -> Option<Widget> {
         match name {
-            "ActiveWindow" | "WindowTitle" => {
-                Some(Widget::ActiveWindow(cx.new(|cx| {
-                    ActiveWindow::new(services.compositor.clone(), cx)
-                })))
-            }
+            "ActiveWindow" | "WindowTitle" => Some(Widget::ActiveWindow(cx.new(ActiveWindow::new))),
             "Clock" => Some(Widget::Clock(cx.new(Clock::new))),
-            "Battery" => Some(Widget::Battery(
-                cx.new(|cx| Battery::new(services.upower.clone(), cx)),
-            )),
-            "Workspaces" => Some(Widget::Workspaces(
-                cx.new(|cx| Workspaces::new(services.compositor.clone(), cx)),
-            )),
-            "KeyboardLayout" => {
-                Some(Widget::KeyboardLayout(cx.new(|cx| {
-                    KeyboardLayout::new(services.compositor.clone(), cx)
-                })))
-            }
-            "Systray" | "Tray" => Some(Widget::Tray(
-                cx.new(|cx| Tray::new(services.tray.clone(), cx)),
-            )),
-            "SysInfo" => Some(Widget::SysInfo(
-                cx.new(|cx| SysInfo::new(services.sysinfo.clone(), cx)),
-            )),
-            "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(
-                cx.new(|cx| LauncherBtn::new(services.clone(), cx)),
-            )),
-            "Settings" | "Info" | "ControlCenter" => Some(Widget::Settings(
-                cx.new(|cx| Settings::new(services.clone(), cx)),
-            )),
+            "Battery" => Some(Widget::Battery(cx.new(Battery::new))),
+            "Workspaces" => Some(Widget::Workspaces(cx.new(Workspaces::new))),
+            "KeyboardLayout" => Some(Widget::KeyboardLayout(cx.new(KeyboardLayout::new))),
+            "Systray" | "Tray" => Some(Widget::Tray(cx.new(Tray::new))),
+            "SysInfo" => Some(Widget::SysInfo(cx.new(SysInfo::new))),
+            "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(cx.new(LauncherBtn::new))),
+            "Settings" | "Info" | "ControlCenter" => Some(Widget::Settings(cx.new(Settings::new))),
             _ => {
                 tracing::warn!("Unknown widget: {}", name);
                 None
@@ -94,14 +68,10 @@ impl Widget {
     }
 
     /// Create multiple widgets from a config list.
-    pub fn create_many<V: 'static>(
-        widgets: &[WidgetConfig],
-        services: &Services,
-        cx: &mut Context<V>,
-    ) -> Vec<Widget> {
+    pub fn create_many<V: 'static>(widgets: &[WidgetConfig], cx: &mut Context<V>) -> Vec<Widget> {
         widgets
             .iter()
-            .filter_map(|widget| Widget::create(&widget.name, services, cx))
+            .filter_map(|widget| Widget::create(&widget.name, cx))
             .collect()
     }
 }

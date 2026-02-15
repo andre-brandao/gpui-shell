@@ -14,13 +14,14 @@ use futures_signals::signal::SignalExt;
 use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
-    Services, UPowerData,
+    UPowerData,
 };
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
 use crate::panel::{PanelConfig, toggle_panel};
+use crate::state::AppState;
 
 /// Nerd Font icons for status display.
 mod icons {
@@ -49,7 +50,6 @@ mod icons {
 
 /// Settings widget for the bar that shows system status icons.
 pub struct Settings {
-    services: Services,
     audio: AudioData,
     bluetooth: BluetoothData,
     network: NetworkData,
@@ -58,8 +58,9 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// Create a new settings widget with services.
-    pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
+    /// Create a new settings widget.
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let services = AppState::services(cx).clone();
         let audio = services.audio.get();
         let bluetooth = services.bluetooth.get();
         let network = services.network.get();
@@ -167,7 +168,6 @@ impl Settings {
         .detach();
 
         Settings {
-            services,
             audio,
             bluetooth,
             network,
@@ -177,8 +177,8 @@ impl Settings {
     }
 
     /// Toggle the control center panel.
-    fn toggle_panel(&self, cx: &mut gpui::App) {
-        let services = self.services.clone();
+    fn toggle_panel(cx: &mut gpui::App) {
+        let services = AppState::services(cx).clone();
         let is_vertical = Config::global(cx).bar.orientation.is_vertical();
         let (anchor, margin) = if is_vertical {
             (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
@@ -340,8 +340,8 @@ impl Render for Settings {
             .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.toggle_panel(cx);
+                cx.listener(|_, _, _, cx| {
+                    Self::toggle_panel(cx);
                 }),
             )
             // Privacy icons (red, only shown when active)

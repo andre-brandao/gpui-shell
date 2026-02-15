@@ -19,8 +19,10 @@ pub mod control_center;
 pub mod launcher;
 pub mod osd;
 mod panel;
+pub mod state;
 
 use args::Args;
+use state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -70,13 +72,15 @@ async fn main() {
         ui::Theme::init(cx);
         // Initialize the global app config
         config::Config::init(cx);
+        // Initialize global app state
+        AppState::init(services.clone(), cx);
 
         // Register keybindings
         launcher::register_keybindings(cx);
         control_center::ControlCenter::register_keybindings(cx);
 
         // Open the status bar
-        bar::open(services.clone(), cx);
+        bar::open(cx);
 
         // Start the OSD listener for volume/brightness changes
         osd::start(services.clone(), osd::OsdPosition::Right, cx);

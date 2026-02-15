@@ -7,22 +7,22 @@ use gpui::{
     App, Context, ElementId, MouseButton, Render, SharedString, Window, div, layer_shell::Anchor,
     prelude::*, px,
 };
-use services::{
-    MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem, TraySubscriber,
-};
+use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::config::{ActiveConfig, Config};
+use crate::state::AppState;
 
 /// System tray widget that displays tray icons.
 pub struct Tray {
-    subscriber: TraySubscriber,
+    subscriber: services::TraySubscriber,
     data: TrayData,
 }
 
 impl Tray {
     /// Create a new system tray widget.
-    pub fn new(subscriber: TraySubscriber, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let subscriber = AppState::services(cx).tray.clone();
         let data = subscriber.get();
 
         // Subscribe to tray data changes
@@ -155,13 +155,13 @@ fn count_top_level_menu_items(items: &[MenuLayout]) -> usize {
 struct TrayMenuPanel {
     menu: MenuLayout,
     item_name: String,
-    subscriber: TraySubscriber,
+    subscriber: services::TraySubscriber,
     /// Track which submenus are expanded (by menu ID)
     expanded_submenus: Vec<i32>,
 }
 
 impl TrayMenuPanel {
-    fn new(menu: MenuLayout, item_name: String, subscriber: TraySubscriber) -> Self {
+    fn new(menu: MenuLayout, item_name: String, subscriber: services::TraySubscriber) -> Self {
         Self {
             menu,
             item_name,

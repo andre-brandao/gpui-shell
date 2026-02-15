@@ -2,10 +2,11 @@
 
 use futures_signals::signal::SignalExt;
 use gpui::{Context, Window, div, prelude::*, px};
-use services::{BatteryState, UPowerData, UPowerSubscriber};
+use services::{BatteryState, UPowerData};
 use ui::{ActiveTheme, font_size, icon_size, spacing};
 
 use crate::config::ActiveConfig;
+use crate::state::AppState;
 
 /// A battery widget that displays the current battery percentage and status.
 pub struct Battery {
@@ -13,8 +14,9 @@ pub struct Battery {
 }
 
 impl Battery {
-    /// Create a new battery widget with a UPower subscriber.
-    pub fn new(subscriber: UPowerSubscriber, cx: &mut Context<Self>) -> Self {
+    /// Create a new battery widget.
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let subscriber = AppState::services(cx).upower.clone();
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the UPower service

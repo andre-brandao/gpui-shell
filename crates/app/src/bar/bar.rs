@@ -8,7 +8,6 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     point, prelude::*, px, rems,
 };
-use services::Services;
 use ui::{ActiveTheme, spacing};
 
 use super::widgets::Widget;
@@ -23,15 +22,15 @@ struct Bar {
 }
 
 impl Bar {
-    /// Create a bar with services and configuration.
-    fn new(services: Services, cx: &mut Context<Self>) -> Self {
+    /// Create a bar with configuration.
+    fn new(cx: &mut Context<Self>) -> Self {
         let config = cx.config().bar.clone();
         let orientation = config.orientation;
         Self {
             orientation,
-            start_widgets: Widget::create_many(&config.start, &services, cx),
-            center_widgets: Widget::create_many(&config.center, &services, cx),
-            end_widgets: Widget::create_many(&config.end, &services, cx),
+            start_widgets: Widget::create_many(&config.start, cx),
+            center_widgets: Widget::create_many(&config.center, cx),
+            end_widgets: Widget::create_many(&config.end, cx),
         }
     }
 
@@ -169,7 +168,7 @@ pub fn window_options(
 }
 
 /// Open the bar using the current global config.
-pub fn open(services: Services, cx: &mut App) {
+pub fn open(cx: &mut App) {
     cx.spawn(async move |cx| {
         // Small delay to allow Wayland to enumerate displays
         cx.background_executor()
@@ -184,12 +183,12 @@ pub fn open(services: Services, cx: &mut App) {
             if displays.is_empty() {
                 // No displays enumerated yet, open on default display
                 tracing::info!("No displays found, opening bar on default display");
-                open_with_config(services.clone(), None, cx);
+                open_with_config(None, cx);
             } else {
                 tracing::info!("Opening bar on {} displays", displays.len());
                 for d in displays {
                     tracing::info!("Opening bar on display {:?}", d.id());
-                    open_with_config(services.clone(), Some(d.id()), cx);
+                    open_with_config(Some(d.id()), cx);
                 }
             }
         })
@@ -198,9 +197,9 @@ pub fn open(services: Services, cx: &mut App) {
 }
 
 /// Open the bar with custom configuration.
-pub fn open_with_config(services: Services, display_id: Option<DisplayId>, cx: &mut App) {
+pub fn open_with_config(display_id: Option<DisplayId>, cx: &mut App) {
     cx.open_window(window_options(display_id, cx), move |_, cx| {
-        cx.new(|cx| Bar::new(services, cx))
+        cx.new(Bar::new)
     })
     .unwrap();
 }

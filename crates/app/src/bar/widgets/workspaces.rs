@@ -3,20 +3,22 @@
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
-use services::{CompositorCommand, CompositorState, CompositorSubscriber};
+use services::{CompositorCommand, CompositorState};
 use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::ActiveConfig;
+use crate::state::AppState;
 
 /// Workspaces widget that displays workspace indicators and allows switching.
 pub struct Workspaces {
-    compositor: CompositorSubscriber,
+    compositor: services::CompositorSubscriber,
     state: CompositorState,
 }
 
 impl Workspaces {
-    /// Create a new Workspaces widget with the given compositor subscriber.
-    pub fn new(compositor: CompositorSubscriber, cx: &mut Context<Self>) -> Self {
+    /// Create a new Workspaces widget.
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let compositor = AppState::services(cx).compositor.clone();
         let state = compositor.get();
 
         // Subscribe to compositor state changes

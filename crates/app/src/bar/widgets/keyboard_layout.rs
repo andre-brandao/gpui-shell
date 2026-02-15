@@ -3,20 +3,22 @@
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
-use services::{CompositorCommand, CompositorState, CompositorSubscriber};
+use services::{CompositorCommand, CompositorState};
 use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::ActiveConfig;
+use crate::state::AppState;
 
 /// Keyboard layout widget that displays the current keyboard layout.
 pub struct KeyboardLayout {
-    compositor: CompositorSubscriber,
+    compositor: services::CompositorSubscriber,
     state: CompositorState,
 }
 
 impl KeyboardLayout {
-    /// Create a new KeyboardLayout widget with the given compositor subscriber.
-    pub fn new(compositor: CompositorSubscriber, cx: &mut Context<Self>) -> Self {
+    /// Create a new KeyboardLayout widget.
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let compositor = AppState::services(cx).compositor.clone();
         let state = compositor.get();
 
         // Subscribe to compositor state changes

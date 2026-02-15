@@ -5,10 +5,11 @@
 use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use gpui::{App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
-use services::{SysInfoData, SysInfoSubscriber};
+use services::SysInfoData;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::config::{ActiveConfig, Config};
+use crate::state::AppState;
 
 mod panel;
 pub use panel::SysInfoPanel;
@@ -43,13 +44,14 @@ pub mod icons {
 
 /// SysInfo widget showing CPU and memory usage in the bar.
 pub struct SysInfo {
-    subscriber: SysInfoSubscriber,
+    subscriber: services::SysInfoSubscriber,
     data: SysInfoData,
 }
 
 impl SysInfo {
-    /// Create a new SysInfo widget with the given subscriber.
-    pub fn new(subscriber: SysInfoSubscriber, cx: &mut Context<Self>) -> Self {
+    /// Create a new SysInfo widget.
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let subscriber = AppState::services(cx).sysinfo.clone();
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the sysinfo service

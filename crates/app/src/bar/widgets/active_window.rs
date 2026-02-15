@@ -3,10 +3,11 @@
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, Render, Window, div, prelude::*, px};
-use services::{CompositorState, CompositorSubscriber};
+use services::CompositorState;
 use ui::{ActiveTheme, font_size, spacing};
 
 use crate::config::{ActiveConfig, BarOrientation};
+use crate::state::AppState;
 
 /// Maximum characters to display before truncating the title.
 const MAX_TITLE_LENGTH_HORIZONTAL: usize = 60;
@@ -14,13 +15,14 @@ const MAX_TITLE_LENGTH_VERTICAL: usize = 20;
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
-    _compositor: CompositorSubscriber,
+    _compositor: services::CompositorSubscriber,
     state: CompositorState,
 }
 
 impl ActiveWindow {
     /// Create a new active window widget.
-    pub fn new(compositor: CompositorSubscriber, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let compositor = AppState::services(cx).compositor.clone();
         let state = compositor.get();
 
         // Subscribe to compositor state changes
