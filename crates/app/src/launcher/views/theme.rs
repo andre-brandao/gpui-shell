@@ -6,6 +6,7 @@
 
 use std::sync::Mutex;
 
+use crate::config::Config;
 use crate::launcher::view::{LauncherView, ViewContext};
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
 use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
@@ -99,6 +100,9 @@ impl LauncherView for ThemeView {
         let schemes = Self::visible_schemes(vx.query);
         if let Some(scheme) = schemes.get(index) {
             Theme::set(scheme.theme.clone(), cx);
+            if let Err(err) = Config::save_theme(cx) {
+                tracing::warn!("Failed to persist selected theme: {}", err);
+            }
         }
         false
     }
@@ -211,6 +215,9 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
         .cursor_pointer()
         .on_click(move |_, _, cx| {
             Theme::set(stylix_theme.clone(), cx);
+            if let Err(err) = Config::save_theme(cx) {
+                tracing::warn!("Failed to persist selected theme: {}", err);
+            }
         })
         .flex()
         .items_center()

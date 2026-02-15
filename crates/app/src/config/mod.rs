@@ -3,19 +3,30 @@
 mod bar;
 mod launcher;
 mod persistence;
+mod theme_persistence;
 
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
+use ui::Theme;
 
 pub use bar::{BarConfig, BarPosition};
 pub use launcher::LauncherConfig;
 
 /// Root application configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub bar: BarConfig,
     pub launcher: LauncherConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            bar: BarConfig::default(),
+            launcher: LauncherConfig::default(),
+        }
+    }
 }
 
 impl Global for Config {}
@@ -31,6 +42,15 @@ impl Config {
             }
         };
 
+        let theme = match theme_persistence::load_theme() {
+            Ok(theme) => theme,
+            Err(err) => {
+                tracing::warn!("Failed to load theme, using defaults: {}", err);
+                Theme::default()
+            }
+        };
+
+        cx.set_global(theme);
         cx.set_global(config);
     }
 
@@ -70,6 +90,16 @@ impl Config {
     /// Persist a provided config to disk.
     pub fn save_config(config: &Config) -> anyhow::Result<()> {
         persistence::save(config)
+    }
+
+    /// Persist current global theme colors to `theme.toml`.
+    pub fn save_theme(cx: &App) -> anyhow::Result<()> {
+        theme_persistence::save_theme(Theme::global(cx))
+    }
+
+    /// Persist a provided theme colors to `theme.toml`.
+    pub fn save_theme_value(theme: &Theme) -> anyhow::Result<()> {
+        theme_persistence::save_theme(theme)
     }
 }
 

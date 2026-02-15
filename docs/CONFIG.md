@@ -7,7 +7,14 @@ GPUi Shell loads configuration from:
 
 If the file does not exist, it is created with defaults on startup.
 
-## Example
+Theme colors are loaded from:
+
+- `$XDG_CONFIG_HOME/gpuishell/theme.toml`
+- or `$HOME/.config/gpuishell/theme.toml` (fallback)
+
+If `theme.toml` is missing or invalid, the default theme is used.
+
+## `config.toml` example
 
 ```toml
 [bar]
@@ -25,6 +32,15 @@ margin_right = 0.0
 margin_bottom = 0.0
 margin_left = 0.0
 ```
+
+## `theme.toml` format
+
+`theme.toml` is written automatically when you apply a theme from the launcher.
+
+Color values accept:
+
+- `#RRGGBB`
+- `#RRGGBBAA`
 
 ## `bar`
 

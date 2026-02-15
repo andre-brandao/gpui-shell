@@ -68,9 +68,7 @@ async fn main() {
     let app = Application::new().with_assets(Assets {});
 
     app.run(move |cx| {
-        // Initialize the global theme
-        ui::Theme::init(cx);
-        // Initialize the global app config
+        // Initialize config and theme
         config::Config::init(cx);
         // Initialize global app state
         AppState::init(services.clone(), cx);
