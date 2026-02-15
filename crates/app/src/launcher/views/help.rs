@@ -6,8 +6,8 @@ use ui::{
     icon_size, spacing,
 };
 
+use crate::bar::widgets::sysinfo::icons;
 use crate::launcher::view::{LauncherView, ViewContext};
-use crate::widgets::sysinfo::icons;
 
 /// Help view - shows available commands and system status.
 pub struct HelpView {

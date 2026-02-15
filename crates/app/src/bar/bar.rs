@@ -11,10 +11,8 @@ use gpui::{
 use services::Services;
 use ui::{ActiveTheme, spacing};
 
-use crate::{
-    config::{BarConfig, BarOrientation, Config},
-    widgets::Widget,
-};
+use super::widgets::Widget;
+use crate::config::{ActiveConfig, BarOrientation};
 
 /// The main bar view.
 struct Bar {
@@ -26,7 +24,8 @@ struct Bar {
 
 impl Bar {
     /// Create a bar with services and configuration.
-    fn new(services: Services, config: BarConfig, cx: &mut Context<Self>) -> Self {
+    fn new(services: Services, cx: &mut Context<Self>) -> Self {
+        let config = cx.config().bar.clone();
         let orientation = config.orientation;
         Self {
             orientation,
@@ -125,7 +124,7 @@ impl Render for Bar {
 
 /// Returns window options for the bar.
 pub fn window_options(
-    config: &BarConfig,
+    // config: &BarConfig,
     display_id: Option<DisplayId>,
     cx: &App,
 ) -> WindowOptions {
@@ -134,15 +133,15 @@ pub fn window_options(
         .or_else(|| cx.primary_display())
         .map(|display| display.bounds().size)
         .unwrap_or_else(|| Size::new(px(1920.), px(1080.)));
-
-    let (window_size, anchor) = if config.orientation.is_vertical() {
+    let config = cx.config();
+    let (window_size, anchor) = if config.bar.orientation.is_vertical() {
         (
-            Size::new(px(config.size), display_size.height),
+            Size::new(px(config.bar.size), display_size.height),
             Anchor::LEFT | Anchor::TOP | Anchor::BOTTOM,
         )
     } else {
         (
-            Size::new(display_size.width, px(config.size)),
+            Size::new(display_size.width, px(config.bar.size)),
             Anchor::LEFT | Anchor::RIGHT | Anchor::TOP,
         )
     };
@@ -160,7 +159,7 @@ pub fn window_options(
             namespace: "bar".to_string(),
             layer: Layer::Top,
             anchor,
-            exclusive_zone: Some(px(config.size)),
+            exclusive_zone: Some(px(config.bar.size)),
             margin: None,
             keyboard_interactivity: KeyboardInteractivity::None,
             ..Default::default()
@@ -180,18 +179,17 @@ pub fn open(services: Services, cx: &mut App) {
         tracing::info!("Bar opened");
 
         cx.update(|cx: &mut App| {
-            let bar_config = Config::global(cx).bar.clone();
             let displays = cx.displays();
 
             if displays.is_empty() {
                 // No displays enumerated yet, open on default display
                 tracing::info!("No displays found, opening bar on default display");
-                open_with_config(services.clone(), bar_config, None, cx);
+                open_with_config(services.clone(), None, cx);
             } else {
                 tracing::info!("Opening bar on {} displays", displays.len());
                 for d in displays {
                     tracing::info!("Opening bar on display {:?}", d.id());
-                    open_with_config(services.clone(), bar_config.clone(), Some(d.id()), cx);
+                    open_with_config(services.clone(), Some(d.id()), cx);
                 }
             }
         })
@@ -200,14 +198,9 @@ pub fn open(services: Services, cx: &mut App) {
 }
 
 /// Open the bar with custom configuration.
-pub fn open_with_config(
-    services: Services,
-    config: BarConfig,
-    display_id: Option<DisplayId>,
-    cx: &mut App,
-) {
-    cx.open_window(window_options(&config, display_id, cx), move |_, cx| {
-        cx.new(|cx| Bar::new(services, config, cx))
+pub fn open_with_config(services: Services, display_id: Option<DisplayId>, cx: &mut App) {
+    cx.open_window(window_options(display_id, cx), move |_, cx| {
+        cx.new(|cx| Bar::new(services, cx))
     })
     .unwrap();
 }

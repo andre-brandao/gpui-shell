@@ -19,7 +19,6 @@ pub mod control_center;
 pub mod launcher;
 pub mod osd;
 mod panel;
-pub mod widgets;
 
 use args::Args;
 
