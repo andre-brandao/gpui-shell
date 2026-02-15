@@ -543,38 +543,18 @@ pub fn register_keybindings(cx: &mut App) {
     ]);
 }
 
-/// Toggle the launcher window.
-pub fn toggle(services: Services, cx: &mut App) {
-    toggle_with_input(services, None, cx);
-}
-
-pub fn toggle_from_ipc(services: Services, input: Option<String>, cx: &mut App) {
-    let start = std::time::Instant::now();
-    tracing::debug!("toggle_from_ipc: start");
-
-    let mut guard = LAUNCHER_WINDOW.lock().unwrap();
-    tracing::debug!("toggle_from_ipc: acquired lock {:?}", start.elapsed());
-
-    if let Some(handle) = guard.take() {
-        let _ = handle.update(cx, |_, window, _| {
-            window.remove_window();
-        });
-        tracing::debug!("toggle_from_ipc: closed window {:?}", start.elapsed());
-    } else {
-        tracing::debug!("toggle_from_ipc: opening new window {:?}", start.elapsed());
-        drop(guard);
-        toggle_with_input(services, input, cx);
-    }
-    tracing::debug!("toggle_from_ipc: done {:?}", start.elapsed());
-}
-
 /// Toggle the launcher window with optional prefilled input.
-pub fn toggle_with_input(services: Services, input: Option<String>, cx: &mut App) {
+///
+/// Behavior:
+/// - If launcher is closed: opens it (with optional input).
+/// - If launcher is open and `input` is `Some`: updates the input.
+/// - If launcher is open and `input` is `None`: closes it.
+pub fn toggle(services: Services, input: Option<String>, cx: &mut App) {
     let start = std::time::Instant::now();
-    tracing::debug!("toggle_with_input: start");
+    tracing::debug!("launcher::toggle: start");
 
     let mut guard = LAUNCHER_WINDOW.lock().unwrap();
-    tracing::debug!("toggle_with_input: acquired lock {:?}", start.elapsed());
+    tracing::debug!("launcher::toggle: acquired lock {:?}", start.elapsed());
 
     if let Some(handle) = guard.take() {
         // If input is provided, update existing launcher instead of closing
@@ -592,12 +572,9 @@ pub fn toggle_with_input(services: Services, input: Option<String>, cx: &mut App
         let _ = handle.update(cx, |_, window, _| {
             window.remove_window();
         });
-        tracing::debug!("toggle_with_input: closed window {:?}", start.elapsed());
+        tracing::debug!("launcher::toggle: closed window {:?}", start.elapsed());
     } else {
-        tracing::debug!(
-            "toggle_with_input: opening new window {:?}",
-            start.elapsed()
-        );
+        tracing::debug!("launcher::toggle: opening new window {:?}", start.elapsed());
         if let Ok(handle) = cx.open_window(
             WindowOptions {
                 titlebar: None,
@@ -624,7 +601,7 @@ pub fn toggle_with_input(services: Services, input: Option<String>, cx: &mut App
                     let new_start = std::time::Instant::now();
                     let launcher = Launcher::new(services.clone(), input.clone(), cx);
                     tracing::debug!(
-                        "toggle_with_input: Launcher::new took {:?}",
+                        "launcher::toggle: Launcher::new took {:?}",
                         new_start.elapsed()
                     );
                     launcher
@@ -632,42 +609,8 @@ pub fn toggle_with_input(services: Services, input: Option<String>, cx: &mut App
             },
         ) {
             *guard = Some(handle);
-            tracing::debug!("toggle_with_input: window opened {:?}", start.elapsed());
+            tracing::debug!("launcher::toggle: window opened {:?}", start.elapsed());
         }
     }
-    tracing::debug!("toggle_with_input: done {:?}", start.elapsed());
-}
-
-/// Open the launcher (alias for toggle).
-pub fn open(services: Services, cx: &mut App) {
-    toggle(services, cx);
-}
-
-/// Open the launcher with prefilled input.
-/// If already open, updates the input. If closed, opens with the input.
-pub fn open_with_input(services: Services, input: Option<String>, cx: &mut App) {
-    let start = std::time::Instant::now();
-    tracing::debug!("open_with_input: start");
-
-    let guard = LAUNCHER_WINDOW.lock().unwrap();
-    tracing::debug!("open_with_input: acquired lock {:?}", start.elapsed());
-
-    if let Some(handle) = &*guard {
-        // Launcher already open, update input if provided
-        if let Some(input_text) = input {
-            let _ = handle.update(cx, |launcher, _, cx| {
-                launcher.set_input(input_text);
-                cx.notify();
-            });
-        }
-    } else {
-        // Launcher not open, open it with input
-        tracing::debug!(
-            "open_with_input: delegating to toggle_with_input {:?}",
-            start.elapsed()
-        );
-        drop(guard); // Release lock before calling toggle_with_input
-        toggle_with_input(services, input, cx);
-    }
-    tracing::debug!("open_with_input: done {:?}", start.elapsed());
+    tracing::debug!("launcher::toggle: done {:?}", start.elapsed());
 }

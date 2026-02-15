@@ -39,7 +39,7 @@ impl Render for LauncherBtn {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |_, _, _, cx| {
-                    launcher::toggle(AppState::services(cx).clone(), cx);
+                    launcher::toggle(AppState::services(cx).clone(), None, cx);
                 }),
             )
             .child(

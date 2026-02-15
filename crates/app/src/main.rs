@@ -103,7 +103,7 @@ async fn main() {
 
                 cx.update(move |cx| {
                     tracing::info!("Toggling launcher from IPC: {:?}", input);
-                    launcher::toggle_from_ipc(services, input, cx);
+                    launcher::toggle(services, input, cx);
                 });
             }
 
