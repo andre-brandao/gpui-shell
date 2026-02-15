@@ -136,27 +136,54 @@ impl Render for Battery {
             None => theme.text.muted,
         };
 
-        div()
-            .id("battery-widget")
-            .flex()
-            .when(is_vertical, |this| this.flex_col())
-            .items_center()
-            .gap(px(spacing::XS))
-            // Battery icon
-            .child(
-                div()
-                    .text_size(px(icon_size::MD))
-                    .text_color(icon_color)
-                    .child(icon),
-            )
-            // Battery percentage
-            .when(!text.is_empty(), |this| {
-                this.child(
+        if is_vertical {
+            div()
+                .id("battery-widget")
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(px(spacing::XS))
+                // Battery icon
+                .child(
                     div()
-                        .text_size(px(font_size::SM))
-                        .text_color(text_color)
-                        .child(text),
+                        .text_size(px(icon_size::MD))
+                        .text_color(icon_color)
+                        .child(icon),
                 )
-            })
+                // Battery percentage stacked vertically
+                .when(!text.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .text_size(px(font_size::SM))
+                            .text_color(text_color)
+                            .children(text.chars().map(|ch| div().child(ch.to_string()))),
+                    )
+                })
+        } else {
+            div()
+                .id("battery-widget")
+                .flex()
+                .items_center()
+                .gap(px(spacing::XS))
+                // Battery icon
+                .child(
+                    div()
+                        .text_size(px(icon_size::MD))
+                        .text_color(icon_color)
+                        .child(icon),
+                )
+                // Battery percentage
+                .when(!text.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .text_size(px(font_size::SM))
+                            .text_color(text_color)
+                            .child(text),
+                    )
+                })
+        }
     }
 }

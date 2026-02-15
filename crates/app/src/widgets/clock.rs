@@ -35,10 +35,6 @@ impl Clock {
     fn formatted_time_compact(&self) -> String {
         Local::now().format("%H:%M").to_string()
     }
-
-    fn formatted_date_compact(&self) -> String {
-        Local::now().format("%d/%m").to_string()
-    }
 }
 
 impl Render for Clock {
@@ -47,19 +43,14 @@ impl Render for Clock {
         let is_vertical = cx.config().bar.orientation.is_vertical();
 
         if is_vertical {
+            let time = self.formatted_time_compact();
             div()
                 .flex()
                 .flex_col()
                 .items_center()
                 .text_size(gpui::px(font_size::SM))
                 .text_color(theme.text.primary)
-                .child(self.formatted_time_compact())
-                .child(
-                    div()
-                        .text_size(gpui::px(font_size::XS))
-                        .text_color(theme.text.secondary)
-                        .child(self.formatted_date_compact()),
-                )
+                .children(time.chars().map(|ch| div().child(ch.to_string())))
         } else {
             div()
                 .flex()

@@ -79,17 +79,31 @@ impl Render for ActiveWindow {
         let orientation = cx.config().bar.orientation;
         let title = self.display_title(orientation);
 
-        div()
-            .id("active-window")
-            .flex()
-            .items_center()
-            .justify_center()
-            .when(orientation.is_vertical(), |this| this.w_full())
-            .px(px(spacing::MD))
-            .text_size(px(font_size::SM))
-            .text_color(theme.text.secondary)
-            .overflow_hidden()
-            .text_ellipsis()
-            .child(title)
+        if orientation.is_vertical() {
+            div()
+                .id("active-window")
+                .w_full()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_start()
+                .px(px(spacing::SM))
+                .text_size(px(font_size::SM))
+                .text_color(theme.text.secondary)
+                .overflow_hidden()
+                .children(title.chars().map(|ch| div().child(ch.to_string())))
+        } else {
+            div()
+                .id("active-window")
+                .flex()
+                .items_center()
+                .justify_center()
+                .px(px(spacing::MD))
+                .text_size(px(font_size::SM))
+                .text_color(theme.text.secondary)
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(title)
+        }
     }
 }
