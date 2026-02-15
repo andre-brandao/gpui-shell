@@ -6,6 +6,8 @@ use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState, CompositorSubscriber};
 use ui::{ActiveTheme, radius, spacing};
 
+use crate::config::ActiveConfig;
+
 /// Keyboard layout widget that displays the current keyboard layout.
 pub struct KeyboardLayout {
     compositor: CompositorSubscriber,
@@ -111,6 +113,7 @@ impl KeyboardLayout {
 impl Render for KeyboardLayout {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = cx.config().bar.orientation.is_vertical();
         let short_name = self.short_layout_name();
 
         // Pre-compute colors for closures
@@ -123,6 +126,7 @@ impl Render for KeyboardLayout {
         div()
             .id("keyboard-layout")
             .flex()
+            .when(is_vertical, |this| this.flex_col())
             .items_center()
             .gap(px(spacing::XS))
             .px(px(spacing::SM))

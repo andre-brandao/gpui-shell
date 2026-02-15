@@ -12,6 +12,8 @@ use services::{
 };
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
+use crate::config::{ActiveConfig, Config};
+
 /// System tray widget that displays tray icons.
 pub struct Tray {
     subscriber: TraySubscriber,
@@ -57,12 +59,18 @@ impl Tray {
         let visible_items = count_top_level_menu_items(&menu.2);
         // Each item is ~26px (py: 6px * 2 + font ~14px), separators ~9px, plus panel padding 8px
         let menu_height = (visible_items * 26).min(400) as f32 + 8.0;
+        let is_vertical = Config::global(cx).bar.orientation.is_vertical();
+        let (anchor, margin) = if is_vertical {
+            (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
+        } else {
+            (Anchor::TOP | Anchor::RIGHT, (0.0, 8.0, 0.0, 0.0))
+        };
 
         let config = PanelConfig {
             width: 250.0,
             height: menu_height,
-            anchor: Anchor::TOP | Anchor::RIGHT,
-            margin: (0.0, 8.0, 0.0, 0.0), // Compositor handles top margin
+            anchor,
+            margin, // Compositor handles reserved bar space via exclusive zone
             namespace: "systray-menu".to_string(),
         };
 
@@ -75,6 +83,7 @@ impl Tray {
 impl Render for Tray {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = cx.config().bar.orientation.is_vertical();
         let items: Vec<_> = self.data.items.clone();
 
         // Pre-compute colors for closures
@@ -86,6 +95,7 @@ impl Render for Tray {
         div()
             .id("systray")
             .flex()
+            .when(is_vertical, |this| this.flex_col())
             .items_center()
             .gap(px(2.))
             .children(items.into_iter().map(|item| {

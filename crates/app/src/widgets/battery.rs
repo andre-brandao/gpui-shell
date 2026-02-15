@@ -5,6 +5,8 @@ use gpui::{Context, Window, div, prelude::*, px};
 use services::{BatteryState, UPowerData, UPowerSubscriber};
 use ui::{ActiveTheme, font_size, icon_size, spacing};
 
+use crate::config::ActiveConfig;
+
 /// A battery widget that displays the current battery percentage and status.
 pub struct Battery {
     data: UPowerData,
@@ -94,6 +96,7 @@ impl Battery {
 impl Render for Battery {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = cx.config().bar.orientation.is_vertical();
 
         let icon = self.battery_icon();
         let text = self.battery_text();
@@ -121,7 +124,10 @@ impl Render for Battery {
                     theme.status.error
                 } else if battery.is_low() {
                     theme.status.warning
-                } else if matches!(battery.state, BatteryState::Charging | BatteryState::FullyCharged) {
+                } else if matches!(
+                    battery.state,
+                    BatteryState::Charging | BatteryState::FullyCharged
+                ) {
                     theme.status.success
                 } else {
                     theme.text.primary
@@ -133,6 +139,7 @@ impl Render for Battery {
         div()
             .id("battery-widget")
             .flex()
+            .when(is_vertical, |this| this.flex_col())
             .items_center()
             .gap(px(spacing::XS))
             // Battery icon

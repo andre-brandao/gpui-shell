@@ -18,6 +18,7 @@ use services::{
 };
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
+use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
 use crate::panel::{PanelConfig, toggle_panel};
 
@@ -178,11 +179,17 @@ impl Settings {
     /// Toggle the control center panel.
     fn toggle_panel(&self, cx: &mut gpui::App) {
         let services = self.services.clone();
+        let is_vertical = Config::global(cx).bar.orientation.is_vertical();
+        let (anchor, margin) = if is_vertical {
+            (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
+        } else {
+            (Anchor::TOP | Anchor::RIGHT, (0.0, 8.0, 0.0, 0.0))
+        };
         let config = PanelConfig {
             width: 300.0,
             height: 380.0,
-            anchor: Anchor::TOP | Anchor::RIGHT,
-            margin: (0.0, 8.0, 0.0, 0.0), // Compositor handles top margin
+            anchor,
+            margin, // Compositor handles reserved bar space via exclusive zone
             namespace: "control-center".to_string(),
         };
 
@@ -287,6 +294,7 @@ impl Settings {
 impl Render for Settings {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = cx.config().bar.orientation.is_vertical();
 
         let privacy_icons = self.privacy_icons();
         let volume_icon = self.volume_icon();
@@ -321,6 +329,7 @@ impl Render for Settings {
         div()
             .id("settings-widget")
             .flex()
+            .when(is_vertical, |this| this.flex_col())
             .items_center()
             .gap(px(spacing::SM))
             .px(px(spacing::SM))

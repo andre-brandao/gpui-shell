@@ -408,22 +408,20 @@ impl Render for SysInfoPanel {
                                         ),
                                 )
                                 .child(
-                                    div()
-                                        .pl(px(32.))
-                                        .child(
-                                            div()
-                                                .w_full()
-                                                .h(px(4.))
-                                                .rounded(px(2.))
-                                                .bg(bg_tertiary)
-                                                .child(
-                                                    div()
-                                                        .h_full()
-                                                        .rounded(px(2.))
-                                                        .bg(disk_color)
-                                                        .w(gpui::relative(width_percent / 100.0)),
-                                                ),
-                                        ),
+                                    div().pl(px(32.)).child(
+                                        div()
+                                            .w_full()
+                                            .h(px(4.))
+                                            .rounded(px(2.))
+                                            .bg(bg_tertiary)
+                                            .child(
+                                                div()
+                                                    .h_full()
+                                                    .rounded(px(2.))
+                                                    .bg(disk_color)
+                                                    .w(gpui::relative(width_percent / 100.0)),
+                                            ),
+                                    ),
                                 )
                                 .child(
                                     div()

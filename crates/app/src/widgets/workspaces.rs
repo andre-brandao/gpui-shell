@@ -6,6 +6,8 @@ use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState, CompositorSubscriber};
 use ui::{ActiveTheme, radius, spacing};
 
+use crate::config::ActiveConfig;
+
 /// Workspaces widget that displays workspace indicators and allows switching.
 pub struct Workspaces {
     compositor: CompositorSubscriber,
@@ -61,6 +63,7 @@ impl Workspaces {
 impl Render for Workspaces {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = cx.config().bar.orientation.is_vertical();
         let active_workspace_id = self.state.active_workspace_id;
 
         // Pre-compute colors for closures
@@ -76,6 +79,7 @@ impl Render for Workspaces {
         div()
             .id("workspaces")
             .flex()
+            .when(is_vertical, |this| this.flex_col())
             .items_center()
             .gap(px(spacing::XS))
             // Scroll to switch workspaces

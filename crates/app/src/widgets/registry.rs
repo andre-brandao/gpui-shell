@@ -7,6 +7,8 @@ use gpui::{AnyElement, Context, Entity, prelude::*};
 
 use services::Services;
 
+use crate::config::WidgetConfig;
+
 use super::{
     ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces,
 };
@@ -49,11 +51,6 @@ impl Widget {
     /// Create a widget by name.
     ///
     /// Returns `None` if the widget name is unknown.
-    ///
-    /// # Arguments
-    /// * `name` - The widget name (e.g., "Clock", "Battery", "Settings")
-    /// * `services` - Shared services for widgets that need them
-    /// * `cx` - The GPUI context
     pub fn create<V: 'static>(
         name: &str,
         services: &Services,
@@ -96,22 +93,15 @@ impl Widget {
         }
     }
 
-    /// Create multiple widgets from a list of names.
-    ///
-    /// Unknown widget names are silently filtered out (with a warning log).
-    ///
-    /// # Arguments
-    /// * `names` - Slice of widget names to create
-    /// * `services` - Shared services for widgets that need them
-    /// * `cx` - The GPUI context
+    /// Create multiple widgets from a config list.
     pub fn create_many<V: 'static>(
-        names: &[String],
+        widgets: &[WidgetConfig],
         services: &Services,
         cx: &mut Context<V>,
     ) -> Vec<Widget> {
-        names
+        widgets
             .iter()
-            .filter_map(|name| Widget::create(name, services, cx))
+            .filter_map(|widget| Widget::create(&widget.name, services, cx))
             .collect()
     }
 }

@@ -6,8 +6,11 @@ use gpui::{Context, Render, Window, div, prelude::*, px};
 use services::{CompositorState, CompositorSubscriber};
 use ui::{ActiveTheme, font_size, spacing};
 
+use crate::config::{ActiveConfig, BarOrientation};
+
 /// Maximum characters to display before truncating the title.
-const MAX_TITLE_LENGTH: usize = 60;
+const MAX_TITLE_LENGTH_HORIZONTAL: usize = 60;
+const MAX_TITLE_LENGTH_VERTICAL: usize = 20;
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
@@ -44,7 +47,7 @@ impl ActiveWindow {
     }
 
     /// Get the display title, truncated if necessary.
-    fn display_title(&self) -> String {
+    fn display_title(&self, orientation: BarOrientation) -> String {
         let title = self
             .state
             .active_window
@@ -56,7 +59,13 @@ impl ActiveWindow {
             return String::new();
         }
 
-        if let Some((cutoff, _)) = title.char_indices().nth(MAX_TITLE_LENGTH) {
+        let max_length = if orientation.is_vertical() {
+            MAX_TITLE_LENGTH_VERTICAL
+        } else {
+            MAX_TITLE_LENGTH_HORIZONTAL
+        };
+
+        if let Some((cutoff, _)) = title.char_indices().nth(max_length) {
             format!("{}…", &title[..cutoff])
         } else {
             title.to_string()
@@ -67,13 +76,15 @@ impl ActiveWindow {
 impl Render for ActiveWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let title = self.display_title();
+        let orientation = cx.config().bar.orientation;
+        let title = self.display_title(orientation);
 
         div()
             .id("active-window")
             .flex()
             .items_center()
             .justify_center()
+            .when(orientation.is_vertical(), |this| this.w_full())
             .px(px(spacing::MD))
             .text_size(px(font_size::SM))
             .text_color(theme.text.secondary)

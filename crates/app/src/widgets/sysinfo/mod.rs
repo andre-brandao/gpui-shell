@@ -8,6 +8,8 @@ use gpui::{App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude:
 use services::{SysInfoData, SysInfoSubscriber};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
+use crate::config::{ActiveConfig, Config};
+
 mod panel;
 pub use panel::SysInfoPanel;
 
@@ -79,11 +81,17 @@ impl SysInfo {
 
     fn toggle_panel(&mut self, cx: &mut App) {
         let subscriber = self.subscriber.clone();
+        let is_vertical = Config::global(cx).bar.orientation.is_vertical();
+        let (anchor, margin) = if is_vertical {
+            (Anchor::TOP | Anchor::LEFT, (8.0, 0.0, 0.0, 0.0))
+        } else {
+            (Anchor::TOP | Anchor::LEFT, (0.0, 0.0, 0.0, 8.0))
+        };
         let config = PanelConfig {
             width: 350.0,
             height: 450.0,
-            anchor: Anchor::TOP | Anchor::LEFT,
-            margin: (0.0, 0.0, 0.0, 8.0),
+            anchor,
+            margin,
             namespace: "sysinfo-panel".to_string(),
         };
 
@@ -112,6 +120,7 @@ impl SysInfo {
 impl Render for SysInfo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let is_vertical = cx.config().bar.orientation.is_vertical();
 
         let cpu_usage = self.data.cpu_usage;
         let memory_usage = self.data.memory_usage;
@@ -127,6 +136,7 @@ impl Render for SysInfo {
         div()
             .id("sysinfo-widget")
             .flex()
+            .when(is_vertical, |this| this.flex_col())
             .items_center()
             .gap(px(spacing::SM))
             .px(px(spacing::SM))

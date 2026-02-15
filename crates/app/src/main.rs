@@ -14,6 +14,7 @@ use tracing_subscriber::EnvFilter;
 
 mod args;
 mod bar;
+pub mod config;
 pub mod control_center;
 pub mod launcher;
 pub mod osd;
@@ -68,6 +69,8 @@ async fn main() {
     app.run(move |cx| {
         // Initialize the global theme
         ui::Theme::init(cx);
+        // Initialize the global app config
+        config::Config::init(cx);
 
         // Register keybindings
         launcher::register_keybindings(cx);
