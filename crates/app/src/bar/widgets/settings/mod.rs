@@ -11,7 +11,7 @@
 //! Clicking opens the Control Center panel.
 
 use futures_signals::signal::SignalExt;
-use gpui::{Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
@@ -19,9 +19,9 @@ use services::{
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::bar::widgets::WidgetSlot;
-use crate::config::{ActiveConfig, BarPosition, Config};
+use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
-use crate::panel::{PanelConfig, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement, toggle_panel};
 use crate::state::AppState;
 
 /// Nerd Font icons for status display.
@@ -183,40 +183,7 @@ impl Settings {
     fn toggle_panel(&self, cx: &mut gpui::App) {
         let services = AppState::services(cx).clone();
         let config = Config::global(cx);
-        let (anchor, margin) = match config.bar.position {
-            BarPosition::Left => {
-                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::BOTTOM
-                } else {
-                    Anchor::TOP
-                };
-                (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Right => {
-                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::BOTTOM
-                } else {
-                    Anchor::TOP
-                };
-                (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Top => {
-                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::RIGHT
-                } else {
-                    Anchor::LEFT
-                };
-                (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Bottom => {
-                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::RIGHT
-                } else {
-                    Anchor::LEFT
-                };
-                (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-        };
+        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
         let config = PanelConfig {
             width: 300.0,
             height: 380.0,

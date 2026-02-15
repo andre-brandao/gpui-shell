@@ -4,12 +4,13 @@
 
 use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
-use gpui::{App, Context, MouseButton, Window, div, layer_shell::Anchor, prelude::*, px};
+use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
 use services::SysInfoData;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::bar::widgets::WidgetSlot;
-use crate::config::{ActiveConfig, BarPosition, Config};
+use crate::config::{ActiveConfig, Config};
+use crate::panel::panel_placement;
 use crate::state::AppState;
 
 mod panel;
@@ -87,40 +88,7 @@ impl SysInfo {
     fn toggle_panel(&mut self, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
-        let (anchor, margin) = match config.bar.position {
-            BarPosition::Left => {
-                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::BOTTOM
-                } else {
-                    Anchor::TOP
-                };
-                (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Right => {
-                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::BOTTOM
-                } else {
-                    Anchor::TOP
-                };
-                (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Top => {
-                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::RIGHT
-                } else {
-                    Anchor::LEFT
-                };
-                (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Bottom => {
-                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::RIGHT
-                } else {
-                    Anchor::LEFT
-                };
-                (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-        };
+        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
         let config = PanelConfig {
             width: 350.0,
             height: 450.0,

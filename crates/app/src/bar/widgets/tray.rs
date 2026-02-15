@@ -4,14 +4,14 @@ use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{
-    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, layer_shell::Anchor,
-    prelude::*, px,
+    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::bar::widgets::WidgetSlot;
-use crate::config::{ActiveConfig, BarPosition, Config};
+use crate::config::{ActiveConfig, Config};
+use crate::panel::panel_placement;
 use crate::state::AppState;
 
 /// System tray widget that displays tray icons.
@@ -66,40 +66,7 @@ impl Tray {
         // Each item is ~26px (py: 6px * 2 + font ~14px), separators ~9px, plus panel padding 8px
         let menu_height = (visible_items * 26).min(400) as f32 + 8.0;
         let config = Config::global(cx);
-        let (anchor, margin) = match config.bar.position {
-            BarPosition::Left => {
-                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::BOTTOM
-                } else {
-                    Anchor::TOP
-                };
-                (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Right => {
-                let vertical_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::BOTTOM
-                } else {
-                    Anchor::TOP
-                };
-                (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Top => {
-                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::RIGHT
-                } else {
-                    Anchor::LEFT
-                };
-                (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-            BarPosition::Bottom => {
-                let horizontal_edge = if matches!(self.slot, WidgetSlot::End) {
-                    Anchor::RIGHT
-                } else {
-                    Anchor::LEFT
-                };
-                (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
-            }
-        };
+        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
 
         let config = PanelConfig {
             width: 250.0,

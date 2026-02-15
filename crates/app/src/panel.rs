@@ -9,6 +9,9 @@ use gpui::{
 };
 use std::sync::Mutex;
 
+use crate::bar::widgets::WidgetSlot;
+use crate::config::BarPosition;
+
 /// Panel configuration for positioning and sizing.
 #[derive(Clone)]
 pub struct PanelConfig {
@@ -27,6 +30,47 @@ impl Default for PanelConfig {
             anchor: Anchor::TOP | Anchor::RIGHT,
             margin: (0.0, 8.0, 0.0, 0.0),
             namespace: "panel".to_string(),
+        }
+    }
+}
+
+/// Resolve panel anchor/margin for a bar position and widget slot.
+pub fn panel_placement(
+    bar_position: BarPosition,
+    slot: WidgetSlot,
+) -> (Anchor, (f32, f32, f32, f32)) {
+    match bar_position {
+        BarPosition::Left => {
+            let vertical_edge = if matches!(slot, WidgetSlot::End) {
+                Anchor::BOTTOM
+            } else {
+                Anchor::TOP
+            };
+            (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+        }
+        BarPosition::Right => {
+            let vertical_edge = if matches!(slot, WidgetSlot::End) {
+                Anchor::BOTTOM
+            } else {
+                Anchor::TOP
+            };
+            (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+        }
+        BarPosition::Top => {
+            let horizontal_edge = if matches!(slot, WidgetSlot::End) {
+                Anchor::RIGHT
+            } else {
+                Anchor::LEFT
+            };
+            (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+        }
+        BarPosition::Bottom => {
+            let horizontal_edge = if matches!(slot, WidgetSlot::End) {
+                Anchor::RIGHT
+            } else {
+                Anchor::LEFT
+            };
+            (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
         }
     }
 }
