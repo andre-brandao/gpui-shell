@@ -1,0 +1,65 @@
+# Configuration
+
+GPUi Shell loads configuration from:
+
+- `$XDG_CONFIG_HOME/gpuishell/config.toml`
+- or `$HOME/.config/gpuishell/config.toml` (fallback)
+
+If the file does not exist, it is created with defaults on startup.
+
+## Example
+
+```toml
+[bar]
+size = 32.0
+position = "left"
+start = ["LauncherBtn", "Workspaces", "SysInfo"]
+center = ["ActiveWindow"]
+end = ["Clock", "Systray", "KeyboardLayout", "Settings"]
+
+[launcher]
+width = 600.0
+height = 450.0
+margin_top = 100.0
+margin_right = 0.0
+margin_bottom = 0.0
+margin_left = 0.0
+```
+
+## `bar`
+
+- `size` (`float`): bar thickness in pixels.
+- `position` (`"left" | "right" | "top" | "bottom"`): screen edge.
+- `start` (`string[]`): widgets in the start section.
+- `center` (`string[]`): widgets in the center section.
+- `end` (`string[]`): widgets in the end section.
+
+Notes:
+
+- Vertical layout is inferred from `position = "left" | "right"`.
+- Horizontal layout is inferred from `position = "top" | "bottom"`.
+
+## `launcher`
+
+- `width` (`float`): launcher window width in pixels.
+- `height` (`float`): launcher window height in pixels.
+- `margin_top` (`float`): top margin for layer-shell placement.
+- `margin_right` (`float`): right margin for layer-shell placement.
+- `margin_bottom` (`float`): bottom margin for layer-shell placement.
+- `margin_left` (`float`): left margin for layer-shell placement.
+
+## Widget names
+
+Known widget names:
+
+- `LauncherBtn` (alias: `Launcher`)
+- `Workspaces`
+- `ActiveWindow` (alias: `WindowTitle`)
+- `SysInfo`
+- `Clock`
+- `Systray` (alias: `Tray`)
+- `KeyboardLayout`
+- `Settings` (aliases: `Info`, `ControlCenter`)
+- `Battery`
+
+Unknown names are ignored and logged as warnings.
