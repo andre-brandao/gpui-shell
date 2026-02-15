@@ -338,21 +338,21 @@ impl Render for Settings {
             // Privacy icons (red, only shown when active)
             .children(privacy_icons.into_iter().map(move |icon| {
                 div()
-                    .text_size(px(icon_size::MD))
+                    .text_size(px(icon_size::LG))
                     .text_color(status_error)
                     .child(icon)
             }))
             // Volume icon
             .child(
                 div()
-                    .text_size(px(icon_size::MD))
+                    .text_size(px(icon_size::LG))
                     .text_color(text_primary)
                     .child(volume_icon),
             )
             // Network icon
             .child(
                 div()
-                    .text_size(px(icon_size::MD))
+                    .text_size(px(icon_size::LG))
                     .text_color(text_primary)
                     .child(network_icon),
             )
@@ -360,7 +360,7 @@ impl Render for Settings {
             .when_some(bluetooth_icon, |el, icon| {
                 el.child(
                     div()
-                        .text_size(px(icon_size::MD))
+                        .text_size(px(icon_size::LG))
                         .text_color(text_primary)
                         .child(icon),
                 )
@@ -368,7 +368,7 @@ impl Render for Settings {
             // Power profile icon
             .child(
                 div()
-                    .text_size(px(icon_size::MD))
+                    .text_size(px(icon_size::LG))
                     .text_color(text_primary)
                     .child(power_profile_icon),
             )
@@ -380,14 +380,14 @@ impl Render for Settings {
                     .gap(px(2.))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(px(icon_size::LG))
                             .text_color(battery_color)
                             .child(battery_icon),
                     )
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
                             div()
-                                .text_size(px(font_size::SM))
+                                .text_size(px(font_size::LG))
                                 .text_color(battery_color)
                                 .child(battery_text),
                         )

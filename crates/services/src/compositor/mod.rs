@@ -46,7 +46,7 @@ impl CompositorSubscriber {
         // Fetch initial state
         let initial_state = match backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
-            CompositorBackend::Niri => CompositorState::default(),
+            CompositorBackend::Niri => niri::fetch_full_state()?,
         };
 
         let data = Mutable::new(initial_state);
@@ -54,9 +54,7 @@ impl CompositorSubscriber {
         // Start the event listener (runs in a dedicated thread with sync handlers)
         match backend {
             CompositorBackend::Hyprland => hyprland::start_listener(data.clone()),
-            CompositorBackend::Niri => {
-                // Niri not yet implemented
-            }
+            CompositorBackend::Niri => niri::start_listener(data.clone()),
         }
 
         Ok(Self { data, backend })
@@ -92,9 +90,7 @@ impl CompositorSubscriber {
     pub fn refresh(&self) -> Result<()> {
         let new_state = match self.backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
-            CompositorBackend::Niri => {
-                return Err(anyhow::anyhow!("Niri not yet implemented"));
-            }
+            CompositorBackend::Niri => niri::fetch_full_state()?,
         };
         self.data.set(new_state);
         Ok(())

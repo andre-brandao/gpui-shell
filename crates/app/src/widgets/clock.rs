@@ -27,7 +27,7 @@ impl Clock {
 
     /// Get the formatted date and time string.
     fn formatted_time(&self) -> String {
-        Local::now().format("%d/%m/%Y %H:%M:%S").to_string()
+        Local::now().format("%H:%M:%S %d/%m/%Y").to_string()
     }
 }
 

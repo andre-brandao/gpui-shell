@@ -12,6 +12,7 @@ tracing.workspace = true
 itertools.workspace = true
 chrono.workspace = true
 hyprland.workspace = true
+niri-ipc.workspace = true
 tokio.workspace = true
 
 inotify = "0.11"

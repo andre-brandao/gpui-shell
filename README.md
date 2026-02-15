@@ -24,7 +24,6 @@ contributions and feedback are welcome!
 
 ## Known Issues
 
-- Scroll on launcher
 - Mouse interactions missing
 - Control center interactions missing
 

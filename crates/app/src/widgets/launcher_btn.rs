@@ -51,16 +51,10 @@ impl Render for LauncherBtn {
                     // Grid/Apps icon
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(px(icon_size::LG))
                             .text_color(text_primary)
                             .child(""), // nf-oct-apps
-                    ), // Optional label
-                       // .child(
-                       //     div()
-                       //         .text_size(px(font_size::SM))
-                       //         .text_color(text::secondary())
-                       //         .child("Apps"),
-                       // ),
+                    ),
             )
     }
 }
