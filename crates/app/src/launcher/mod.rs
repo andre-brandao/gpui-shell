@@ -21,10 +21,9 @@ use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_special_char};
 use views::{HelpView, all_views};
 
-actions!(launcher, [Escape, Enter]);
+use crate::config::Config;
 
-const LAUNCHER_WIDTH: f32 = 600.0;
-const LAUNCHER_HEIGHT: f32 = 450.0;
+actions!(launcher, [Escape, Enter]);
 
 /// Number of items to jump when using Page Up/Down.
 const ITEMS_PER_PAGE: usize = 7;
@@ -575,12 +574,13 @@ pub fn toggle(services: Services, input: Option<String>, cx: &mut App) {
         tracing::debug!("launcher::toggle: closed window {:?}", start.elapsed());
     } else {
         tracing::debug!("launcher::toggle: opening new window {:?}", start.elapsed());
+        let cfg = Config::global(cx).launcher.clone();
         if let Ok(handle) = cx.open_window(
             WindowOptions {
                 titlebar: None,
                 window_bounds: Some(WindowBounds::Windowed(Bounds {
                     origin: Point::new(px(0.), px(0.)),
-                    size: Size::new(px(LAUNCHER_WIDTH), px(LAUNCHER_HEIGHT)),
+                    size: Size::new(px(cfg.width), px(cfg.height)),
                 })),
                 app_id: Some("gpuishell-launcher".to_string()),
                 window_background: WindowBackgroundAppearance::Transparent,
@@ -589,7 +589,12 @@ pub fn toggle(services: Services, input: Option<String>, cx: &mut App) {
                     layer: Layer::Overlay,
                     anchor: Anchor::TOP,
                     exclusive_zone: None,
-                    margin: Some((px(100.), px(0.), px(0.), px(0.))),
+                    margin: Some((
+                        px(cfg.margin_top),
+                        px(cfg.margin_right),
+                        px(cfg.margin_bottom),
+                        px(cfg.margin_left),
+                    )),
                     keyboard_interactivity: KeyboardInteractivity::Exclusive,
                     ..Default::default()
                 }),

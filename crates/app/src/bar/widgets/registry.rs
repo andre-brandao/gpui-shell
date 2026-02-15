@@ -5,8 +5,6 @@
 
 use gpui::{AnyElement, Context, Entity, prelude::*};
 
-use crate::config::WidgetConfig;
-
 use super::{
     ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces,
 };
@@ -79,13 +77,13 @@ impl Widget {
 
     /// Create multiple widgets from a config list.
     pub fn create_many<V: 'static>(
-        widgets: &[WidgetConfig],
+        widgets: &[String],
         slot: WidgetSlot,
         cx: &mut Context<V>,
     ) -> Vec<Widget> {
         widgets
             .iter()
-            .filter_map(|widget| Widget::create(&widget.name, slot, cx))
+            .filter_map(|widget| Widget::create(widget, slot, cx))
             .collect()
     }
 }

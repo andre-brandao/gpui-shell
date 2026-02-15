@@ -22,3 +22,5 @@ tracing-subscriber.workspace = true
 chrono.workspace = true
 hyprland.workspace = true
 tokio.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
