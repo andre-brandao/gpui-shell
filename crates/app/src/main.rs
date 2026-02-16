@@ -9,7 +9,7 @@
 
 use assets::Assets;
 use gpui::Application;
-use services::{InstanceResult, Services, ShellSubscriber};
+use services::{Services, ShellSubscriber};
 use tracing_subscriber::EnvFilter;
 
 mod args;
@@ -20,9 +20,6 @@ pub mod launcher;
 pub mod osd;
 mod panel;
 pub mod state;
-
-use args::Args;
-use state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -35,25 +32,12 @@ async fn main() {
         .init();
 
     // Parse command-line arguments
-    let args = Args::parse();
+    let args = args::Args::parse();
 
-    // Try to acquire single-instance lock or signal existing instance
-    // The secondary path (signaling existing instance) is fast and exits immediately
-    let mut shell = match ShellSubscriber::acquire(args.input) {
-        InstanceResult::Primary(subscriber) => subscriber,
-        InstanceResult::Secondary => {
-            // Another instance is running and was signaled, exit immediately
-            return;
-        }
-        InstanceResult::Error(e) => {
-            tracing::error!("Shell service error: {}", e);
-            // Continue without single-instance support
-            tracing::warn!("Running without single-instance support");
-            match ShellSubscriber::acquire(None) {
-                InstanceResult::Primary(s) => s,
-                _ => panic!("Failed to acquire shell service"),
-            }
-        }
+    // Try to acquire single-instance lock or signal existing instance.
+    // Secondary path exits immediately after signaling the primary instance.
+    let Some(mut shell) = ShellSubscriber::init(args.input) else {
+        return;
     };
 
     // Initialize services (requires async)
@@ -68,45 +52,15 @@ async fn main() {
     let app = Application::new().with_assets(Assets {});
 
     app.run(move |cx| {
-        // Initialize config and theme
         config::Config::init(cx);
-        // Initialize global app state
-        AppState::init(services.clone(), cx);
+        state::AppState::init(services.clone(), cx);
 
         // Register keybindings
         launcher::register_keybindings(cx);
         control_center::ControlCenter::register_keybindings(cx);
 
-        // Open the status bar
-        bar::open(cx);
-
-        // Start the OSD listener for volume/brightness changes
-        osd::start(services.clone(), osd::OsdPosition::Right, cx);
-
-        // Listen for launcher requests from other instances
-        let services_for_shell = services.clone();
-        let mut receiver = shell_receiver;
-        cx.spawn(async move |cx| {
-            tracing::info!("Shell request listener started");
-
-            while let Some(request) = receiver.recv().await {
-                tracing::info!(
-                    "Processing launcher request: id={}, input={:?}",
-                    request.id,
-                    request.input
-                );
-
-                let services = services_for_shell.clone();
-                let input = request.input;
-
-                cx.update(move |cx| {
-                    tracing::info!("Toggling launcher from IPC: {:?}", input);
-                    launcher::toggle(services, input, cx);
-                });
-            }
-
-            tracing::warn!("Shell request listener ended unexpectedly");
-        })
-        .detach();
+        bar::init(cx);
+        osd::init(cx);
+        launcher::init(shell_receiver, cx);
     });
 }

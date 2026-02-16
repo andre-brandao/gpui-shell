@@ -211,8 +211,8 @@ pub fn window_options(
     }
 }
 
-/// Open the bar using the current global config.
-pub fn open(cx: &mut App) {
+/// Initialize the bar using the current global config.
+pub fn init(cx: &mut App) {
     cx.spawn(async move |cx| {
         // Small delay to allow Wayland to enumerate displays
         cx.background_executor()

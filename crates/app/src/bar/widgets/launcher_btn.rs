@@ -6,7 +6,6 @@ use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::config::ActiveConfig;
-use crate::state::AppState;
 
 /// A button widget that opens the launcher when clicked.
 pub struct LauncherBtn;
@@ -46,7 +45,7 @@ impl Render for LauncherBtn {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |_, _, _, cx| {
-                    launcher::toggle(AppState::services(cx).clone(), None, cx);
+                    launcher::toggle(None, cx);
                 }),
             )
             .child(

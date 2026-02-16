@@ -71,6 +71,33 @@ impl std::fmt::Debug for ShellSubscriber {
 }
 
 impl ShellSubscriber {
+    /// Initialize shell single-instance handling.
+    ///
+    /// Returns `Some(ShellSubscriber)` when this process should continue as
+    /// the primary instance, otherwise `None`.
+    ///
+    /// This performs one retry without initial input when the first acquire
+    /// attempt fails with an error.
+    pub fn init(input: Option<String>) -> Option<Self> {
+        match Self::acquire(input) {
+            InstanceResult::Primary(subscriber) => Some(subscriber),
+            InstanceResult::Secondary => None,
+            InstanceResult::Error(err) => {
+                error!("Shell service error: {}", err);
+                warn!("Retrying shell acquire without initial input");
+
+                match Self::acquire(None) {
+                    InstanceResult::Primary(subscriber) => Some(subscriber),
+                    InstanceResult::Secondary => None,
+                    InstanceResult::Error(retry_err) => {
+                        error!("Failed to acquire shell service on retry: {}", retry_err);
+                        None
+                    }
+                }
+            }
+        }
+    }
+
     /// Try to become the primary instance or signal an existing one.
     ///
     /// This function uses synchronous I/O for the secondary path to minimize

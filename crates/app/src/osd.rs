@@ -15,25 +15,16 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     prelude::*, px,
 };
-use services::Services;
 use ui::{ActiveTheme, icon_size, radius, spacing};
 
+use crate::config::{Config, OsdPosition};
 use crate::control_center::icons;
+use crate::state::AppState;
 
 const OSD_LONG: f32 = 280.0;
 const OSD_SHORT: f32 = 56.0;
 const OSD_MARGIN: f32 = 24.0;
 const OSD_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// OSD screen position.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum OsdPosition {
-    Top,
-    Bottom,
-    Left,
-    #[default]
-    Right,
-}
 
 impl OsdPosition {
     fn is_vertical(self) -> bool {
@@ -360,10 +351,12 @@ fn schedule_dismiss(cx: &mut App) {
     .detach();
 }
 
-/// Start listening for audio and brightness changes and show the OSD.
+/// Initialize OSD listeners for audio and brightness changes.
 ///
 /// Should be called once during app initialization.
-pub fn start(services: Services, position: OsdPosition, cx: &mut App) {
+pub fn init(cx: &mut App) {
+    let services = AppState::services(cx).clone();
+    let position = Config::global(cx).osd.position;
     *OSD_POSITION.lock().unwrap() = position;
 
     // Track initial values to only show OSD on changes (not on startup)

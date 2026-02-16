@@ -2,6 +2,7 @@
 
 mod bar;
 mod launcher;
+mod osd;
 mod persistence;
 mod theme_persistence;
 
@@ -11,6 +12,7 @@ use ui::Theme;
 
 pub use bar::{BarConfig, BarPosition};
 pub use launcher::LauncherConfig;
+pub use osd::{OsdConfig, OsdPosition};
 
 /// Root application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +20,7 @@ pub use launcher::LauncherConfig;
 pub struct Config {
     pub bar: BarConfig,
     pub launcher: LauncherConfig,
+    pub osd: OsdConfig,
 }
 
 impl Default for Config {
@@ -25,6 +28,7 @@ impl Default for Config {
         Self {
             bar: BarConfig::default(),
             launcher: LauncherConfig::default(),
+            osd: OsdConfig::default(),
         }
     }
 }

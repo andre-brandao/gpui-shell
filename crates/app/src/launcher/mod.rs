@@ -16,12 +16,14 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
     div, layer_shell::*, prelude::*, px,
 };
-use services::Services;
+use services::{LauncherRequest, Services};
+use tokio::sync::mpsc::UnboundedReceiver;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_special_char};
 use views::{HelpView, all_views};
 
 use crate::config::Config;
+use crate::state::AppState;
 
 actions!(launcher, [Escape, Enter]);
 
@@ -40,8 +42,9 @@ pub struct Launcher {
 }
 
 impl Launcher {
-    /// Create a new launcher with the given services and optional initial input.
-    pub fn new(services: Services, initial_input: Option<String>, cx: &mut Context<Self>) -> Self {
+    /// Create a new launcher with optional initial input.
+    pub fn new(initial_input: Option<String>, cx: &mut Context<Self>) -> Self {
+        let services = AppState::services(cx).clone();
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
 
@@ -542,13 +545,39 @@ pub fn register_keybindings(cx: &mut App) {
     ]);
 }
 
+/// Initialize launcher module runtime listeners.
+///
+/// This starts processing single-instance IPC launcher requests.
+pub fn init(mut receiver: UnboundedReceiver<LauncherRequest>, cx: &mut App) {
+    cx.spawn(async move |cx| {
+        tracing::info!("Launcher request listener started");
+
+        while let Some(request) = receiver.recv().await {
+            tracing::info!(
+                "Processing launcher request: id={}, input={:?}",
+                request.id,
+                request.input
+            );
+
+            let input = request.input;
+            cx.update(move |cx| {
+                tracing::info!("Toggling launcher from IPC: {:?}", input);
+                toggle(input, cx);
+            });
+        }
+
+        tracing::warn!("Launcher request listener ended unexpectedly");
+    })
+    .detach();
+}
+
 /// Toggle the launcher window with optional prefilled input.
 ///
 /// Behavior:
 /// - If launcher is closed: opens it (with optional input).
 /// - If launcher is open and `input` is `Some`: updates the input.
 /// - If launcher is open and `input` is `None`: closes it.
-pub fn toggle(services: Services, input: Option<String>, cx: &mut App) {
+pub fn toggle(input: Option<String>, cx: &mut App) {
     let start = std::time::Instant::now();
     tracing::debug!("launcher::toggle: start");
 
@@ -604,7 +633,7 @@ pub fn toggle(services: Services, input: Option<String>, cx: &mut App) {
             move |_, cx| {
                 cx.new(|cx| {
                     let new_start = std::time::Instant::now();
-                    let launcher = Launcher::new(services.clone(), input.clone(), cx);
+                    let launcher = Launcher::new(input.clone(), cx);
                     tracing::debug!(
                         "launcher::toggle: Launcher::new took {:?}",
                         new_start.elapsed()
