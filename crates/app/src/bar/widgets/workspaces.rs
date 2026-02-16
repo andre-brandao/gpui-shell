@@ -6,6 +6,7 @@ use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
 use ui::{ActiveTheme, radius, spacing};
 
+use super::style;
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 
@@ -83,7 +84,7 @@ impl Render for Workspaces {
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(spacing::XS))
+            .gap(px(style::CHIP_GAP))
             // Scroll to switch workspaces
             .on_scroll_wheel(
                 cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, _cx| {
@@ -104,15 +105,33 @@ impl Render for Workspaces {
                         let workspace_id = ws.id;
                         let is_active = active_workspace_id == Some(ws.id);
                         let has_windows = ws.windows > 0;
+                        let label = if is_vertical && ws.name.chars().count() > 2 {
+                            ws.id.to_string()
+                        } else {
+                            ws.name.clone()
+                        };
 
                         div()
                             .id(format!("workspace-{}", ws.id))
-                            .px(if is_active {
-                                px(spacing::MD)
-                            } else {
-                                px(spacing::SM)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .when(is_vertical, |this| {
+                                this.w(if is_active {
+                                    px(style::WORKSPACE_PILL_WIDTH_ACTIVE)
+                                } else {
+                                    px(style::WORKSPACE_PILL_WIDTH)
+                                })
+                                .h(px(style::WORKSPACE_PILL_HEIGHT))
                             })
-                            .py(px(2.))
+                            .when(!is_vertical, |this| {
+                                this.px(if is_active {
+                                    px(spacing::MD)
+                                } else {
+                                    px(spacing::SM)
+                                })
+                                .py(px(2.0))
+                            })
                             .rounded(px(radius::SM))
                             .cursor_pointer()
                             .bg(if is_active {
@@ -137,6 +156,7 @@ impl Render for Workspaces {
                             )
                             .child(
                                 div()
+                                    .text_size(px(style::label(is_vertical)))
                                     .text_color(if is_active {
                                         bg_primary
                                     } else if has_windows {
@@ -144,7 +164,7 @@ impl Render for Workspaces {
                                     } else {
                                         text_muted
                                     })
-                                    .child(ws.name.clone()),
+                                    .child(label),
                             )
                     }),
             )

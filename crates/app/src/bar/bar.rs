@@ -5,9 +5,9 @@
 use gpui::{
     AnyElement, App, Bounds, Context, DisplayId, FontWeight, Size, Window,
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
-    point, prelude::*, px, rems,
+    point, prelude::*, px,
 };
-use ui::{ActiveTheme, spacing};
+use ui::{ActiveTheme, font_size, spacing};
 
 use super::widgets::{Widget, WidgetSlot};
 use crate::config::{ActiveConfig, BarPosition};
@@ -18,6 +18,13 @@ struct Bar {
     start_widgets: Vec<Widget>,
     center_widgets: Vec<Widget>,
     end_widgets: Vec<Widget>,
+}
+
+#[derive(Clone, Copy)]
+enum SectionAlign {
+    Start,
+    Center,
+    End,
 }
 
 impl Bar {
@@ -33,21 +40,45 @@ impl Bar {
         }
     }
 
-    fn render_section(is_vertical: bool, gap: f32, children: Vec<AnyElement>) -> impl IntoElement {
+    fn render_section(
+        is_vertical: bool,
+        align: SectionAlign,
+        children: Vec<AnyElement>,
+    ) -> impl IntoElement {
         let section = div();
 
         if is_vertical {
             section
                 .flex()
+                .w_full()
                 .flex_col()
                 .items_center()
-                .gap(px(gap))
+                .gap(px(spacing::SM))
+                .when(matches!(align, SectionAlign::Center), |this| {
+                    this.flex_1().justify_center()
+                })
+                .when(matches!(align, SectionAlign::Start), |this| {
+                    this.justify_start()
+                })
+                .when(matches!(align, SectionAlign::End), |this| {
+                    this.justify_end()
+                })
                 .children(children)
         } else {
             section
                 .flex()
+                .h_full()
                 .items_center()
-                .gap(px(gap))
+                .gap(px(spacing::SM))
+                .when(matches!(align, SectionAlign::Start), |this| {
+                    this.flex_1().justify_start()
+                })
+                .when(matches!(align, SectionAlign::Center), |this| {
+                    this.justify_center()
+                })
+                .when(matches!(align, SectionAlign::End), |this| {
+                    this.flex_1().justify_end()
+                })
                 .children(children)
         }
     }
@@ -67,8 +98,7 @@ impl Render for Bar {
         let root = div()
             .size_full()
             .flex()
-            .justify_between()
-            .text_size(rems(0.67))
+            .text_size(px(font_size::SM))
             .font_weight(FontWeight::MEDIUM)
             .text_color(theme.text.primary)
             .bg(theme.bg.primary)
@@ -77,7 +107,8 @@ impl Render for Bar {
         if is_vertical {
             root.flex_col()
                 .items_center()
-                .py(px(spacing::LG))
+                .px(px(spacing::XS))
+                .py(px(spacing::SM))
                 .when(matches!(self.position, BarPosition::Left), |this| {
                     this.border_r_1()
                 })
@@ -86,18 +117,22 @@ impl Render for Bar {
                 })
                 .child(Self::render_section(
                     is_vertical,
-                    spacing::SM,
+                    SectionAlign::Start,
                     start_elements,
                 ))
                 .child(Self::render_section(
                     is_vertical,
-                    spacing::SM,
+                    SectionAlign::Center,
                     center_elements,
                 ))
-                .child(Self::render_section(is_vertical, spacing::MD, end_elements))
+                .child(Self::render_section(
+                    is_vertical,
+                    SectionAlign::End,
+                    end_elements,
+                ))
         } else {
             root.items_center()
-                .px(px(spacing::LG))
+                .px(px(spacing::SM))
                 .when(matches!(self.position, BarPosition::Top), |this| {
                     this.border_b_1()
                 })
@@ -106,15 +141,19 @@ impl Render for Bar {
                 })
                 .child(Self::render_section(
                     is_vertical,
-                    spacing::SM,
+                    SectionAlign::Start,
                     start_elements,
                 ))
                 .child(Self::render_section(
                     is_vertical,
-                    spacing::SM,
+                    SectionAlign::Center,
                     center_elements,
                 ))
-                .child(Self::render_section(is_vertical, spacing::MD, end_elements))
+                .child(Self::render_section(
+                    is_vertical,
+                    SectionAlign::End,
+                    end_elements,
+                ))
         }
     }
 }

@@ -7,8 +7,9 @@ use gpui::{
     App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, font_size, radius, spacing};
 
+use super::style;
 use crate::bar::widgets::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
@@ -89,6 +90,7 @@ impl Render for Tray {
         let items: Vec<_> = self.data.items.clone();
 
         // Pre-compute colors for closures
+        let interactive_default = theme.interactive.default;
         let interactive_hover = theme.interactive.hover;
         let interactive_active = theme.interactive.active;
         let text_primary = theme.text.primary;
@@ -99,7 +101,7 @@ impl Render for Tray {
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(2.))
+            .gap(px(style::CHIP_GAP))
             .children(items.into_iter().map(|item| {
                 let item_clone = item.clone();
                 let has_menu = item.menu.is_some();
@@ -119,9 +121,10 @@ impl Render for Tray {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .size(px(28.))
+                    .size(px(style::TRAY_ITEM_SIZE))
                     .rounded(px(radius::SM))
                     .cursor_pointer()
+                    .bg(interactive_default)
                     .hover(move |s| s.bg(interactive_hover))
                     .active(move |s| s.bg(interactive_active))
                     .on_mouse_down(
@@ -132,7 +135,7 @@ impl Render for Tray {
                     )
                     .child(
                         div()
-                            .text_size(px(icon_size::LG))
+                            .text_size(px(style::icon(is_vertical)))
                             .text_color(if has_menu { text_primary } else { text_muted })
                             .child(icon_char),
                     )
@@ -413,14 +416,20 @@ impl Render for TrayMenuPanel {
         div()
             .id("systray-menu-panel")
             .size_full()
-            .bg(theme.bg.elevated)
+            .bg(theme.bg.primary)
             .border_1()
             .border_color(theme.border.default)
             .rounded(px(radius::LG))
-            .py(px(spacing::XS))
             .text_color(theme.text.primary)
-            .overflow_y_scroll()
-            .child(div().flex().flex_col().gap(px(1.)).children(menu_items))
+            .overflow_hidden()
+            .child(
+                div()
+                    .id("systray-menu-scroll")
+                    .size_full()
+                    .py(px(spacing::XS))
+                    .overflow_y_scroll()
+                    .child(div().flex().flex_col().gap(px(1.)).children(menu_items)),
+            )
     }
 }
 
@@ -436,8 +445,8 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
         "spotify" => "󰓇",
         "steam" => "󰓓",
         "firefox" => "󰈹",
-        "chrome" | "google-chrome" | "chromium" => "",
-        "telegram" => "",
+        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => "",
+        "telegram" | "telegram-desktop" => "",
         "slack" => "󰒱",
         "thunderbird" => "󰴃",
         "vesktop" => "󰙯",
@@ -479,8 +488,8 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
             "spotify" => "󰓇",
             "steam" => "󰓓",
             "firefox" => "󰈹",
-            "chrome" | "google-chrome" | "chromium" => "",
-            "telegram" | "telegram-desktop" => "",
+            "chrome" | "google-chrome" | "chromium" | "chromium-browser" => "",
+            "telegram" | "telegram-desktop" => "",
             "slack" => "󰒱",
             "thunderbird" => "󰴃",
             "1password" => "󰢁",
@@ -504,7 +513,47 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
         }
     }
 
+    // Heuristic fallback by substring (covers many variant ids/names).
+    if let Some(icon) = infer_icon_from_hint(&name.to_lowercase()) {
+        return icon;
+    }
+    if let Some(id) = app_id
+        && let Some(icon) = infer_icon_from_hint(&id.to_lowercase())
+    {
+        return icon;
+    }
+
     // Fallback icon - log for easier icon mapping
     tracing::debug!("No icon mapping for name='{}' app_id={:?}", name, app_id);
     "󰀻"
+}
+
+fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
+    if hint.contains("chrome") || hint.contains("chromium") {
+        Some("")
+    } else if hint.contains("telegram") {
+        Some("")
+    } else if hint.contains("discord") || hint.contains("vesktop") {
+        Some("󰙯")
+    } else if hint.contains("spotify") {
+        Some("󰓇")
+    } else if hint.contains("steam") {
+        Some("󰓓")
+    } else if hint.contains("network") || hint.contains("wifi") || hint.contains("nm-") {
+        Some("󰖩")
+    } else if hint.contains("bluetooth") || hint.contains("blue") {
+        Some("󰂯")
+    } else if hint.contains("audio") || hint.contains("volume") || hint.contains("pulse") {
+        Some("󰕾")
+    } else if hint.contains("battery") || hint.contains("power") {
+        Some("󰁹")
+    } else if hint.contains("vpn") {
+        Some("󰕥")
+    } else if hint.contains("cloud") || hint.contains("dropbox") || hint.contains("sync") {
+        Some("󰇣")
+    } else if hint.contains("remote") || hint.contains("remmina") {
+        Some("󰢹")
+    } else {
+        None
+    }
 }

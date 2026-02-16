@@ -16,8 +16,9 @@ use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
 };
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, radius};
 
+use super::style;
 use crate::bar::widgets::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
@@ -282,9 +283,15 @@ impl Settings {
     }
 
     /// Get the battery percentage text.
-    fn battery_text(&self) -> String {
+    fn battery_text(&self, is_vertical: bool) -> String {
         match &self.upower.battery {
-            Some(battery) => format!("{}%", battery.percentage),
+            Some(battery) => {
+                if is_vertical {
+                    battery.percentage.to_string()
+                } else {
+                    format!("{}%", battery.percentage)
+                }
+            }
             None => String::new(),
         }
     }
@@ -301,7 +308,9 @@ impl Render for Settings {
         let bluetooth_icon = self.bluetooth_icon();
         let power_profile_icon = self.power_profile_icon();
         let battery_icon = self.battery_icon();
-        let battery_text = self.battery_text();
+        let battery_text = self.battery_text(is_vertical);
+        let icon_size = style::icon(is_vertical);
+        let text_size = style::label(is_vertical);
 
         // Get the battery icon color
         let battery_color = match &self.upower.battery {
@@ -320,6 +329,7 @@ impl Render for Settings {
         };
 
         // Pre-compute colors for closures
+        let interactive_default = theme.interactive.default;
         let interactive_hover = theme.interactive.hover;
         let interactive_active = theme.interactive.active;
         let status_error = theme.status.error;
@@ -330,11 +340,12 @@ impl Render for Settings {
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(spacing::SM))
-            .px(px(spacing::SM))
-            .py(px(spacing::XS))
+            .gap(px(style::CHIP_GAP))
+            .px(px(style::chip_padding_x(is_vertical)))
+            .py(px(style::CHIP_PADDING_Y))
             .rounded(px(radius::SM))
             .cursor_pointer()
+            .bg(interactive_default)
             .hover(move |s| s.bg(interactive_hover))
             .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
@@ -346,21 +357,21 @@ impl Render for Settings {
             // Privacy icons (red, only shown when active)
             .children(privacy_icons.into_iter().map(move |icon| {
                 div()
-                    .text_size(px(icon_size::LG))
+                    .text_size(px(icon_size))
                     .text_color(status_error)
                     .child(icon)
             }))
             // Volume icon
             .child(
                 div()
-                    .text_size(px(icon_size::LG))
+                    .text_size(px(icon_size))
                     .text_color(text_primary)
                     .child(volume_icon),
             )
             // Network icon
             .child(
                 div()
-                    .text_size(px(icon_size::LG))
+                    .text_size(px(icon_size))
                     .text_color(text_primary)
                     .child(network_icon),
             )
@@ -368,7 +379,7 @@ impl Render for Settings {
             .when_some(bluetooth_icon, |el, icon| {
                 el.child(
                     div()
-                        .text_size(px(icon_size::LG))
+                        .text_size(px(icon_size))
                         .text_color(text_primary)
                         .child(icon),
                 )
@@ -376,7 +387,7 @@ impl Render for Settings {
             // Power profile icon
             .child(
                 div()
-                    .text_size(px(icon_size::LG))
+                    .text_size(px(icon_size))
                     .text_color(text_primary)
                     .child(power_profile_icon),
             )
@@ -384,18 +395,19 @@ impl Render for Settings {
             .child(
                 div()
                     .flex()
+                    .when(is_vertical, |this| this.flex_col())
                     .items_center()
-                    .gap(px(2.))
+                    .gap(px(style::CHIP_GAP))
                     .child(
                         div()
-                            .text_size(px(icon_size::LG))
+                            .text_size(px(icon_size))
                             .text_color(battery_color)
                             .child(battery_icon),
                     )
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
                             div()
-                                .text_size(px(font_size::LG))
+                                .text_size(px(text_size))
                                 .text_color(battery_color)
                                 .child(battery_text),
                         )

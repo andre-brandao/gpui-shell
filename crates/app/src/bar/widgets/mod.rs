@@ -7,6 +7,7 @@ mod keyboard_layout;
 mod launcher_btn;
 mod registry;
 pub mod settings;
+pub(crate) mod style;
 pub mod sysinfo;
 mod tray;
 mod workspaces;

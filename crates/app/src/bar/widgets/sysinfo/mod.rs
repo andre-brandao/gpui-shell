@@ -6,8 +6,9 @@ use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
 use services::SysInfoData;
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, radius};
 
+use super::style;
 use crate::bar::widgets::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
@@ -19,15 +20,15 @@ pub use panel::SysInfoPanel;
 /// Nerd Font icons for system info
 pub mod icons {
     // CPU icons
-    pub const CPU: &str = ""; // nf-oct-cpu
-    pub const CPU_HIGH: &str = ""; // nf-oct-flame
+    pub const CPU: &str = "󰻠"; // nf-md-chip
+    pub const CPU_HIGH: &str = ""; // nf-fa-fire
 
     // Memory icons
     pub const MEMORY: &str = "󰍛"; // nf-md-memory
     pub const SWAP: &str = "󰾴"; // nf-md-swap_horizontal
 
     // Temperature icons
-    pub const TEMP: &str = ""; // nf-oct-thermometer
+    pub const TEMP: &str = "󱃂"; // nf-md-thermometer
     pub const TEMP_HOT: &str = "󰸁"; // nf-md-thermometer_high
 
     // Disk icons
@@ -41,7 +42,7 @@ pub mod icons {
     pub const UPLOAD: &str = "󰕒"; // nf-md-upload
 
     // System/header icon
-    pub const SYSTEM: &str = ""; // nf-oct-server
+    pub const SYSTEM: &str = ""; // nf-fa-server
 }
 
 /// SysInfo widget showing CPU and memory usage in the bar.
@@ -117,6 +118,10 @@ impl SysInfo {
             icons::MEMORY
         }
     }
+
+    fn usage_text(usage: u32, is_vertical: bool) -> String {
+        style::compact_percent(usage, is_vertical)
+    }
 }
 
 impl Render for SysInfo {
@@ -128,23 +133,29 @@ impl Render for SysInfo {
         let memory_usage = self.data.memory_usage;
         let cpu_icon = self.cpu_icon();
         let memory_icon = self.memory_icon();
+        let cpu_text = Self::usage_text(cpu_usage, is_vertical);
+        let memory_text = Self::usage_text(memory_usage, is_vertical);
         let cpu_color = theme.status.from_percentage(cpu_usage);
         let memory_color = theme.status.from_percentage(memory_usage);
 
         // Pre-compute colors for closures
+        let interactive_default = theme.interactive.default;
         let interactive_hover = theme.interactive.hover;
         let interactive_active = theme.interactive.active;
+        let icon_size = style::icon(is_vertical);
+        let text_size = style::label(is_vertical);
 
         div()
             .id("sysinfo-widget")
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(spacing::SM))
-            .px(px(spacing::SM))
-            .py(px(spacing::XS))
+            .gap(px(style::CHIP_GAP))
+            .px(px(style::chip_padding_x(is_vertical)))
+            .py(px(style::CHIP_PADDING_Y))
             .rounded(px(radius::SM))
             .cursor_pointer()
+            .bg(interactive_default)
             .hover(move |s| s.bg(interactive_hover))
             .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
@@ -157,38 +168,40 @@ impl Render for SysInfo {
             .child(
                 div()
                     .flex()
+                    .when(is_vertical, |this| this.flex_col())
                     .items_center()
-                    .gap(px(spacing::XS))
+                    .gap(px(style::CHIP_GAP))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(px(icon_size))
                             .text_color(cpu_color)
                             .child(cpu_icon),
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(px(text_size))
                             .text_color(cpu_color)
-                            .child(format!("{}%", cpu_usage)),
+                            .child(cpu_text),
                     ),
             )
             // Memory usage
             .child(
                 div()
                     .flex()
+                    .when(is_vertical, |this| this.flex_col())
                     .items_center()
-                    .gap(px(spacing::XS))
+                    .gap(px(style::CHIP_GAP))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(px(icon_size))
                             .text_color(memory_color)
                             .child(memory_icon),
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(px(text_size))
                             .text_color(memory_color)
-                            .child(format!("{}%", memory_usage)),
+                            .child(memory_text),
                     ),
             )
     }

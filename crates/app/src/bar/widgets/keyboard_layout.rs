@@ -4,10 +4,13 @@ use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, radius};
 
+use super::style;
 use crate::config::ActiveConfig;
 use crate::state::AppState;
+
+const KEYBOARD_ICON: &str = "󰌌";
 
 /// Keyboard layout widget that displays the current keyboard layout.
 pub struct KeyboardLayout {
@@ -55,57 +58,58 @@ impl KeyboardLayout {
     /// Converts full layout names like "English (US)" to short codes like "EN".
     fn short_layout_name(&self) -> String {
         let layout = &self.state.keyboard_layout;
+        let layout_lower = layout.to_lowercase();
 
         // Common layout name mappings
-        let short = if layout.to_lowercase().contains("english") {
+        let short = if layout_lower.contains("english") {
             "EN"
-        } else if layout.to_lowercase().contains("russian") {
+        } else if layout_lower.contains("russian") {
             "RU"
-        } else if layout.to_lowercase().contains("german") {
+        } else if layout_lower.contains("german") {
             "DE"
-        } else if layout.to_lowercase().contains("french") {
+        } else if layout_lower.contains("french") {
             "FR"
-        } else if layout.to_lowercase().contains("spanish") {
+        } else if layout_lower.contains("spanish") {
             "ES"
-        } else if layout.to_lowercase().contains("italian") {
+        } else if layout_lower.contains("italian") {
             "IT"
-        } else if layout.to_lowercase().contains("portuguese") {
+        } else if layout_lower.contains("portuguese") {
             "PT"
-        } else if layout.to_lowercase().contains("japanese") {
+        } else if layout_lower.contains("japanese") {
             "JP"
-        } else if layout.to_lowercase().contains("chinese") {
+        } else if layout_lower.contains("chinese") {
             "CN"
-        } else if layout.to_lowercase().contains("korean") {
+        } else if layout_lower.contains("korean") {
             "KR"
-        } else if layout.to_lowercase().contains("arabic") {
+        } else if layout_lower.contains("arabic") {
             "AR"
-        } else if layout.to_lowercase().contains("hebrew") {
+        } else if layout_lower.contains("hebrew") {
             "HE"
-        } else if layout.to_lowercase().contains("ukrainian") {
+        } else if layout_lower.contains("ukrainian") {
             "UA"
-        } else if layout.to_lowercase().contains("polish") {
+        } else if layout_lower.contains("polish") {
             "PL"
-        } else if layout.to_lowercase().contains("czech") {
+        } else if layout_lower.contains("czech") {
             "CZ"
-        } else if layout.to_lowercase().contains("dutch") {
+        } else if layout_lower.contains("dutch") {
             "NL"
-        } else if layout.to_lowercase().contains("swedish") {
+        } else if layout_lower.contains("swedish") {
             "SE"
-        } else if layout.to_lowercase().contains("norwegian") {
+        } else if layout_lower.contains("norwegian") {
             "NO"
-        } else if layout.to_lowercase().contains("danish") {
+        } else if layout_lower.contains("danish") {
             "DK"
-        } else if layout.to_lowercase().contains("finnish") {
+        } else if layout_lower.contains("finnish") {
             "FI"
-        } else if layout.to_lowercase().contains("turkish") {
+        } else if layout_lower.contains("turkish") {
             "TR"
-        } else if layout.to_lowercase().contains("greek") {
+        } else if layout_lower.contains("greek") {
             "GR"
-        } else if layout.len() >= 2 {
-            // Fallback: take first 2 characters uppercase
-            &layout[..2]
+        } else if layout.chars().count() >= 2 {
+            // Fallback: take first 2 Unicode chars uppercase.
+            return layout.chars().take(2).collect::<String>().to_uppercase();
         } else {
-            layout
+            return layout.to_uppercase();
         };
 
         short.to_uppercase()
@@ -124,15 +128,17 @@ impl Render for KeyboardLayout {
         let interactive_active = theme.interactive.active;
         let text_secondary = theme.text.secondary;
         let text_primary = theme.text.primary;
+        let icon_size = style::icon(is_vertical);
+        let text_size = style::label(is_vertical);
 
         div()
             .id("keyboard-layout")
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(spacing::XS))
-            .px(px(spacing::SM))
-            .py(px(2.))
+            .gap(px(style::CHIP_GAP))
+            .px(px(style::chip_padding_x(is_vertical)))
+            .py(px(style::CHIP_PADDING_Y))
             .rounded(px(radius::SM))
             .cursor_pointer()
             .bg(interactive_default)
@@ -147,10 +153,15 @@ impl Render for KeyboardLayout {
             )
             .child(
                 div()
+                    .text_size(px(icon_size))
                     .text_color(text_secondary)
-                    // Keyboard icon
-                    .child("󰌌 "),
+                    .child(KEYBOARD_ICON),
             )
-            .child(div().text_color(text_primary).child(short_name))
+            .child(
+                div()
+                    .text_size(px(text_size))
+                    .text_color(text_primary)
+                    .child(short_name),
+            )
     }
 }

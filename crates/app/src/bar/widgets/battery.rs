@@ -3,8 +3,9 @@
 use futures_signals::signal::SignalExt;
 use gpui::{Context, Window, div, prelude::*, px};
 use services::{BatteryState, UPowerData};
-use ui::{ActiveTheme, font_size, icon_size, spacing};
+use ui::{ActiveTheme, radius};
 
+use super::style;
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 
@@ -52,9 +53,9 @@ impl Battery {
     }
 
     /// Get the battery percentage text.
-    fn battery_text(&self) -> String {
+    fn battery_text(&self, is_vertical: bool) -> String {
         match &self.data.battery {
-            Some(battery) => format!("{}%", battery.percentage),
+            Some(battery) => style::compact_percent(battery.percentage.into(), is_vertical),
             None => String::new(),
         }
     }
@@ -101,7 +102,9 @@ impl Render for Battery {
         let is_vertical = cx.config().bar.is_vertical();
 
         let icon = self.battery_icon();
-        let text = self.battery_text();
+        let text = self.battery_text(is_vertical);
+        let icon_size = style::icon(is_vertical);
+        let text_size = style::label(is_vertical);
 
         // Get the text color based on battery state
         let text_color = match &self.data.battery {
@@ -144,36 +147,14 @@ impl Render for Battery {
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(spacing::XS))
+                .gap(px(style::CHIP_GAP))
+                .px(px(style::chip_padding_x(true)))
+                .py(px(style::CHIP_PADDING_Y))
+                .rounded(px(radius::SM))
                 // Battery icon
                 .child(
                     div()
-                        .text_size(px(icon_size::MD))
-                        .text_color(icon_color)
-                        .child(icon),
-                )
-                // Battery percentage stacked vertically
-                .when(!text.is_empty(), |this| {
-                    this.child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .text_size(px(font_size::SM))
-                            .text_color(text_color)
-                            .children(text.chars().map(|ch| div().child(ch.to_string()))),
-                    )
-                })
-        } else {
-            div()
-                .id("battery-widget")
-                .flex()
-                .items_center()
-                .gap(px(spacing::XS))
-                // Battery icon
-                .child(
-                    div()
-                        .text_size(px(icon_size::MD))
+                        .text_size(px(icon_size))
                         .text_color(icon_color)
                         .child(icon),
                 )
@@ -181,7 +162,32 @@ impl Render for Battery {
                 .when(!text.is_empty(), |this| {
                     this.child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(px(text_size))
+                            .text_color(text_color)
+                            .child(text),
+                    )
+                })
+        } else {
+            div()
+                .id("battery-widget")
+                .flex()
+                .items_center()
+                .gap(px(style::CHIP_GAP))
+                .px(px(style::chip_padding_x(false)))
+                .py(px(style::CHIP_PADDING_Y))
+                .rounded(px(radius::SM))
+                // Battery icon
+                .child(
+                    div()
+                        .text_size(px(icon_size))
+                        .text_color(icon_color)
+                        .child(icon),
+                )
+                // Battery percentage
+                .when(!text.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .text_size(px(text_size))
                             .text_color(text_color)
                             .child(text),
                     )
