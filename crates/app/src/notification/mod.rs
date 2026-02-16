@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{
-    AnyWindowHandle, App, Bounds, Context, Entity, MouseButton, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, img, layer_shell::*,
-    prelude::*, px,
+    AnyWindowHandle, App, Bounds, Context, Entity, MouseButton, Point, Render, ScrollHandle, Size,
+    StatefulInteractiveElement as _, Window, WindowBackgroundAppearance, WindowBounds, WindowKind,
+    WindowOptions, div, img, layer_shell::*, prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationData, NotificationSubscriber};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
@@ -157,11 +157,13 @@ impl Render for NotificationWidget {
 struct NotificationCenter {
     subscriber: NotificationSubscriber,
     data: NotificationData,
+    scroll_handle: ScrollHandle,
 }
 
 impl NotificationCenter {
     fn new(subscriber: NotificationSubscriber, cx: &mut Context<Self>) -> Self {
         let data = subscriber.get();
+        let scroll_handle = ScrollHandle::new();
         cx.spawn({
             let mut signal = subscriber.subscribe().to_stream();
             async move |this, cx| {
@@ -180,7 +182,11 @@ impl NotificationCenter {
         })
         .detach();
 
-        Self { subscriber, data }
+        Self {
+            subscriber,
+            data,
+            scroll_handle,
+        }
     }
 }
 
@@ -192,6 +198,50 @@ impl Render for NotificationCenter {
         let dnd_enabled = self.data.dnd;
         let dnd_subscriber = self.subscriber.clone();
         let clear_subscriber = self.subscriber.clone();
+        let list_content = if has_notifications {
+            div()
+                .children(notifications.into_iter().map(|item| {
+                    let dismiss_subscriber = self.subscriber.clone();
+                    let id = item.id;
+                    div()
+                        .relative()
+                        .w_full()
+                        .p(px(spacing::SM))
+                        .rounded(px(radius::LG))
+                        .bg(theme.bg.primary)
+                        .border_1()
+                        .border_color(theme.border.default)
+                        .child(notification_card_body(&item, cx, true))
+                        .child(
+                            div()
+                                .absolute()
+                                .top(px(8.0))
+                                .right(px(8.0))
+                                .cursor_pointer()
+                                .text_size(px(font_size::SM))
+                                .text_color(theme.text.muted)
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |_, _, _, _cx| {
+                                        dispatch_notification_command(
+                                            dismiss_subscriber.clone(),
+                                            NotificationCommand::Dismiss(id),
+                                        );
+                                    }),
+                                )
+                                .child(icons::CLOSE),
+                        )
+                }))
+                .into_any_element()
+        } else {
+            div()
+                .py(px(spacing::XL))
+                .text_size(px(font_size::SM))
+                .text_color(theme.text.muted)
+                .text_center()
+                .child("No notifications")
+                .into_any_element()
+        };
 
         div()
             .id("notification-center")
@@ -260,53 +310,14 @@ impl Render for NotificationCenter {
             )
             .child(
                 div()
+                    .id("notification-center-list")
                     .flex_1()
-                    .overflow_hidden()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.scroll_handle)
                     .flex()
                     .flex_col()
                     .gap(px(spacing::XS))
-                    .when(!has_notifications, |el| {
-                        el.child(
-                            div()
-                                .py(px(spacing::XL))
-                                .text_size(px(font_size::SM))
-                                .text_color(theme.text.muted)
-                                .text_center()
-                                .child("No notifications"),
-                        )
-                    })
-                    .children(notifications.into_iter().map(|item| {
-                        let dismiss_subscriber = self.subscriber.clone();
-                        let id = item.id;
-                        div()
-                            .relative()
-                            .w_full()
-                            .p(px(spacing::SM))
-                            .rounded(px(radius::LG))
-                            .bg(theme.bg.primary)
-                            .border_1()
-                            .border_color(theme.border.default)
-                            .child(notification_card_body(&item, cx, true))
-                            .child(
-                                div()
-                                    .absolute()
-                                    .top(px(8.0))
-                                    .right(px(8.0))
-                                    .cursor_pointer()
-                                    .text_size(px(font_size::SM))
-                                    .text_color(theme.text.muted)
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(move |_, _, _, _cx| {
-                                            dispatch_notification_command(
-                                                dismiss_subscriber.clone(),
-                                                NotificationCommand::Dismiss(id),
-                                            );
-                                        }),
-                                    )
-                                    .child(icons::CLOSE),
-                            )
-                    })),
+                    .child(list_content),
             )
     }
 }
