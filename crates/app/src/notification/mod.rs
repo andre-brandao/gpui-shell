@@ -6,7 +6,7 @@ use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{
     AnyWindowHandle, App, Bounds, Context, Entity, MouseButton, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, img, layer_shell::*,
     prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationData, NotificationSubscriber};
@@ -21,8 +21,8 @@ const POPUP_WIDTH: f32 = 360.0;
 const POPUP_HEIGHT: f32 = 320.0;
 const POPUP_MARGIN: (f32, f32, f32, f32) = (42.0, 12.0, 0.0, 0.0);
 const POPUP_STACK_LIMIT: usize = 4;
-const POPUP_CARD_COLLAPSED_H: f32 = 44.0;
-const POPUP_CARD_EXPANDED_H: f32 = 102.0;
+const POPUP_CARD_COLLAPSED_H: f32 = 92.0;
+const POPUP_CARD_EXPANDED_H: f32 = 170.0;
 
 mod icons {
     pub const BELL: &str = "󰂚";
@@ -278,47 +278,20 @@ impl Render for NotificationCenter {
                     .children(notifications.into_iter().map(|item| {
                         let dismiss_subscriber = self.subscriber.clone();
                         let id = item.id;
-                        let app_name = item.app_name.clone();
-                        let summary = item.summary.clone();
-                        let body = item.body.clone();
                         div()
-                            .flex()
-                            .items_start()
-                            .gap(px(spacing::SM))
+                            .relative()
+                            .w_full()
                             .p(px(spacing::SM))
-                            .rounded(px(radius::SM))
-                            .bg(theme.bg.secondary)
+                            .rounded(px(radius::LG))
+                            .bg(theme.bg.primary)
                             .border_1()
-                            .border_color(theme.border.subtle)
+                            .border_color(theme.border.default)
+                            .child(notification_card_body(&item, cx, true))
                             .child(
                                 div()
-                                    .flex_1()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(4.0))
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size::XS))
-                                            .text_color(theme.text.secondary)
-                                            .child(app_name),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size::SM))
-                                            .text_color(theme.text.primary)
-                                            .child(summary),
-                                    )
-                                    .when(!body.is_empty(), |el| {
-                                        el.child(
-                                            div()
-                                                .text_size(px(font_size::XS))
-                                                .text_color(theme.text.muted)
-                                                .child(body.clone()),
-                                        )
-                                    }),
-                            )
-                            .child(
-                                div()
+                                    .absolute()
+                                    .top(px(8.0))
+                                    .right(px(8.0))
                                     .cursor_pointer()
                                     .text_size(px(font_size::SM))
                                     .text_color(theme.text.muted)
@@ -370,9 +343,6 @@ impl Render for NotificationPopupStack {
                     .children(items.into_iter().map(|notification| {
                         let dismiss_subscriber = self.subscriber.clone();
                         let id = notification.id;
-                        let app_name = notification.app_name.clone();
-                        let summary = notification.summary.clone();
-                        let body = notification.body.clone();
 
                         div()
                             .h(px(POPUP_CARD_COLLAPSED_H))
@@ -387,49 +357,26 @@ impl Render for NotificationPopupStack {
                                     .bg(theme.bg.elevated)
                                     .border_color(theme.accent.primary)
                             })
+                            .child(notification_card_body(&notification, cx, true))
                             .child(
                                 div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size::XS))
-                                            .text_color(theme.text.secondary)
-                                            .child(app_name),
-                                    )
-                                    .child(
-                                        div()
-                                            .cursor_pointer()
-                                            .text_size(px(font_size::SM))
-                                            .text_color(theme.text.muted)
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(move |_, _, _, _cx| {
-                                                    dispatch_notification_command(
-                                                        dismiss_subscriber.clone(),
-                                                        NotificationCommand::Dismiss(id),
-                                                    );
-                                                }),
-                                            )
-                                            .child(icons::CLOSE),
-                                    ),
-                            )
-                            .child(
-                                div()
+                                    .absolute()
+                                    .top(px(8.0))
+                                    .right(px(8.0))
+                                    .cursor_pointer()
                                     .text_size(px(font_size::SM))
-                                    .text_color(theme.text.primary)
-                                    .child(summary),
+                                    .text_color(theme.text.muted)
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(move |_, _, _, _cx| {
+                                            dispatch_notification_command(
+                                                dismiss_subscriber.clone(),
+                                                NotificationCommand::Dismiss(id),
+                                            );
+                                        }),
+                                    )
+                                    .child(icons::CLOSE),
                             )
-                            .when(!body.is_empty(), |el| {
-                                el.child(
-                                    div()
-                                        .text_size(px(font_size::XS))
-                                        .text_color(theme.text.muted)
-                                        .line_height(px(16.0))
-                                        .child(body),
-                                )
-                            })
                     })),
             )
     }
@@ -532,4 +479,169 @@ pub fn init(cx: &mut App) {
         }
     })
     .detach();
+}
+
+fn image_source_from(value: &str) -> Option<String> {
+    if is_image_source(value) {
+        Some(value.to_string())
+    } else {
+        None
+    }
+}
+
+fn is_image_source(value: &str) -> bool {
+    value.starts_with('/')
+        || value.starts_with("file://")
+        || value.starts_with("http://")
+        || value.starts_with("https://")
+}
+
+fn icon_fallback(app_name: &str, app_icon_name: &str) -> String {
+    if !app_icon_name.is_empty() {
+        return app_icon_name.chars().take(2).collect();
+    }
+    app_name
+        .chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_ascii_uppercase().to_string())
+        .unwrap_or_else(|| "?".to_string())
+}
+
+fn format_notification_time(timestamp_ms: i64) -> String {
+    use chrono::{Local, TimeZone};
+    Local
+        .timestamp_millis_opt(timestamp_ms)
+        .single()
+        .map(|dt| dt.format("%H:%M").to_string())
+        .unwrap_or_default()
+}
+
+fn notification_card_body<V>(
+    notification: &Notification,
+    cx: &Context<V>,
+    show_image: bool,
+) -> gpui::AnyElement {
+    let theme = cx.theme();
+    let app_name = notification.app_name.clone();
+    let app_icon_name = notification.app_icon.clone();
+    let icon_source = notification
+        .app_icon_path
+        .clone()
+        .or_else(|| image_source_from(&notification.app_icon));
+    let image_source = notification
+        .image_path
+        .clone()
+        .filter(|source| is_image_source(source));
+    let summary = notification.summary.clone();
+    let body = notification.body.clone();
+    let timestamp = format_notification_time(notification.timestamp_ms);
+    let urgency_color = urgency_color(notification.urgency, cx);
+
+    div()
+        .w_full()
+        .flex()
+        .items_start()
+        .gap(px(spacing::SM))
+        .child(
+            div()
+                .w(px(3.0))
+                .h_full()
+                .rounded(px(radius::SM))
+                .bg(urgency_color),
+        )
+        .child(
+            div()
+                .size(px(28.0))
+                .rounded(px(radius::SM))
+                .bg(theme.bg.secondary)
+                .border_1()
+                .border_color(theme.border.subtle)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    icon_source
+                        .map(|src| {
+                            img(src)
+                                .size(px(18.0))
+                                .rounded(px(radius::SM))
+                                .into_any_element()
+                        })
+                        .unwrap_or_else(|| {
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(theme.text.secondary)
+                                .child(icon_fallback(&app_name, &app_icon_name))
+                                .into_any_element()
+                        }),
+                ),
+        )
+        .child(
+            div()
+                .flex_1()
+                .w_full()
+                .pr(px(spacing::XL))
+                .flex()
+                .flex_col()
+                .gap(px(3.0))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(theme.text.secondary)
+                                .child(app_name),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(theme.text.muted)
+                                .child(timestamp),
+                        ),
+                )
+                .child(
+                    div()
+                        .whitespace_normal()
+                        .text_size(px(font_size::SM))
+                        .text_color(theme.text.primary)
+                        .line_height(px(18.0))
+                        .child(summary),
+                )
+                .when(!body.is_empty(), |el| {
+                    el.child(
+                        div()
+                            .whitespace_normal()
+                            .text_size(px(font_size::XS))
+                            .text_color(theme.text.muted)
+                            .line_height(px(16.0))
+                            .child(body),
+                    )
+                })
+                .when(show_image, |el| {
+                    el.when_some(image_source, |el, source| {
+                        el.child(
+                            div()
+                                .mt(px(4.0))
+                                .h(px(56.0))
+                                .max_w_full()
+                                .rounded(px(radius::SM))
+                                .overflow_hidden()
+                                .child(img(source).h_full().w_auto()),
+                        )
+                    })
+                }),
+        )
+        .into_any_element()
+}
+
+fn urgency_color<V>(urgency: u8, cx: &Context<V>) -> gpui::Hsla {
+    let theme = cx.theme();
+    match urgency {
+        2 => theme.status.error,
+        0 => theme.text.muted,
+        _ => theme.accent.primary,
+    }
 }

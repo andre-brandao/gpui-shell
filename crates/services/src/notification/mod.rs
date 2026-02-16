@@ -28,6 +28,8 @@ pub struct Notification {
     pub id: u32,
     pub app_name: String,
     pub app_icon: String,
+    pub app_icon_path: Option<String>,
+    pub image_path: Option<String>,
     pub summary: String,
     pub body: String,
     pub urgency: u8,
@@ -260,8 +262,17 @@ impl NotificationServer {
             }
         };
 
-        let _ = hints;
-        let urgency = 1;
+        let urgency = hints
+            .get("urgency")
+            .and_then(|v| u8::try_from(v.clone()).ok())
+            .unwrap_or(1);
+        let image_path = hint_string(&hints, &["image-path", "image_path", "image_path"]);
+        let app_icon_path = if is_image_source(app_icon) {
+            Some(app_icon.to_string())
+        } else {
+            hint_string(&hints, &["app_icon", "icon-path", "icon_path"])
+                .filter(|value| is_image_source(value))
+        };
         let timeout_ms = if expire_timeout < 0 {
             DEFAULT_TIMEOUT_MS
         } else {
@@ -279,6 +290,8 @@ impl NotificationServer {
             id,
             app_name: app_name.to_string(),
             app_icon: app_icon.to_string(),
+            app_icon_path,
+            image_path,
             summary: summary.to_string(),
             body: body.to_string(),
             urgency,
@@ -380,6 +393,29 @@ fn deactivate_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
     let had_popup = state.popup_ids.iter().any(|x| *x == id);
     state.popup_ids.retain(|x| *x != id);
     had_popup || state.notifications.iter().any(|n| n.id == id)
+}
+
+fn hint_string(hints: &HashMap<String, OwnedValue>, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        hints.get(*key).and_then(|v| {
+            String::try_from(v.clone())
+                .ok()
+                .or_else(|| {
+                    let raw = format!("{v:?}");
+                    raw.strip_prefix('"')
+                        .and_then(|s| s.strip_suffix('"'))
+                        .map(ToString::to_string)
+                })
+                .filter(|s| !s.trim().is_empty())
+        })
+    })
+}
+
+fn is_image_source(value: &str) -> bool {
+    value.starts_with('/')
+        || value.starts_with("file://")
+        || value.starts_with("http://")
+        || value.starts_with("https://")
 }
 
 #[proxy(
