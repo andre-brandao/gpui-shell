@@ -1,7 +1,7 @@
 //! MPRIS panel with a list of players and transport controls.
 
 use futures_signals::signal::SignalExt;
-use gpui::{App, Context, FontWeight, MouseButton, Window, div, prelude::*, px};
+use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
@@ -221,10 +221,37 @@ impl MprisPanel {
                             .items_center()
                             .gap(px(spacing::SM))
                             .child(
-                                div()
-                                    .text_size(px(icon_size::SM))
-                                    .text_color(theme.text.primary)
-                                    .child(icons::PLAYER),
+                                player
+                                    .art_url
+                                    .clone()
+                                    .map(|source| {
+                                        div()
+                                            .size(px(34.0))
+                                            .rounded(px(radius::SM))
+                                            .overflow_hidden()
+                                            .border_1()
+                                            .border_color(theme.border.subtle)
+                                            .child(img(source).size_full())
+                                            .into_any_element()
+                                    })
+                                    .unwrap_or_else(|| {
+                                        div()
+                                            .size(px(34.0))
+                                            .rounded(px(radius::SM))
+                                            .bg(theme.bg.tertiary)
+                                            .border_1()
+                                            .border_color(theme.border.subtle)
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(
+                                                div()
+                                                    .text_size(px(icon_size::SM))
+                                                    .text_color(theme.text.primary)
+                                                    .child(icons::PLAYER),
+                                            )
+                                            .into_any_element()
+                                    }),
                             )
                             .child(
                                 div()

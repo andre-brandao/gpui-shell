@@ -83,6 +83,18 @@ impl From<HashMap<String, OwnedValue>> for MprisPlayerMetadata {
     }
 }
 
+fn metadata_art_url(value: &HashMap<String, OwnedValue>) -> Option<String> {
+    value
+        .get("mpris:artUrl")
+        .and_then(|v| v.clone().try_into().ok())
+        .filter(|source: &String| {
+            source.starts_with('/')
+                || source.starts_with("file://")
+                || source.starts_with("http://")
+                || source.starts_with("https://")
+        })
+}
+
 fn metadata_duration_us(value: &HashMap<String, OwnedValue>) -> Option<i64> {
     value
         .get("mpris:length")
@@ -100,6 +112,7 @@ fn metadata_duration_us(value: &HashMap<String, OwnedValue>) -> Option<i64> {
 pub struct MprisPlayerData {
     pub service: String,
     pub metadata: Option<MprisPlayerMetadata>,
+    pub art_url: Option<String>,
     pub duration_us: Option<i64>,
     pub volume: Option<f64>,
     pub state: PlaybackStatus,
@@ -210,6 +223,7 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
 
         let metadata_raw = proxy.metadata().await.ok();
         let metadata = metadata_raw.clone().map(MprisPlayerMetadata::from);
+        let art_url = metadata_raw.as_ref().and_then(metadata_art_url);
         let duration_us = metadata_raw.as_ref().and_then(metadata_duration_us);
         let volume = proxy.volume().await.ok().map(|v| v * 100.0);
         let state = proxy
@@ -222,6 +236,7 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
         Some(MprisPlayerData {
             service: name.clone(),
             metadata,
+            art_url,
             duration_us,
             volume,
             state,
@@ -391,12 +406,16 @@ async fn run_listener(data: Mutable<MprisData>, conn: Connection) -> anyhow::Res
                     continue;
                 };
                 let new_metadata = Some(MprisPlayerMetadata::from(raw.clone()));
+                let new_art_url = metadata_art_url(&raw);
                 let new_duration_us = metadata_duration_us(&raw);
 
                 let mut guard = data.lock_mut();
                 if let Some(player) = guard.players.iter_mut().find(|p| p.service == service) {
                     if player.metadata != new_metadata {
                         player.metadata = new_metadata;
+                    }
+                    if player.art_url != new_art_url {
+                        player.art_url = new_art_url;
                     }
                     if player.duration_us != new_duration_us {
                         player.duration_us = new_duration_us;
