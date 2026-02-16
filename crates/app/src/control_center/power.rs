@@ -193,7 +193,8 @@ fn render_profile_button(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let accent_primary = theme.accent.primary;
+    let interactive_toggle_on = theme.interactive.toggle_on;
+    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
     let bg_primary = theme.bg.primary;
@@ -213,9 +214,15 @@ fn render_profile_button(
         .py(px(spacing::SM))
         .rounded(px(radius::SM))
         .cursor_pointer()
-        .when(active, move |el| el.bg(accent_primary))
+        .when(active, move |el| el.bg(interactive_toggle_on))
         .when(!active, move |el| el.bg(interactive_default))
-        .hover(move |s| s.bg(interactive_hover))
+        .hover(move |s| {
+            s.bg(if active {
+                interactive_toggle_on_hover
+            } else {
+                interactive_hover
+            })
+        })
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })

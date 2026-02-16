@@ -1,0 +1,358 @@
+//! Notification service implementing org.freedesktop.Notifications.
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use chrono::Utc;
+use futures_signals::signal::{Mutable, MutableSignalCloned};
+use tracing::warn;
+use zbus::{
+    Connection,
+    fdo::{DBusProxy, RequestNameFlags, RequestNameReply},
+    interface,
+    names::WellKnownName,
+    object_server::SignalEmitter,
+    proxy,
+    zvariant::OwnedValue,
+};
+
+const NAME: WellKnownName =
+    WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
+const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
+const DEFAULT_TIMEOUT_MS: i32 = 5000;
+
+/// A single desktop notification.
+#[derive(Debug, Clone, Default)]
+pub struct Notification {
+    pub id: u32,
+    pub app_name: String,
+    pub app_icon: String,
+    pub summary: String,
+    pub body: String,
+    pub urgency: u8,
+    pub timeout_ms: i32,
+    pub timestamp_ms: i64,
+    pub actions: Vec<(String, String)>,
+    pub read: bool,
+}
+
+/// Notification center state.
+#[derive(Debug, Clone, Default)]
+pub struct NotificationData {
+    pub notifications: Vec<Notification>,
+    pub popup_ids: Vec<u32>,
+    pub dnd: bool,
+    pub unread_count: usize,
+}
+
+impl NotificationData {
+    fn recompute_unread(&mut self) {
+        self.unread_count = self.notifications.iter().filter(|n| !n.read).count();
+    }
+
+    fn latest_popup(&self) -> Option<Notification> {
+        let id = self.popup_ids.first().copied()?;
+        self.notifications.iter().find(|n| n.id == id).cloned()
+    }
+}
+
+/// Commands for the notification service.
+#[derive(Debug, Clone)]
+pub enum NotificationCommand {
+    Dismiss(u32),
+    DismissLatest,
+    DismissAll,
+    SetDnd(bool),
+    MarkAllRead,
+}
+
+/// Event-driven notification service.
+#[derive(Debug, Clone)]
+pub struct NotificationSubscriber {
+    data: Mutable<NotificationData>,
+    conn: Option<Connection>,
+}
+
+impl NotificationSubscriber {
+    /// Create the notification daemon and begin listening on D-Bus.
+    pub async fn new() -> anyhow::Result<Self> {
+        let conn = zbus::connection::Connection::session().await?;
+        let data = Mutable::new(NotificationData::default());
+        let server = NotificationServer::new(data.clone(), conn.clone());
+        conn.object_server().at(OBJECT_PATH, server).await?;
+
+        let dbus_proxy = DBusProxy::new(&conn).await?;
+        let flags = RequestNameFlags::AllowReplacement;
+        if dbus_proxy.request_name(NAME, flags.into()).await? == RequestNameReply::InQueue {
+            warn!("Bus name '{NAME}' already owned, notifications will be unavailable");
+            return Ok(Self { data, conn: None });
+        }
+
+        Ok(Self {
+            data,
+            conn: Some(conn),
+        })
+    }
+
+    /// Fallback subscriber when D-Bus notification name is unavailable.
+    pub fn disabled() -> Self {
+        Self {
+            data: Mutable::new(NotificationData::default()),
+            conn: None,
+        }
+    }
+
+    pub fn subscribe(&self) -> MutableSignalCloned<NotificationData> {
+        self.data.signal_cloned()
+    }
+
+    pub fn get(&self) -> NotificationData {
+        self.data.get_cloned()
+    }
+
+    pub fn latest_popup(&self) -> Option<Notification> {
+        self.data.lock_ref().latest_popup()
+    }
+
+    pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
+        match command {
+            NotificationCommand::Dismiss(id) => {
+                self.dismiss_by_id(id).await?;
+            }
+            NotificationCommand::DismissLatest => {
+                if let Some(id) = self.data.lock_ref().notifications.first().map(|n| n.id) {
+                    self.dismiss_by_id(id).await?;
+                }
+            }
+            NotificationCommand::DismissAll => {
+                let ids: Vec<u32> = self
+                    .data
+                    .lock_ref()
+                    .notifications
+                    .iter()
+                    .map(|n| n.id)
+                    .collect();
+                for id in ids {
+                    self.dismiss_by_id(id).await?;
+                }
+            }
+            NotificationCommand::SetDnd(enabled) => {
+                let mut data = self.data.lock_mut();
+                data.dnd = enabled;
+                if enabled {
+                    data.popup_ids.clear();
+                }
+            }
+            NotificationCommand::MarkAllRead => {
+                let mut data = self.data.lock_mut();
+                for item in &mut data.notifications {
+                    item.read = true;
+                }
+                data.recompute_unread();
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn dismiss_by_id(&self, id: u32) -> anyhow::Result<()> {
+        if let Some(conn) = &self.conn {
+            let proxy = NotificationsProxy::new(conn).await?;
+            let _ = proxy.close_notification(id).await;
+        }
+        remove_notification(&self.data, id);
+        Ok(())
+    }
+}
+
+impl Default for NotificationSubscriber {
+    fn default() -> Self {
+        Self::disabled()
+    }
+}
+
+#[derive(Debug)]
+struct NotificationServer {
+    data: Mutable<NotificationData>,
+    conn: Connection,
+    next_id: u32,
+}
+
+impl NotificationServer {
+    fn new(data: Mutable<NotificationData>, conn: Connection) -> Self {
+        Self {
+            data,
+            conn,
+            next_id: 1,
+        }
+    }
+}
+
+#[interface(
+    name = "org.freedesktop.Notifications",
+    proxy(
+        gen_blocking = false,
+        default_service = "org.freedesktop.Notifications",
+        default_path = "/org/freedesktop/Notifications",
+    )
+)]
+impl NotificationServer {
+    #[zbus(name = "GetCapabilities")]
+    async fn get_capabilities(&self) -> Vec<String> {
+        vec![
+            "actions".to_string(),
+            "body".to_string(),
+            "body-markup".to_string(),
+            "persistence".to_string(),
+        ]
+    }
+
+    #[zbus(name = "GetServerInformation")]
+    async fn get_server_information(&self) -> (String, String, String, String) {
+        (
+            "GPUi Shell".to_string(),
+            "gpuishell".to_string(),
+            "0.1.0".to_string(),
+            "1.2".to_string(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[zbus(name = "Notify")]
+    async fn notify(
+        &mut self,
+        app_name: &str,
+        replaces_id: u32,
+        app_icon: &str,
+        summary: &str,
+        body: &str,
+        actions: Vec<String>,
+        hints: HashMap<String, OwnedValue>,
+        expire_timeout: i32,
+    ) -> u32 {
+        let id = {
+            let existing = self
+                .data
+                .lock_ref()
+                .notifications
+                .iter()
+                .any(|n| n.id == replaces_id);
+            if replaces_id != 0 && existing {
+                replaces_id
+            } else {
+                let id = self.next_id;
+                self.next_id = self.next_id.saturating_add(1);
+                id
+            }
+        };
+
+        let _ = hints;
+        let urgency = 1;
+        let timeout_ms = if expire_timeout < 0 {
+            DEFAULT_TIMEOUT_MS
+        } else {
+            expire_timeout
+        };
+        let parsed_actions = actions
+            .chunks(2)
+            .filter_map(|chunk| match chunk {
+                [key, label] => Some((key.clone(), label.clone())),
+                _ => None,
+            })
+            .collect();
+
+        let notification = Notification {
+            id,
+            app_name: app_name.to_string(),
+            app_icon: app_icon.to_string(),
+            summary: summary.to_string(),
+            body: body.to_string(),
+            urgency,
+            timeout_ms,
+            timestamp_ms: Utc::now().timestamp_millis(),
+            actions: parsed_actions,
+            read: false,
+        };
+
+        {
+            let mut data = self.data.lock_mut();
+            data.notifications.retain(|n| n.id != id);
+            data.popup_ids.retain(|n| *n != id);
+            data.notifications.insert(0, notification);
+            if !data.dnd {
+                data.popup_ids.insert(0, id);
+            }
+            data.recompute_unread();
+        }
+
+        if timeout_ms > 0 {
+            let conn = self.conn.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(timeout_ms as u64));
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build tokio runtime for notification timeout");
+                rt.block_on(async move {
+                    if let Ok(proxy) = NotificationsProxy::new(&conn).await {
+                        let _ = proxy.close_notification(id).await;
+                    }
+                });
+            });
+        }
+
+        id
+    }
+
+    #[zbus(name = "CloseNotification")]
+    async fn close_notification(
+        &mut self,
+        id: u32,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) {
+        if deactivate_notification(&self.data, id) {
+            let _ = NotificationServer::notification_closed(&emitter, id, 2).await;
+        }
+    }
+
+    #[zbus(signal, name = "NotificationClosed")]
+    async fn notification_closed(
+        emitter: &SignalEmitter<'_>,
+        id: u32,
+        reason: u32,
+    ) -> zbus::Result<()>;
+
+    #[zbus(signal, name = "ActionInvoked")]
+    async fn action_invoked(
+        emitter: &SignalEmitter<'_>,
+        id: u32,
+        action_key: &str,
+    ) -> zbus::Result<()>;
+}
+
+fn remove_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
+    let mut state = data.lock_mut();
+    let len_before = state.notifications.len();
+    state.notifications.retain(|n| n.id != id);
+    state.popup_ids.retain(|x| *x != id);
+    state.recompute_unread();
+    len_before != state.notifications.len()
+}
+
+fn deactivate_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
+    let mut state = data.lock_mut();
+    let had_popup = state.popup_ids.iter().any(|x| *x == id);
+    state.popup_ids.retain(|x| *x != id);
+    had_popup || state.notifications.iter().any(|n| n.id == id)
+}
+
+#[proxy(
+    interface = "org.freedesktop.Notifications",
+    default_service = "org.freedesktop.Notifications",
+    default_path = "/org/freedesktop/Notifications",
+    gen_blocking = false
+)]
+trait Notifications {
+    #[zbus(name = "CloseNotification")]
+    fn close_notification(&self, id: u32) -> zbus::Result<()>;
+}

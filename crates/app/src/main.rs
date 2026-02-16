@@ -17,6 +17,7 @@ mod bar;
 pub mod config;
 pub mod control_center;
 pub mod launcher;
+pub mod notification;
 pub mod osd;
 mod panel;
 pub mod state;
@@ -60,6 +61,7 @@ async fn main() {
         control_center::ControlCenter::register_keybindings(cx);
 
         bar::init(cx);
+        notification::init(cx);
         osd::init(cx);
         launcher::init(shell_receiver, cx);
     });

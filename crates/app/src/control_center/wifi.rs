@@ -50,7 +50,6 @@ pub fn render_wifi_section(
     services: &Services,
     password_state: &WifiPasswordState,
     on_connect: impl Fn(String, Option<String>, &mut App) + Clone + 'static,
-    on_password_change: impl Fn(String, &mut App) + Clone + 'static,
     on_cancel_password: impl Fn(&mut App) + Clone + 'static,
     cx: &App,
 ) -> impl IntoElement {
@@ -139,7 +138,6 @@ pub fn render_wifi_section(
                         let is_secured = !ap.public;
                         let is_known = ap.known;
                         let on_connect = on_connect.clone();
-                        let on_password_change = on_password_change.clone();
                         let on_cancel = on_cancel_password.clone();
                         let current_password = password_state.password.clone();
                         let is_connecting = password_state.connecting;
@@ -156,7 +154,6 @@ pub fn render_wifi_section(
                                     let ssid = ssid_submit.clone();
                                     on_connect(ssid, Some(password), cx);
                                 },
-                                on_password_change.clone(),
                                 on_cancel,
                                 cx,
                             )
@@ -287,7 +284,6 @@ fn render_password_input(
     connecting: bool,
     error: Option<&str>,
     on_submit: impl Fn(String, &mut App) + 'static,
-    _on_change: impl Fn(String, &mut App) + 'static,
     on_cancel: impl Fn(&mut App) + 'static,
     cx: &App,
 ) -> impl IntoElement {

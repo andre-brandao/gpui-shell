@@ -5,6 +5,8 @@
 
 use gpui::{AnyElement, Context, Entity, prelude::*};
 
+use crate::notification::NotificationWidget;
+
 use super::{
     ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces,
 };
@@ -31,6 +33,7 @@ pub enum Widget {
     Tray(Entity<Tray>),
     SysInfo(Entity<SysInfo>),
     LauncherBtn(Entity<LauncherBtn>),
+    Notification(Entity<NotificationWidget>),
     Settings(Entity<Settings>),
 }
 
@@ -48,6 +51,7 @@ impl Widget {
             Widget::Tray(e) => e.clone().into_any_element(),
             Widget::SysInfo(e) => e.clone().into_any_element(),
             Widget::LauncherBtn(e) => e.clone().into_any_element(),
+            Widget::Notification(e) => e.clone().into_any_element(),
             Widget::Settings(e) => e.clone().into_any_element(),
         }
     }
@@ -65,6 +69,9 @@ impl Widget {
             "Systray" | "Tray" => Some(Widget::Tray(cx.new(|cx| Tray::new(slot, cx)))),
             "SysInfo" => Some(Widget::SysInfo(cx.new(|cx| SysInfo::new(slot, cx)))),
             "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(cx.new(LauncherBtn::new))),
+            "Notification" | "Notifications" => Some(Widget::Notification(
+                cx.new(|cx| NotificationWidget::new(slot, cx)),
+            )),
             "Settings" | "Info" | "ControlCenter" => {
                 Some(Widget::Settings(cx.new(|cx| Settings::new(slot, cx))))
             }

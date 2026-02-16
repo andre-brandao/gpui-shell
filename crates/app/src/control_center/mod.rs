@@ -30,7 +30,7 @@ use services::{AudioCommand, BrightnessCommand, NetworkCommand, Services};
 use ui::{ActiveTheme, Slider, SliderEvent, radius, spacing};
 
 // Keyboard actions for password input
-actions!(control_center, [Backspace, Cancel, Submit, TypeChar]);
+actions!(control_center, [Backspace, Cancel, Submit]);
 
 pub use quick_toggles::ExpandedSection;
 pub use wifi::WifiPasswordState;
@@ -329,16 +329,6 @@ impl Render for ControlCenter {
             }
         };
 
-        let on_password_change = {
-            let entity = entity.clone();
-            move |password: String, cx: &mut App| {
-                entity.update(cx, |this, cx| {
-                    this.wifi_password.password = password;
-                    cx.notify();
-                });
-            }
-        };
-
         let on_cancel_password = {
             let entity = entity.clone();
             move |cx: &mut App| {
@@ -448,19 +438,38 @@ impl Render for ControlCenter {
             .on_key_down({
                 let entity = entity.clone();
                 move |event, _window, cx| {
-                    // Handle printable character input for password
-                    let key = event.keystroke.key.as_str();
-                    if key.len() == 1 && !event.keystroke.modifiers.control {
-                        let ch = key.chars().next().unwrap();
-                        if ch.is_ascii_graphic() || ch == ' ' {
-                            entity.update(cx, |this, cx| {
-                                if this.wifi_password.ssid.is_some() {
-                                    this.wifi_password.password.push(ch);
-                                    cx.notify();
-                                }
-                            });
-                        }
+                    // Handle printable character input for password.
+                    if event.keystroke.modifiers.control || event.keystroke.modifiers.alt {
+                        return;
                     }
+
+                    let input_char = event
+                        .keystroke
+                        .key_char
+                        .as_ref()
+                        .and_then(|s| s.chars().next())
+                        .or_else(|| {
+                            let key = event.keystroke.key.as_str();
+                            if key.chars().count() == 1 {
+                                key.chars().next()
+                            } else {
+                                None
+                            }
+                        });
+
+                    let Some(ch) = input_char else {
+                        return;
+                    };
+                    if ch.is_control() {
+                        return;
+                    }
+
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.password.push(ch);
+                            cx.notify();
+                        }
+                    });
                 }
             })
             // Quick toggles row
@@ -476,7 +485,6 @@ impl Render for ControlCenter {
                     &services,
                     &self.wifi_password,
                     on_wifi_connect,
-                    on_password_change,
                     on_cancel_password,
                     cx,
                 ))

@@ -9,6 +9,7 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod compositor;
 pub mod network;
+pub mod notification;
 pub mod privacy;
 pub mod shell;
 pub mod sysinfo;
@@ -29,6 +30,9 @@ pub use compositor::{
 pub use network::{
     AccessPoint, ActiveConnectionInfo, ConnectivityState, DeviceState, DeviceType, NetworkCommand,
     NetworkData, NetworkStatistics, NetworkSubscriber,
+};
+pub use notification::{
+    Notification, NotificationCommand, NotificationData, NotificationSubscriber,
 };
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
 pub use shell::{InstanceResult, LauncherRequest, ShellSubscriber};
@@ -58,6 +62,7 @@ pub struct Services {
     pub brightness: BrightnessSubscriber,
     pub compositor: CompositorSubscriber,
     pub network: NetworkSubscriber,
+    pub notification: NotificationSubscriber,
     pub privacy: PrivacySubscriber,
     pub sysinfo: SysInfoSubscriber,
     pub tray: TraySubscriber,
@@ -76,6 +81,10 @@ impl Services {
         let brightness = BrightnessSubscriber::new().await?;
         let compositor = CompositorSubscriber::new().await?;
         let network = NetworkSubscriber::new().await?;
+        let notification = NotificationSubscriber::new().await.unwrap_or_else(|err| {
+            tracing::warn!("Notification service unavailable: {}", err);
+            NotificationSubscriber::disabled()
+        });
         let privacy = PrivacySubscriber::new();
         let sysinfo = SysInfoSubscriber::new();
         let tray = TraySubscriber::new().await?;
@@ -88,6 +97,7 @@ impl Services {
             brightness,
             compositor,
             network,
+            notification,
             privacy,
             sysinfo,
             tray,

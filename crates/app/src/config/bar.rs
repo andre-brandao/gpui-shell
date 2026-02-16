@@ -47,6 +47,7 @@ impl Default for BarConfig {
             center: vec!["ActiveWindow".into()],
             end: vec![
                 "Clock".into(),
+                "Notifications".into(),
                 "Systray".into(),
                 "KeyboardLayout".into(),
                 "Settings".into(),

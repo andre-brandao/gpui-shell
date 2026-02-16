@@ -169,8 +169,8 @@ fn render_expandable_toggle(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let accent_primary = theme.accent.primary;
-    let accent_selection = theme.accent.selection;
+    let interactive_toggle_on = theme.interactive.toggle_on;
+    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
     let bg_primary = theme.bg.primary;
@@ -194,9 +194,15 @@ fn render_expandable_toggle(
                 .w(px(40.))
                 .h(px(36.))
                 .cursor_pointer()
-                .when(active, move |el| el.bg(accent_primary))
+                .when(active, move |el| el.bg(interactive_toggle_on))
                 .when(!active, move |el| el.bg(interactive_default))
-                .hover(move |s| s.bg(interactive_hover))
+                .hover(move |s| {
+                    s.bg(if active {
+                        interactive_toggle_on_hover
+                    } else {
+                        interactive_hover
+                    })
+                })
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_toggle(cx);
                 })
@@ -217,9 +223,15 @@ fn render_expandable_toggle(
                 .w(px(20.))
                 .h(px(36.))
                 .cursor_pointer()
-                .when(expanded, move |el| el.bg(accent_selection))
+                .when(expanded, move |el| el.bg(interactive_toggle_on))
                 .when(!expanded, move |el| el.bg(interactive_default))
-                .hover(move |s| s.bg(interactive_hover))
+                .hover(move |s| {
+                    s.bg(if expanded {
+                        interactive_toggle_on_hover
+                    } else {
+                        interactive_hover
+                    })
+                })
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_expand(cx);
                 })
@@ -247,7 +259,8 @@ fn render_simple_toggle(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let accent_primary = theme.accent.primary;
+    let interactive_toggle_on = theme.interactive.toggle_on;
+    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
     let bg_primary = theme.bg.primary;
@@ -262,9 +275,15 @@ fn render_simple_toggle(
         .h(px(36.))
         .rounded(px(radius::MD))
         .cursor_pointer()
-        .when(active, move |el| el.bg(accent_primary))
+        .when(active, move |el| el.bg(interactive_toggle_on))
         .when(!active, move |el| el.bg(interactive_default))
-        .hover(move |s| s.bg(interactive_hover))
+        .hover(move |s| {
+            s.bg(if active {
+                interactive_toggle_on_hover
+            } else {
+                interactive_hover
+            })
+        })
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
