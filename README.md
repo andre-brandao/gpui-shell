@@ -11,8 +11,8 @@ contributions and feedback are welcome!
 - OSD (Volume + Brightness)
 - Launcher with multiple views
 - Bar with control center and widgets
+- Configurable via `config.toml` and `theme.toml`
 - (Planned) bottom dock
-- (Planned) configuration files/menu
 - (Planned) notification module (replace swaync)
 - (Planned) custom launcher views/ bar widgets
 
@@ -64,12 +64,16 @@ bindr = SUPER, SUPER_L, exec, gpuishell
 #### bash
 
 ```bash
-# Calling again will open the launcher
+# Calling again will signal the running instance to open the launcher
 gpuishell
 
 # Prefill input to open a custom provider
 gpuishell -i "~"
 ```
+
+## Configuration
+
+See [`docs/CONFIG.md`](./docs/CONFIG.md) for all fields.
 
 ## Thanks
 

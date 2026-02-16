@@ -31,6 +31,9 @@ margin_top = 100.0
 margin_right = 0.0
 margin_bottom = 0.0
 margin_left = 0.0
+
+[osd]
+position = "right"
 ```
 
 ## `theme.toml` format
@@ -63,6 +66,11 @@ Notes:
 - `margin_right` (`float`): right margin for layer-shell placement.
 - `margin_bottom` (`float`): bottom margin for layer-shell placement.
 - `margin_left` (`float`): left margin for layer-shell placement.
+
+## `osd`
+
+- `position` (`"top" | "bottom" | "left" | "right"`): screen edge where the
+  volume/brightness OSD appears.
 
 ## Widget names
 
