@@ -10,7 +10,7 @@ use gpui::{
 use ui::{ActiveTheme, font_size, spacing};
 
 use super::widgets::{Widget, WidgetSlot};
-use crate::config::{ActiveConfig, BarPosition};
+use crate::config::{ActiveConfig, BarPosition, Config};
 
 /// The main bar view.
 struct Bar {
@@ -213,6 +213,12 @@ pub fn window_options(
 
 /// Initialize the bar using the current global config.
 pub fn init(cx: &mut App) {
+    cx.observe_global::<Config>(|cx| {
+        tracing::info!("Config changed; reloading bar windows");
+        reload(cx);
+    })
+    .detach();
+
     cx.spawn(async move |cx| {
         // Small delay to allow Wayland to enumerate displays
         cx.background_executor()
@@ -241,9 +247,53 @@ pub fn init(cx: &mut App) {
 }
 
 /// Open the bar with custom configuration.
-pub fn open_with_config(display_id: Option<DisplayId>, cx: &mut App) {
-    cx.open_window(window_options(display_id, cx), move |_, cx| {
+pub fn open_with_config(display_id: Option<DisplayId>, cx: &mut App) -> bool {
+    match cx.open_window(window_options(display_id, cx), move |_, cx| {
         cx.new(Bar::new)
-    })
-    .unwrap();
+    }) {
+        Ok(_) => true,
+        Err(err) => {
+            tracing::warn!("Failed to open bar window: {}", err);
+            false
+        }
+    }
+}
+
+fn open_all_bar_windows(cx: &mut App) -> usize {
+    let mut opened = 0usize;
+    let displays = cx.displays();
+    if displays.is_empty() {
+        tracing::info!("No displays found, opening bar on default display");
+        if open_with_config(None, cx) {
+            opened += 1;
+        }
+    } else {
+        tracing::info!("Opening bar on {} displays", displays.len());
+        for d in displays {
+            tracing::info!("Opening bar on display {:?}", d.id());
+            if open_with_config(Some(d.id()), cx) {
+                opened += 1;
+            }
+        }
+    }
+    opened
+}
+
+/// Rebuild all bar windows using the latest config.
+pub fn reload(cx: &mut App) {
+    let old_windows: Vec<_> = cx
+        .windows()
+        .into_iter()
+        .filter(|h| h.downcast::<Bar>().is_some())
+        .collect();
+
+    let opened = open_all_bar_windows(cx);
+    if opened == 0 {
+        tracing::warn!("Bar reload skipped closing old windows because no new bar window opened");
+        return;
+    }
+
+    for handle in old_windows {
+        let _ = handle.update(cx, |_, window, _| window.remove_window());
+    }
 }

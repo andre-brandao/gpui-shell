@@ -22,6 +22,10 @@ fn default_config_path() -> anyhow::Result<PathBuf> {
     ))
 }
 
+pub fn config_path() -> anyhow::Result<PathBuf> {
+    default_config_path()
+}
+
 pub fn load() -> anyhow::Result<Config> {
     let path = default_config_path()?;
     if !path.exists() {
