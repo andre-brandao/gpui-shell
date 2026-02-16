@@ -74,7 +74,7 @@ impl Bar {
                     this.flex_1().justify_start()
                 })
                 .when(matches!(align, SectionAlign::Center), |this| {
-                    this.justify_center()
+                    this.flex_1().justify_center().overflow_hidden()
                 })
                 .when(matches!(align, SectionAlign::End), |this| {
                     this.flex_1().justify_end()

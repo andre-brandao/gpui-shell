@@ -14,6 +14,12 @@ pub const WORKSPACE_PILL_HEIGHT: f32 = 20.0;
 pub const WORKSPACE_PILL_WIDTH: f32 = 20.0;
 /// Workspace pill width (active).
 pub const WORKSPACE_PILL_WIDTH_ACTIVE: f32 = 24.0;
+/// Horizontal workspace pill width (inactive).
+pub const WORKSPACE_PILL_WIDTH_HORIZONTAL: f32 = 24.0;
+/// Horizontal workspace pill width (active).
+pub const WORKSPACE_PILL_WIDTH_HORIZONTAL_ACTIVE: f32 = 30.0;
+/// Horizontal section divider height.
+pub const SECTION_DIVIDER_HEIGHT: f32 = 14.0;
 
 /// Horizontal padding for compact bar widgets.
 #[inline(always)]

@@ -4,7 +4,7 @@ use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::config::ActiveConfig;
@@ -61,6 +61,23 @@ impl Workspaces {
             tracing::error!("Failed to scroll workspace: {}", e);
         }
     }
+
+    fn workspace_label(ws: &services::Workspace, is_vertical: bool) -> String {
+        if is_vertical {
+            return ws.id.to_string();
+        }
+
+        let name = ws.name.trim();
+        if name.is_empty() {
+            return ws.id.to_string();
+        }
+
+        if name.chars().all(|ch| ch.is_ascii_digit()) {
+            name.to_string()
+        } else {
+            name.chars().take(3).collect::<String>().to_uppercase()
+        }
+    }
 }
 
 impl Render for Workspaces {
@@ -105,11 +122,7 @@ impl Render for Workspaces {
                         let workspace_id = ws.id;
                         let is_active = active_workspace_id == Some(ws.id);
                         let has_windows = ws.windows > 0;
-                        let label = if is_vertical && ws.name.chars().count() > 2 {
-                            ws.id.to_string()
-                        } else {
-                            ws.name.clone()
-                        };
+                        let label = Self::workspace_label(ws, is_vertical);
 
                         div()
                             .id(format!("workspace-{}", ws.id))
@@ -125,12 +138,12 @@ impl Render for Workspaces {
                                 .h(px(style::WORKSPACE_PILL_HEIGHT))
                             })
                             .when(!is_vertical, |this| {
-                                this.px(if is_active {
-                                    px(spacing::MD)
+                                this.w(if is_active {
+                                    px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL_ACTIVE)
                                 } else {
-                                    px(spacing::SM)
+                                    px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL)
                                 })
-                                .py(px(2.0))
+                                .h(px(style::WORKSPACE_PILL_HEIGHT))
                             })
                             .rounded(px(radius::SM))
                             .cursor_pointer()

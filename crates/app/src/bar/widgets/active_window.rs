@@ -113,31 +113,54 @@ impl ActiveWindow {
         }
     }
 
-    fn vertical_label(&self) -> String {
+    fn vertical_lines(&self) -> Vec<String> {
         let source = self
             .state
             .active_window
             .as_ref()
             .map(|window| {
-                if window.class.trim().is_empty() {
-                    window.title.trim()
-                } else {
+                if window.title.trim().is_empty() {
                     window.class.trim()
+                } else {
+                    window.title.trim()
                 }
             })
             .unwrap_or_default();
 
-        let label = source
-            .chars()
-            .filter(|ch| ch.is_ascii_alphanumeric())
-            .take(3)
-            .collect::<String>();
-
-        if label.is_empty() {
-            String::new()
-        } else {
-            label.to_uppercase()
+        if source.is_empty() {
+            return Vec::new();
         }
+
+        let token = source
+            .split(|ch: char| !ch.is_alphanumeric())
+            .filter(|part| !part.is_empty())
+            .find(|part| {
+                let lower = part.to_lowercase();
+                !matches!(lower.as_str(), "org" | "com" | "io" | "app" | "www")
+            })
+            .unwrap_or(source);
+
+        let compact = token
+            .chars()
+            .filter(|ch| ch.is_alphanumeric())
+            .take(4)
+            .collect::<String>()
+            .to_uppercase();
+
+        if compact.is_empty() {
+            return Vec::new();
+        }
+
+        let mut lines = Vec::new();
+        let first = compact.chars().take(2).collect::<String>();
+        let second = compact.chars().skip(2).take(2).collect::<String>();
+
+        lines.push(first);
+        if !second.is_empty() {
+            lines.push(second);
+        }
+
+        lines
     }
 }
 
@@ -147,7 +170,13 @@ impl Render for ActiveWindow {
         let is_vertical = cx.config().bar.is_vertical();
         let title = self.display_title();
         let icon = self.window_icon();
-        let vertical_label = self.vertical_label();
+        let vertical_lines = self.vertical_lines();
+        let has_vertical_lines = !vertical_lines.is_empty();
+        let interactive_default = theme.interactive.default;
+        let border_subtle = theme.border.subtle;
+        let text_primary = theme.text.primary;
+        let text_secondary = theme.text.secondary;
+        let text_muted = theme.text.muted;
 
         if is_vertical {
             div()
@@ -159,20 +188,37 @@ impl Render for ActiveWindow {
                 .px(px(style::chip_padding_x(true)))
                 .py(px(style::CHIP_PADDING_Y))
                 .rounded(px(radius::SM))
-                .when_some(icon, |el, icon| {
-                    el.child(
-                        div()
-                            .text_size(px(style::icon(true)))
-                            .text_color(theme.text.muted)
-                            .child(icon),
-                    )
+                .children(
+                    vertical_lines
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(idx, line)| {
+                            div()
+                                .text_size(px(style::label(true)))
+                                .text_color(if idx == 0 {
+                                    text_primary
+                                } else {
+                                    text_secondary
+                                })
+                                .child(line)
+                        }),
+                )
+                .when(icon.is_some() && !has_vertical_lines, |el| {
+                    el.when_some(icon, |el, icon| {
+                        el.child(
+                            div()
+                                .text_size(px(style::icon(true)))
+                                .text_color(text_muted)
+                                .child(icon),
+                        )
+                    })
                 })
-                .when(!vertical_label.is_empty(), |el| {
+                .when(icon.is_none() && !has_vertical_lines, |el| {
                     el.child(
                         div()
                             .text_size(px(style::label(true)))
-                            .text_color(theme.text.secondary)
-                            .child(vertical_label),
+                            .text_color(text_muted)
+                            .child("APP"),
                     )
                 })
         } else {
@@ -182,17 +228,21 @@ impl Render for ActiveWindow {
                 .items_center()
                 .justify_center()
                 .gap(px(style::CHIP_GAP))
-                .px(px(spacing::SM))
+                .px(px(spacing::MD))
                 .py(px(style::CHIP_PADDING_Y))
+                .max_w(px(460.0))
                 .rounded(px(radius::SM))
+                .bg(interactive_default)
+                .border_1()
+                .border_color(border_subtle)
                 .text_size(px(style::label(false)))
-                .text_color(theme.text.secondary)
+                .text_color(theme.text.primary)
                 .overflow_hidden()
                 .when_some(icon, |el, icon| {
                     el.child(
                         div()
                             .text_size(px(style::icon(false)))
-                            .text_color(theme.text.muted)
+                            .text_color(theme.text.secondary)
                             .child(icon),
                     )
                 })

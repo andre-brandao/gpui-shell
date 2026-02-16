@@ -199,20 +199,33 @@ impl Settings {
     }
 
     /// Get privacy indicator icons (only when active).
-    fn privacy_icons(&self) -> Vec<&'static str> {
-        let mut icons = Vec::new();
+    fn privacy_icons(&self, is_vertical: bool) -> Vec<&'static str> {
+        if is_vertical {
+            let mut icons = Vec::new();
 
-        if self.privacy.microphone_access() {
-            icons.push(icons::MICROPHONE);
+            if self.privacy.microphone_access() {
+                icons.push(icons::MICROPHONE);
+            }
+            if self.privacy.webcam_access() {
+                icons.push(icons::WEBCAM);
+            }
+            if self.privacy.screenshare_access() {
+                icons.push(icons::SCREENSHARE);
+            }
+
+            return icons;
         }
-        if self.privacy.webcam_access() {
-            icons.push(icons::WEBCAM);
-        }
+
+        // Horizontal mode: keep privacy signal lightweight and avoid icon crowding.
         if self.privacy.screenshare_access() {
-            icons.push(icons::SCREENSHARE);
+            vec![icons::SCREENSHARE]
+        } else if self.privacy.webcam_access() {
+            vec![icons::WEBCAM]
+        } else if self.privacy.microphone_access() {
+            vec![icons::MICROPHONE]
+        } else {
+            Vec::new()
         }
-
-        icons
     }
 
     /// Get the volume icon based on current state.
@@ -302,7 +315,8 @@ impl Render for Settings {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
 
-        let privacy_icons = self.privacy_icons();
+        let privacy_icons = self.privacy_icons(is_vertical);
+        let has_privacy = !privacy_icons.is_empty();
         let volume_icon = self.volume_icon();
         let network_icon = self.network_icon();
         let bluetooth_icon = self.bluetooth_icon();
@@ -334,6 +348,7 @@ impl Render for Settings {
         let interactive_active = theme.interactive.active;
         let status_error = theme.status.error;
         let text_primary = theme.text.primary;
+        let divider_color = theme.border.subtle;
 
         div()
             .id("settings-widget")
@@ -361,6 +376,14 @@ impl Render for Settings {
                     .text_color(status_error)
                     .child(icon)
             }))
+            .when(!is_vertical && has_privacy, |el| {
+                el.child(
+                    div()
+                        .w(px(1.0))
+                        .h(px(style::SECTION_DIVIDER_HEIGHT))
+                        .bg(divider_color),
+                )
+            })
             // Volume icon
             .child(
                 div()
@@ -385,12 +408,22 @@ impl Render for Settings {
                 )
             })
             // Power profile icon
-            .child(
-                div()
-                    .text_size(px(icon_size))
-                    .text_color(text_primary)
-                    .child(power_profile_icon),
-            )
+            .when(is_vertical, |el| {
+                el.child(
+                    div()
+                        .text_size(px(icon_size))
+                        .text_color(text_primary)
+                        .child(power_profile_icon),
+                )
+            })
+            .when(!is_vertical, |el| {
+                el.child(
+                    div()
+                        .w(px(1.0))
+                        .h(px(style::SECTION_DIVIDER_HEIGHT))
+                        .bg(divider_color),
+                )
+            })
             // Battery icon and percentage
             .child(
                 div()
