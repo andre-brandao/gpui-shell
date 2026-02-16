@@ -8,7 +8,8 @@ use gpui::{AnyElement, Context, Entity, prelude::*};
 use crate::notification::NotificationWidget;
 
 use super::{
-    ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Settings, SysInfo, Tray, Workspaces,
+    ActiveWindow, Battery, Clock, KeyboardLayout, LauncherBtn, Mpris, Settings, SysInfo, Tray,
+    Workspaces,
 };
 
 /// Slot of a widget within the bar layout.
@@ -35,6 +36,7 @@ pub enum Widget {
     LauncherBtn(Entity<LauncherBtn>),
     Notification(Entity<NotificationWidget>),
     Settings(Entity<Settings>),
+    Mpris(Entity<Mpris>),
 }
 
 impl Widget {
@@ -53,6 +55,7 @@ impl Widget {
             Widget::LauncherBtn(e) => e.clone().into_any_element(),
             Widget::Notification(e) => e.clone().into_any_element(),
             Widget::Settings(e) => e.clone().into_any_element(),
+            Widget::Mpris(e) => e.clone().into_any_element(),
         }
     }
 
@@ -69,6 +72,7 @@ impl Widget {
             "Systray" | "Tray" => Some(Widget::Tray(cx.new(|cx| Tray::new(slot, cx)))),
             "SysInfo" => Some(Widget::SysInfo(cx.new(|cx| SysInfo::new(slot, cx)))),
             "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(cx.new(LauncherBtn::new))),
+            "Mpris" | "Media" | "Player" => Some(Widget::Mpris(cx.new(|cx| Mpris::new(slot, cx)))),
             "Notification" | "Notifications" => Some(Widget::Notification(
                 cx.new(|cx| NotificationWidget::new(slot, cx)),
             )),

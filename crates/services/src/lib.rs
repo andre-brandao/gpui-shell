@@ -8,6 +8,7 @@ pub mod audio;
 pub mod bluetooth;
 pub mod brightness;
 pub mod compositor;
+pub mod mpris;
 pub mod network;
 pub mod notification;
 pub mod privacy;
@@ -26,6 +27,10 @@ pub use brightness::{BrightnessCommand, BrightnessData, BrightnessSubscriber};
 pub use compositor::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
     Monitor, Workspace,
+};
+pub use mpris::{
+    MprisCommand, MprisData, MprisPlayerData, MprisPlayerMetadata, MprisSubscriber, PlaybackStatus,
+    PlayerCommand,
 };
 pub use network::{
     AccessPoint, ActiveConnectionInfo, ConnectivityState, DeviceState, DeviceType, NetworkCommand,
@@ -61,6 +66,7 @@ pub struct Services {
     pub bluetooth: BluetoothSubscriber,
     pub brightness: BrightnessSubscriber,
     pub compositor: CompositorSubscriber,
+    pub mpris: MprisSubscriber,
     pub network: NetworkSubscriber,
     pub notification: NotificationSubscriber,
     pub privacy: PrivacySubscriber,
@@ -80,6 +86,7 @@ impl Services {
         let bluetooth = BluetoothSubscriber::new().await?;
         let brightness = BrightnessSubscriber::new().await?;
         let compositor = CompositorSubscriber::new().await?;
+        let mpris = MprisSubscriber::new().await?;
         let network = NetworkSubscriber::new().await?;
         let notification = NotificationSubscriber::new().await.unwrap_or_else(|err| {
             tracing::warn!("Notification service unavailable: {}", err);
@@ -96,6 +103,7 @@ impl Services {
             bluetooth,
             brightness,
             compositor,
+            mpris,
             network,
             notification,
             privacy,
