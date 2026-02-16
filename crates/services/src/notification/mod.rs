@@ -1,6 +1,7 @@
 //! Notification service implementing org.freedesktop.Notifications.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -114,6 +115,15 @@ impl NotificationSubscriber {
         self.data.lock_ref().latest_popup()
     }
 
+    pub fn popup_notifications(&self, limit: usize) -> Vec<Notification> {
+        let data = self.data.lock_ref();
+        data.popup_ids
+            .iter()
+            .filter_map(|id| data.notifications.iter().find(|n| n.id == *id).cloned())
+            .take(limit)
+            .collect()
+    }
+
     pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
         match command {
             NotificationCommand::Dismiss(id) => {
@@ -176,6 +186,8 @@ struct NotificationServer {
     data: Mutable<NotificationData>,
     conn: Connection,
     next_id: u32,
+    next_timer_generation: u64,
+    timer_generations: Arc<Mutex<HashMap<u32, u64>>>,
 }
 
 impl NotificationServer {
@@ -184,6 +196,8 @@ impl NotificationServer {
             data,
             conn,
             next_id: 1,
+            next_timer_generation: 1,
+            timer_generations: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -286,9 +300,27 @@ impl NotificationServer {
         }
 
         if timeout_ms > 0 {
+            self.next_timer_generation = self.next_timer_generation.saturating_add(1);
+            let generation = self.next_timer_generation;
+            if let Ok(mut timers) = self.timer_generations.lock() {
+                timers.insert(id, generation);
+            }
+
             let conn = self.conn.clone();
+            let timer_generations = self.timer_generations.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(timeout_ms as u64));
+
+                let should_close = timer_generations
+                    .lock()
+                    .ok()
+                    .and_then(|map| map.get(&id).copied())
+                    .map(|current_generation| current_generation == generation)
+                    .unwrap_or(false);
+                if !should_close {
+                    return;
+                }
+
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -310,6 +342,10 @@ impl NotificationServer {
         id: u32,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
+        if let Ok(mut timers) = self.timer_generations.lock() {
+            timers.remove(&id);
+        }
+
         if deactivate_notification(&self.data, id) {
             let _ = NotificationServer::notification_closed(&emitter, id, 2).await;
         }

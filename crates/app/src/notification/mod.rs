@@ -18,8 +18,11 @@ use crate::panel::{PanelConfig, panel_placement, toggle_panel};
 use crate::state::AppState;
 
 const POPUP_WIDTH: f32 = 360.0;
-const POPUP_HEIGHT: f32 = 120.0;
+const POPUP_HEIGHT: f32 = 320.0;
 const POPUP_MARGIN: (f32, f32, f32, f32) = (42.0, 12.0, 0.0, 0.0);
+const POPUP_STACK_LIMIT: usize = 4;
+const POPUP_CARD_COLLAPSED_H: f32 = 44.0;
+const POPUP_CARD_EXPANDED_H: f32 = 102.0;
 
 mod icons {
     pub const BELL: &str = "󰂚";
@@ -32,7 +35,7 @@ static POPUP_STATE: Mutex<Option<PopupWindowState>> = Mutex::new(None);
 
 struct PopupWindowState {
     handle: AnyWindowHandle,
-    view: Entity<NotificationPopup>,
+    view: Entity<NotificationPopupStack>,
 }
 
 /// Notification widget for the bar.
@@ -335,84 +338,99 @@ impl Render for NotificationCenter {
     }
 }
 
-struct NotificationPopup {
+struct NotificationPopupStack {
     subscriber: NotificationSubscriber,
-    notification: Notification,
+    notifications: Vec<Notification>,
 }
 
-impl NotificationPopup {
-    fn new(subscriber: NotificationSubscriber, notification: Notification) -> Self {
+impl NotificationPopupStack {
+    fn new(subscriber: NotificationSubscriber, notifications: Vec<Notification>) -> Self {
         Self {
             subscriber,
-            notification,
+            notifications,
         }
     }
 }
 
-impl Render for NotificationPopup {
+impl Render for NotificationPopupStack {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let notification = self.notification.clone();
-        let subscriber = self.subscriber.clone();
+        let items = self.notifications.clone();
 
         div()
-            .id("notification-popup")
+            .id("notification-popup-stack")
             .size_full()
             .p(px(spacing::SM))
             .child(
                 div()
                     .size_full()
-                    .bg(theme.bg.primary)
-                    .border_1()
-                    .border_color(theme.border.default)
-                    .rounded(px(radius::LG))
-                    .p(px(spacing::SM))
                     .flex()
                     .flex_col()
-                    .gap(px(4.0))
-                    .child(
+                    .gap(px(spacing::XS))
+                    .children(items.into_iter().map(|notification| {
+                        let dismiss_subscriber = self.subscriber.clone();
+                        let id = notification.id;
+                        let app_name = notification.app_name.clone();
+                        let summary = notification.summary.clone();
+                        let body = notification.body.clone();
+
                         div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
+                            .h(px(POPUP_CARD_COLLAPSED_H))
+                            .overflow_hidden()
+                            .bg(theme.bg.primary)
+                            .border_1()
+                            .border_color(theme.border.default)
+                            .rounded(px(radius::LG))
+                            .p(px(spacing::SM))
+                            .hover(move |el| {
+                                el.h(px(POPUP_CARD_EXPANDED_H))
+                                    .bg(theme.bg.elevated)
+                                    .border_color(theme.accent.primary)
+                            })
                             .child(
                                 div()
-                                    .text_size(px(font_size::XS))
-                                    .text_color(theme.text.secondary)
-                                    .child(notification.app_name.clone()),
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::XS))
+                                            .text_color(theme.text.secondary)
+                                            .child(app_name),
+                                    )
+                                    .child(
+                                        div()
+                                            .cursor_pointer()
+                                            .text_size(px(font_size::SM))
+                                            .text_color(theme.text.muted)
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |_, _, _, _cx| {
+                                                    dispatch_notification_command(
+                                                        dismiss_subscriber.clone(),
+                                                        NotificationCommand::Dismiss(id),
+                                                    );
+                                                }),
+                                            )
+                                            .child(icons::CLOSE),
+                                    ),
                             )
                             .child(
                                 div()
-                                    .cursor_pointer()
                                     .text_size(px(font_size::SM))
-                                    .text_color(theme.text.muted)
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(move |_, _, _, _cx| {
-                                            dispatch_notification_command(
-                                                subscriber.clone(),
-                                                NotificationCommand::Dismiss(notification.id),
-                                            );
-                                        }),
-                                    )
-                                    .child(icons::CLOSE),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(font_size::SM))
-                            .text_color(theme.text.primary)
-                            .child(notification.summary.clone()),
-                    )
-                    .when(!notification.body.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_size(px(font_size::XS))
-                                .text_color(theme.text.muted)
-                                .line_height(px(18.0))
-                                .child(notification.body),
-                        )
-                    }),
+                                    .text_color(theme.text.primary)
+                                    .child(summary),
+                            )
+                            .when(!body.is_empty(), |el| {
+                                el.child(
+                                    div()
+                                        .text_size(px(font_size::XS))
+                                        .text_color(theme.text.muted)
+                                        .line_height(px(16.0))
+                                        .child(body),
+                                )
+                            })
+                    })),
             )
     }
 }
@@ -455,10 +473,11 @@ fn close_popup(cx: &mut App) {
 }
 
 fn sync_popup(subscriber: &NotificationSubscriber, cx: &mut App) {
-    let Some(notification) = subscriber.latest_popup() else {
+    let notifications = subscriber.popup_notifications(POPUP_STACK_LIMIT);
+    if notifications.is_empty() {
         close_popup(cx);
         return;
-    };
+    }
 
     let mut guard = POPUP_STATE.lock().unwrap();
     if let Some(existing) = guard.as_ref() {
@@ -467,7 +486,7 @@ fn sync_popup(subscriber: &NotificationSubscriber, cx: &mut App) {
         let updated = cx
             .update_window(handle, |_, _window, cx| {
                 view.update(cx, |popup, cx| {
-                    popup.notification = notification.clone();
+                    popup.notifications = notifications.clone();
                     cx.notify();
                 });
             })
@@ -479,7 +498,7 @@ fn sync_popup(subscriber: &NotificationSubscriber, cx: &mut App) {
 
     let sub = subscriber.clone();
     if let Ok(handle) = cx.open_window(popup_window_options(), move |_, cx| {
-        cx.new(|_| NotificationPopup::new(sub, notification))
+        cx.new(|_| NotificationPopupStack::new(sub, notifications))
     }) {
         let view = handle.update(cx, |_, _, cx| cx.entity().clone()).unwrap();
         *guard = Some(PopupWindowState {
