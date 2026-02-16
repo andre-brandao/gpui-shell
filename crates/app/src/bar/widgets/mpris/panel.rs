@@ -12,6 +12,7 @@ mod icons {
     pub const PREV: &str = "󰒮";
     pub const NEXT: &str = "󰒭";
     pub const PLAYER: &str = "󰎈";
+    pub const DURATION: &str = "󰥔";
 }
 
 /// Panel content for controlling media players exposed via MPRIS.
@@ -111,6 +112,13 @@ impl MprisPanel {
         players
     }
 
+    fn format_duration(us: Option<i64>) -> String {
+        let total_secs = us.unwrap_or(0).max(0) / 1_000_000;
+        let minutes = total_secs / 60;
+        let seconds = total_secs % 60;
+        format!("{minutes}:{seconds:02}")
+    }
+
     fn render_control_button(
         id: impl Into<gpui::ElementId>,
         label: &'static str,
@@ -169,6 +177,7 @@ impl MprisPanel {
             .volume
             .map(|v| format!("{:.0}%", v.clamp(0.0, 100.0)))
             .unwrap_or_else(|| "--".to_string());
+        let duration = Self::format_duration(player.duration_us);
 
         let can_control = player.can_control;
         let service_short = service_name
@@ -248,6 +257,27 @@ impl MprisPanel {
                             .child(format!("{}  {}", Self::status_text(player.state), volume)),
                     ),
             )
+            .when(player.duration_us.is_some(), |el| {
+                el.child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .gap(px(spacing::XS))
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(theme.text.muted)
+                                .child(icons::DURATION),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(theme.text.muted)
+                                .child(duration),
+                        ),
+                )
+            })
             .child(
                 div()
                     .w_full()

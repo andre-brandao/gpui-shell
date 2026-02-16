@@ -2,7 +2,7 @@
 
 mod dbus;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::thread;
 
@@ -16,6 +16,14 @@ use zbus::{Connection, fdo::DBusProxy, zvariant::OwnedValue};
 
 const MPRIS_PLAYER_SERVICE_PREFIX: &str = "org.mpris.MediaPlayer2.";
 const EVENT_DEBOUNCE_MS: u64 = 200;
+
+#[derive(Debug, Clone)]
+enum MprisEvent {
+    TopologyChanged,
+    Metadata(String),
+    Volume(String),
+    Playback(String),
+}
 
 /// Current playback state reported by MPRIS.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,11 +83,24 @@ impl From<HashMap<String, OwnedValue>> for MprisPlayerMetadata {
     }
 }
 
+fn metadata_duration_us(value: &HashMap<String, OwnedValue>) -> Option<i64> {
+    value
+        .get("mpris:length")
+        .and_then(|v| {
+            v.clone()
+                .try_into()
+                .ok()
+                .or_else(|| v.clone().try_into().ok().map(|n: u64| n as i64))
+        })
+        .filter(|v: &i64| *v > 0)
+}
+
 /// Per-player data snapshot.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MprisPlayerData {
     pub service: String,
     pub metadata: Option<MprisPlayerMetadata>,
+    pub duration_us: Option<i64>,
     pub volume: Option<f64>,
     pub state: PlaybackStatus,
     pub can_control: bool,
@@ -187,7 +208,9 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
             Err(_) => return None,
         };
 
-        let metadata = proxy.metadata().await.ok().map(MprisPlayerMetadata::from);
+        let metadata_raw = proxy.metadata().await.ok();
+        let metadata = metadata_raw.clone().map(MprisPlayerMetadata::from);
+        let duration_us = metadata_raw.as_ref().and_then(metadata_duration_us);
         let volume = proxy.volume().await.ok().map(|v| v * 100.0);
         let state = proxy
             .playback_status()
@@ -199,6 +222,7 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
         Some(MprisPlayerData {
             service: name.clone(),
             metadata,
+            duration_us,
             volume,
             state,
             can_control,
@@ -255,12 +279,12 @@ async fn run_listener(data: Mutable<MprisData>, conn: Connection) -> anyhow::Res
                     args.name
                         .as_str()
                         .starts_with(MPRIS_PLAYER_SERVICE_PREFIX)
-                        .then_some(())
+                        .then_some(MprisEvent::TopologyChanged)
                 })
                 .boxed(),
         ];
 
-        let mut proxies = Vec::new();
+        let mut proxies = HashMap::new();
         for player in &current.players {
             let proxy = match MprisPlayerProxy::builder(&conn).destination(player.service.as_str())
             {
@@ -285,12 +309,7 @@ async fn run_listener(data: Mutable<MprisData>, conn: Connection) -> anyhow::Res
                 proxy
                     .receive_metadata_changed()
                     .await
-                    .then(move |_| {
-                        let service = service.clone();
-                        async move {
-                            trace!("MPRIS metadata changed: {}", service);
-                        }
-                    })
+                    .map(move |_| MprisEvent::Metadata(service.clone()))
                     .boxed(),
             );
 
@@ -299,12 +318,7 @@ async fn run_listener(data: Mutable<MprisData>, conn: Connection) -> anyhow::Res
                 proxy
                     .receive_volume_changed()
                     .await
-                    .then(move |_| {
-                        let service = service.clone();
-                        async move {
-                            trace!("MPRIS volume changed: {}", service);
-                        }
-                    })
+                    .map(move |_| MprisEvent::Volume(service.clone()))
                     .boxed(),
             );
 
@@ -313,40 +327,120 @@ async fn run_listener(data: Mutable<MprisData>, conn: Connection) -> anyhow::Res
                 proxy
                     .receive_playback_status_changed()
                     .await
-                    .then(move |_| {
-                        let service = service.clone();
-                        async move {
-                            trace!("MPRIS playback state changed: {}", service);
-                        }
-                    })
+                    .map(move |_| MprisEvent::Playback(service.clone()))
                     .boxed(),
             );
 
-            proxies.push(proxy);
+            proxies.insert(player.service.clone(), proxy);
         }
 
         let mut events = select_all(streams);
-        match events.next().await {
-            Some(()) => {
-                // Debounce bursty property-change signals (common with some players like Spotify)
-                // so we refresh once for a batch instead of once per event.
-                let mut drained = 0usize;
-                while let Ok(Some(())) = tokio::time::timeout(
-                    tokio::time::Duration::from_millis(EVENT_DEBOUNCE_MS),
-                    events.next(),
-                )
-                .await
-                {
-                    drained += 1;
+        loop {
+            let first = match events.next().await {
+                Some(event) => event,
+                None => {
+                    warn!("MPRIS event stream ended unexpectedly");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    break;
                 }
-                trace!("MPRIS change batch received ({} extra events)", drained);
+            };
+
+            let mut batch = vec![first];
+            while let Ok(Some(event)) = tokio::time::timeout(
+                tokio::time::Duration::from_millis(EVENT_DEBOUNCE_MS),
+                events.next(),
+            )
+            .await
+            {
+                batch.push(event);
             }
-            None => {
-                warn!("MPRIS event stream ended unexpectedly");
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+            let mut topology_changed = false;
+            let mut metadata_services = HashSet::new();
+            let mut volume_services = HashSet::new();
+            let mut playback_services = HashSet::new();
+
+            for event in batch {
+                match event {
+                    MprisEvent::TopologyChanged => topology_changed = true,
+                    MprisEvent::Metadata(service) => {
+                        trace!("MPRIS metadata changed: {}", service);
+                        metadata_services.insert(service);
+                    }
+                    MprisEvent::Volume(service) => {
+                        trace!("MPRIS volume changed: {}", service);
+                        volume_services.insert(service);
+                    }
+                    MprisEvent::Playback(service) => {
+                        trace!("MPRIS playback changed: {}", service);
+                        playback_services.insert(service);
+                    }
+                }
+            }
+
+            if topology_changed {
+                debug!("MPRIS topology changed, rebuilding player snapshot/streams");
+                break;
+            }
+
+            for service in metadata_services {
+                let Some(proxy) = proxies.get(service.as_str()) else {
+                    continue;
+                };
+                let Ok(raw) = proxy.metadata().await else {
+                    continue;
+                };
+                let new_metadata = Some(MprisPlayerMetadata::from(raw.clone()));
+                let new_duration_us = metadata_duration_us(&raw);
+
+                let mut guard = data.lock_mut();
+                if let Some(player) = guard.players.iter_mut().find(|p| p.service == service) {
+                    if player.metadata != new_metadata {
+                        player.metadata = new_metadata;
+                    }
+                    if player.duration_us != new_duration_us {
+                        player.duration_us = new_duration_us;
+                    }
+                }
+            }
+
+            for service in volume_services {
+                let Some(proxy) = proxies.get(service.as_str()) else {
+                    continue;
+                };
+                let Ok(raw_volume) = proxy.volume().await else {
+                    continue;
+                };
+                let new_volume = raw_volume * 100.0;
+
+                let mut guard = data.lock_mut();
+                if let Some(player) = guard.players.iter_mut().find(|p| p.service == service) {
+                    let changed = player
+                        .volume
+                        .map(|v| (v - new_volume).abs() > 0.01)
+                        .unwrap_or(true);
+                    if changed {
+                        player.volume = Some(new_volume);
+                    }
+                }
+            }
+
+            for service in playback_services {
+                let Some(proxy) = proxies.get(service.as_str()) else {
+                    continue;
+                };
+                let Ok(raw_status) = proxy.playback_status().await else {
+                    continue;
+                };
+                let new_state = PlaybackStatus::from(raw_status);
+
+                let mut guard = data.lock_mut();
+                if let Some(player) = guard.players.iter_mut().find(|p| p.service == service)
+                    && player.state != new_state
+                {
+                    player.state = new_state;
+                }
             }
         }
-
-        drop(proxies);
     }
 }
