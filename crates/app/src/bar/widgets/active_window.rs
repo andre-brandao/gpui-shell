@@ -147,9 +147,16 @@ impl ActiveWindow {
             .collect::<String>()
             .to_uppercase();
 
-        if compact.is_empty() {
-            return Vec::new();
-        }
+        let compact = if compact.is_empty() {
+            source
+                .chars()
+                .filter(|ch| !ch.is_whitespace())
+                .take(4)
+                .collect::<String>()
+                .to_uppercase()
+        } else {
+            compact
+        };
 
         let mut lines = Vec::new();
         let first = compact.chars().take(2).collect::<String>();
@@ -168,15 +175,24 @@ impl Render for ActiveWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
+        let has_window_text = self
+            .state
+            .active_window
+            .as_ref()
+            .map(|window| !window.title.trim().is_empty())
+            .unwrap_or(false);
+
+        if !has_window_text {
+            return div().id("active-window");
+        }
+
         let title = self.display_title();
         let icon = self.window_icon();
         let vertical_lines = self.vertical_lines();
-        let has_vertical_lines = !vertical_lines.is_empty();
         let interactive_default = theme.interactive.default;
         let border_subtle = theme.border.subtle;
         let text_primary = theme.text.primary;
         let text_secondary = theme.text.secondary;
-        let text_muted = theme.text.muted;
 
         if is_vertical {
             div()
@@ -203,24 +219,6 @@ impl Render for ActiveWindow {
                                 .child(line)
                         }),
                 )
-                .when(icon.is_some() && !has_vertical_lines, |el| {
-                    el.when_some(icon, |el, icon| {
-                        el.child(
-                            div()
-                                .text_size(px(style::icon(true)))
-                                .text_color(text_muted)
-                                .child(icon),
-                        )
-                    })
-                })
-                .when(icon.is_none() && !has_vertical_lines, |el| {
-                    el.child(
-                        div()
-                            .text_size(px(style::label(true)))
-                            .text_color(text_muted)
-                            .child("APP"),
-                    )
-                })
         } else {
             div()
                 .id("active-window")
