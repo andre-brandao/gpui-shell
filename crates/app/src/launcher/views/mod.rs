@@ -7,6 +7,7 @@ mod apps;
 mod help;
 mod shell;
 mod theme;
+mod wallpaper;
 mod web;
 mod workspaces;
 
@@ -14,6 +15,7 @@ pub use apps::AppsView;
 pub use help::HelpView;
 pub use shell::ShellView;
 pub use theme::ThemeView;
+pub use wallpaper::WallpaperView;
 pub use web::WebSearchView;
 pub use workspaces::WorkspacesView;
 
@@ -29,6 +31,7 @@ pub fn all_views() -> Vec<Box<dyn LauncherView>> {
         Box::new(ShellView),      // $ prefix
         Box::new(WebSearchView),  // ! prefix
         Box::new(WorkspacesView), // ;ws prefix
+        Box::new(WallpaperView),  // ;wp prefix
         Box::new(ThemeView),      // ~ prefix
     ]
 }

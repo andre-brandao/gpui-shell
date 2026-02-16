@@ -17,6 +17,7 @@ pub mod sysinfo;
 pub mod themes;
 pub mod tray;
 pub mod upower;
+pub mod wallpaper;
 
 pub use applications::{Application, ApplicationsService};
 pub use audio::{AudioCommand, AudioData, AudioSubscriber};
@@ -53,6 +54,7 @@ pub use upower::{
     BatteryData, BatteryLevel, BatteryState, PowerProfile, UPowerCommand, UPowerData,
     UPowerSubscriber, WarningLevel,
 };
+pub use wallpaper::{WallpaperCommand, WallpaperData, WallpaperEngine, WallpaperSubscriber};
 
 /// Shared services container for all system integrations.
 ///
@@ -73,6 +75,7 @@ pub struct Services {
     pub sysinfo: SysInfoSubscriber,
     pub tray: TraySubscriber,
     pub upower: UPowerSubscriber,
+    pub wallpaper: WallpaperSubscriber,
 }
 
 impl Services {
@@ -96,6 +99,7 @@ impl Services {
         let sysinfo = SysInfoSubscriber::new();
         let tray = TraySubscriber::new().await?;
         let upower = UPowerSubscriber::new().await?;
+        let wallpaper = WallpaperSubscriber::new();
 
         Ok(Self {
             applications,
@@ -110,6 +114,7 @@ impl Services {
             sysinfo,
             tray,
             upower,
+            wallpaper,
         })
     }
 }
