@@ -34,10 +34,12 @@ pub(crate) async fn init_services() -> anyhow::Result<Services> {
     let compositor = services::CompositorSubscriber::new().await?;
     let mpris = services::MprisSubscriber::new().await?;
     let network = services::NetworkSubscriber::new().await?;
-    let notification = services::NotificationSubscriber::new().await.unwrap_or_else(|err| {
-        tracing::warn!("Notification service unavailable: {}", err);
-        services::NotificationSubscriber::disabled()
-    });
+    let notification = services::NotificationSubscriber::new()
+        .await
+        .unwrap_or_else(|err| {
+            tracing::warn!("Notification service unavailable: {}", err);
+            services::NotificationSubscriber::disabled()
+        });
     let privacy = services::PrivacySubscriber::new();
     let sysinfo = services::SysInfoSubscriber::new();
     let tray = services::TraySubscriber::new().await?;
@@ -84,7 +86,6 @@ where
     })
     .detach();
 }
-
 
 /// Global runtime state shared across views/widgets.
 #[derive(Clone)]

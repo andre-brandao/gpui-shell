@@ -4,8 +4,8 @@ mod config;
 pub use config::LauncherBtnConfig;
 
 use crate::launcher;
-use gpui::{div, prelude::*, px, Context, MouseButton, Window};
-use ui::{radius, ActiveTheme};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px};
+use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::config::ActiveConfig;

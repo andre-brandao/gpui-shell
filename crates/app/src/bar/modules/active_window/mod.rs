@@ -3,14 +3,14 @@
 mod config;
 pub use config::ActiveWindowConfig;
 
-use gpui::{div, prelude::*, px, Context, Render, Window};
+use gpui::{Context, Render, Window, div, prelude::*, px};
 use services::CompositorState;
-use ui::{radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, radius, spacing};
 
 use super::style;
 use crate::config::ActiveConfig;
-use crate::state::watch;
 use crate::state::AppState;
+use crate::state::watch;
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {

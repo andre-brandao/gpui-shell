@@ -132,13 +132,17 @@ impl ControlCenter {
     /// Subscribe to service updates to keep UI in sync
     fn subscribe_to_services(cx: &mut Context<Self>) {
         // Audio - sync volume slider
-        watch(cx, AppState::audio(cx).subscribe(), |control_center, data, cx| {
-            let volume = data.sink_volume as f32;
-            control_center.volume_slider.update(cx, |slider, cx| {
-                slider.set_value(volume, cx);
-            });
-            cx.notify();
-        });
+        watch(
+            cx,
+            AppState::audio(cx).subscribe(),
+            |control_center, data, cx| {
+                let volume = data.sink_volume as f32;
+                control_center.volume_slider.update(cx, |slider, cx| {
+                    slider.set_value(volume, cx);
+                });
+                cx.notify();
+            },
+        );
 
         // Bluetooth
         watch(cx, AppState::bluetooth(cx).subscribe(), |_, _, cx| {
@@ -146,13 +150,17 @@ impl ControlCenter {
         });
 
         // Brightness - sync brightness slider
-        watch(cx, AppState::brightness(cx).subscribe(), |control_center, data, cx| {
-            let percent = data.percentage() as f32;
-            control_center.brightness_slider.update(cx, |slider, cx| {
-                slider.set_value(percent, cx);
-            });
-            cx.notify();
-        });
+        watch(
+            cx,
+            AppState::brightness(cx).subscribe(),
+            |control_center, data, cx| {
+                let percent = data.percentage() as f32;
+                control_center.brightness_slider.update(cx, |slider, cx| {
+                    slider.set_value(percent, cx);
+                });
+                cx.notify();
+            },
+        );
 
         // Network
         watch(cx, AppState::network(cx).subscribe(), |_, _, cx| {
@@ -430,6 +438,9 @@ impl Render for ControlCenter {
             // Volume slider
             .child(sliders::render_volume_slider(&self.volume_slider, cx))
             // Brightness slider (if available)
-            .child(sliders::render_brightness_slider(&self.brightness_slider, cx))
+            .child(sliders::render_brightness_slider(
+                &self.brightness_slider,
+                cx,
+            ))
     }
 }

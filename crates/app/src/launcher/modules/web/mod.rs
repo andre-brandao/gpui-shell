@@ -270,9 +270,7 @@ impl LauncherView for WebSearchView {
             return false;
         }
 
-        let url = provider
-            .url
-            .replace("{query}", &url_encode(search_query));
+        let url = provider.url.replace("{query}", &url_encode(search_query));
         open_url(&url);
         true
     }

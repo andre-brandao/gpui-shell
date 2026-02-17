@@ -162,18 +162,8 @@ impl Render for SysInfo {
                         .when(is_vertical, |this| this.flex_col())
                         .items_center()
                         .gap(px(style::CHIP_GAP))
-                        .child(
-                            div()
-                                .text_size(px(icon_size))
-                                .text_color(color)
-                                .child(icon),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(text_size))
-                                .text_color(color)
-                                .child(text),
-                        )
+                        .child(div().text_size(px(icon_size)).text_color(color).child(icon))
+                        .child(div().text_size(px(text_size)).text_color(color).child(text))
                         .into_any_element()
                 };
 

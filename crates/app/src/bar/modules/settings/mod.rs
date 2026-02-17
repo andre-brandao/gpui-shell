@@ -10,12 +10,12 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{div, prelude::*, px, Context, MouseButton, Window};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
 };
-use ui::{radius, ActiveTheme};
+use ui::{ActiveTheme, radius};
 
 mod config;
 pub use config::SettingsConfig;
@@ -24,8 +24,8 @@ use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
-use crate::panel::{panel_placement, toggle_panel, PanelConfig};
-use crate::state::{watch, AppState};
+use crate::panel::{PanelConfig, panel_placement, toggle_panel};
+use crate::state::{AppState, watch};
 
 /// Nerd Font icons for status display.
 mod icons {

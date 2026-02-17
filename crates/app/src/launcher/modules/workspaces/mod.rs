@@ -2,12 +2,12 @@
 
 pub mod config;
 
-use gpui::{div, prelude::*, px, AnyElement, App};
+use gpui::{AnyElement, App, div, prelude::*, px};
 use services::CompositorCommand;
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use self::config::WorkspacesConfig;
-use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
+use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
 use crate::state::AppState;
 
 /// Workspaces view - displays and switches between workspaces.

@@ -89,13 +89,10 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                             let s = services.clone();
                             cx.spawn(async move |_| {
                                 if connected {
-                                    let _ = s
-                                        .dispatch(BluetoothCommand::DisconnectDevice(path))
-                                        .await;
+                                    let _ =
+                                        s.dispatch(BluetoothCommand::DisconnectDevice(path)).await;
                                 } else {
-                                    let _ = s
-                                        .dispatch(BluetoothCommand::ConnectDevice(path))
-                                        .await;
+                                    let _ = s.dispatch(BluetoothCommand::ConnectDevice(path)).await;
                                 }
                             })
                             .detach();

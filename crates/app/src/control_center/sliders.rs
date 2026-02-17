@@ -9,10 +9,7 @@ use crate::state::AppState;
 use super::icons;
 
 /// Render the volume slider row
-pub fn render_volume_slider(
-    volume_slider: &Entity<Slider>,
-    cx: &App,
-) -> impl IntoElement {
+pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl IntoElement {
     let audio = AppState::audio(cx).get();
     let volume = audio.sink_volume;
     let muted = audio.sink_muted;
@@ -56,10 +53,7 @@ pub fn render_volume_slider(
 }
 
 /// Render the brightness slider row (returns empty if no brightness control available)
-pub fn render_brightness_slider(
-    brightness_slider: &Entity<Slider>,
-    cx: &App,
-) -> impl IntoElement {
+pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let brightness = AppState::brightness(cx).get();
 

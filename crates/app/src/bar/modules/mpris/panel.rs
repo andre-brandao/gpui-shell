@@ -210,58 +210,56 @@ impl MprisPanel {
                             .flex()
                             .items_center()
                             .gap(px(spacing::SM))
-                            .child(
-                                if show_cover {
-                                    player
-                                        .art_url
-                                        .clone()
-                                        .map(|source| {
-                                            div()
-                                                .size(px(34.0))
-                                                .rounded(px(radius::SM))
-                                                .overflow_hidden()
-                                                .border_1()
-                                                .border_color(theme.border.subtle)
-                                                .child(img(source).size_full())
-                                                .into_any_element()
-                                        })
-                                        .unwrap_or_else(|| {
-                                            div()
-                                                .size(px(34.0))
-                                                .rounded(px(radius::SM))
-                                                .bg(theme.bg.tertiary)
-                                                .border_1()
-                                                .border_color(theme.border.subtle)
-                                                .flex()
-                                                .items_center()
-                                                .justify_center()
-                                                .child(
-                                                    div()
-                                                        .text_size(px(icon_size::SM))
-                                                        .text_color(theme.text.primary)
-                                                        .child(icons::PLAYER),
-                                                )
-                                                .into_any_element()
-                                        })
-                                } else {
-                                    div()
-                                        .size(px(34.0))
-                                        .rounded(px(radius::SM))
-                                        .bg(theme.bg.tertiary)
-                                        .border_1()
-                                        .border_color(theme.border.subtle)
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .child(
-                                            div()
-                                                .text_size(px(icon_size::SM))
-                                                .text_color(theme.text.primary)
-                                                .child(icons::PLAYER),
-                                        )
-                                        .into_any_element()
-                                },
-                            )
+                            .child(if show_cover {
+                                player
+                                    .art_url
+                                    .clone()
+                                    .map(|source| {
+                                        div()
+                                            .size(px(34.0))
+                                            .rounded(px(radius::SM))
+                                            .overflow_hidden()
+                                            .border_1()
+                                            .border_color(theme.border.subtle)
+                                            .child(img(source).size_full())
+                                            .into_any_element()
+                                    })
+                                    .unwrap_or_else(|| {
+                                        div()
+                                            .size(px(34.0))
+                                            .rounded(px(radius::SM))
+                                            .bg(theme.bg.tertiary)
+                                            .border_1()
+                                            .border_color(theme.border.subtle)
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(
+                                                div()
+                                                    .text_size(px(icon_size::SM))
+                                                    .text_color(theme.text.primary)
+                                                    .child(icons::PLAYER),
+                                            )
+                                            .into_any_element()
+                                    })
+                            } else {
+                                div()
+                                    .size(px(34.0))
+                                    .rounded(px(radius::SM))
+                                    .bg(theme.bg.tertiary)
+                                    .border_1()
+                                    .border_color(theme.border.subtle)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .child(
+                                        div()
+                                            .text_size(px(icon_size::SM))
+                                            .text_color(theme.text.primary)
+                                            .child(icons::PLAYER),
+                                    )
+                                    .into_any_element()
+                            })
                             .child(
                                 div()
                                     .flex()

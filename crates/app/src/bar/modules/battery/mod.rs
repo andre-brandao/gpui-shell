@@ -3,14 +3,14 @@
 mod config;
 pub use config::BatteryConfig;
 
-use gpui::{div, prelude::*, px, Context, Window};
+use gpui::{Context, Window, div, prelude::*, px};
 use services::{BatteryState, UPowerData};
-use ui::{radius, ActiveTheme};
+use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::config::ActiveConfig;
-use crate::state::watch;
 use crate::state::AppState;
+use crate::state::watch;
 
 /// A battery widget that displays the current battery percentage and status.
 pub struct Battery {

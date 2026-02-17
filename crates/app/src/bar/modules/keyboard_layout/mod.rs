@@ -3,14 +3,14 @@
 mod config;
 pub use config::KeyboardLayoutConfig;
 
-use gpui::{div, prelude::*, px, Context, MouseButton, Window};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{radius, ActiveTheme};
+use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::config::ActiveConfig;
-use crate::state::watch;
 use crate::state::AppState;
+use crate::state::watch;
 
 const KEYBOARD_ICON: &str = "󰌌";
 
@@ -27,10 +27,14 @@ impl KeyboardLayout {
         let state = compositor.get();
 
         // Subscribe to compositor state changes
-        watch(cx, compositor.subscribe(), |this, new_state, cx| {
-            this.state = new_state;
-            cx.notify();
-        });
+        watch(
+            cx,
+            AppState::compositor(cx).subscribe(),
+            |this, new_state, cx| {
+                this.state = new_state;
+                cx.notify();
+            },
+        );
 
         Self { compositor, state }
     }

@@ -18,6 +18,7 @@ pub mod themes;
 pub mod tray;
 pub mod upower;
 pub mod wallpaper;
+pub mod watcher;
 
 pub use applications::{Application, ApplicationsService};
 pub use audio::{AudioCommand, AudioData, AudioSubscriber};
@@ -55,3 +56,4 @@ pub use upower::{
     UPowerSubscriber, WarningLevel,
 };
 pub use wallpaper::{WallpaperCommand, WallpaperData, WallpaperEngine, WallpaperSubscriber};
+pub use watcher::FileWatcher;

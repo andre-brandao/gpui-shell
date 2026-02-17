@@ -7,19 +7,19 @@
 //! - Switching workspaces (;ws prefix)
 //! - Viewing help and available commands (? prefix)
 
-pub mod view;
 pub mod modules;
+pub mod view;
 
 use gpui::{
     App, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, ScrollHandle, Size, Window,
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
     div, layer_shell::*, prelude::*, px,
 };
+use modules::{HelpView, all_views};
 use services::LauncherRequest;
 use tokio::sync::mpsc::UnboundedReceiver;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
-use modules::{HelpView, all_views};
 
 use crate::config::Config;
 use crate::state::{AppState, watch};

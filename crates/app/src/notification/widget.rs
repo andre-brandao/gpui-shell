@@ -1,11 +1,11 @@
-use gpui::{div, prelude::*, px, App, Context, MouseButton, Render, Window};
+use gpui::{App, Context, MouseButton, Render, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{font_size, icon_size, radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{panel_placement, toggle_panel, PanelConfig};
-use crate::state::{watch, AppState};
+use crate::panel::{PanelConfig, panel_placement, toggle_panel};
+use crate::state::{AppState, watch};
 
 use super::dispatch_notification_command;
 use super::pannel::NotificationCenter;

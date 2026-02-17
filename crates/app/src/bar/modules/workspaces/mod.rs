@@ -3,14 +3,14 @@
 mod config;
 pub use config::WorkspacesConfig;
 
-use gpui::{div, prelude::*, px, Context, MouseButton, Window};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{radius, ActiveTheme};
+use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::config::ActiveConfig;
-use crate::state::watch;
 use crate::state::AppState;
+use crate::state::watch;
 
 /// Workspaces widget that displays workspace indicators and allows switching.
 pub struct Workspaces {

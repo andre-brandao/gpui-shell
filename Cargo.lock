@@ -2362,7 +2362,6 @@ dependencies = [
  "futures-util",
  "gpui",
  "hyprland",
- "inotify",
  "serde",
  "services",
  "tokio",

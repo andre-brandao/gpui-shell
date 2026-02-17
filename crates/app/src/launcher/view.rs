@@ -12,8 +12,8 @@
 //!   return a single element for their entire body. When this returns `Some`,
 //!   the launcher skips the item loop.
 
-use gpui::{div, prelude::*, px, AnyElement, App};
-use ui::{font_size, radius, spacing, ActiveTheme};
+use gpui::{AnyElement, App, div, prelude::*, px};
+use ui::{ActiveTheme, font_size, radius, spacing};
 
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]

@@ -1,7 +1,7 @@
 use gpui::prelude::*;
-use gpui::{div, img, px, Context};
+use gpui::{Context, div, img, px};
 use services::Notification;
-use ui::{font_size, radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, font_size, radius, spacing};
 
 pub(super) fn notification_card_body<V>(
     notification: &Notification,

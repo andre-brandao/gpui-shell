@@ -4,8 +4,8 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    layer_shell::*, prelude::*, px, AnyWindowHandle, App, Bounds, Point, Render, Size,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
+    AnyWindowHandle, App, Bounds, Point, Render, Size, WindowBackgroundAppearance, WindowBounds,
+    WindowKind, WindowOptions, layer_shell::*, prelude::*, px,
 };
 use std::sync::Mutex;
 

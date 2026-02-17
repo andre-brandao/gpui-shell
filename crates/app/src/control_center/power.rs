@@ -2,9 +2,9 @@
 //!
 //! Displays battery status and power profile controls when expanded.
 
+use crate::state::AppState;
 use gpui::{App, Hsla, MouseButton, div, prelude::*, px};
 use services::{PowerProfile, UPowerCommand};
-use crate::state::AppState;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use super::icons;

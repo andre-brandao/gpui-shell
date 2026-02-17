@@ -111,12 +111,7 @@ fn popup_window_options(config: &NotificationConfig) -> WindowOptions {
             layer: Layer::Overlay,
             anchor: popup_anchor(config.popup_position),
             exclusive_zone: None,
-            margin: Some((
-                px(margin.0),
-                px(margin.1),
-                px(margin.2),
-                px(margin.3),
-            )),
+            margin: Some((px(margin.0), px(margin.1), px(margin.2), px(margin.3))),
             keyboard_interactivity: KeyboardInteractivity::None,
             ..Default::default()
         }),
@@ -136,18 +131,12 @@ fn popup_anchor(position: NotificationPopupPosition) -> Anchor {
 
 fn popup_margin(config: &NotificationConfig) -> (f32, f32, f32, f32) {
     match config.popup_position {
-        NotificationPopupPosition::TopLeft => (
-            config.popup_margin_top,
-            0.0,
-            0.0,
-            config.popup_margin_left,
-        ),
-        NotificationPopupPosition::TopRight => (
-            config.popup_margin_top,
-            config.popup_margin_right,
-            0.0,
-            0.0,
-        ),
+        NotificationPopupPosition::TopLeft => {
+            (config.popup_margin_top, 0.0, 0.0, config.popup_margin_left)
+        }
+        NotificationPopupPosition::TopRight => {
+            (config.popup_margin_top, config.popup_margin_right, 0.0, 0.0)
+        }
         NotificationPopupPosition::BottomLeft => (
             0.0,
             0.0,
