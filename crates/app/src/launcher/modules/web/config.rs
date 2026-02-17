@@ -18,7 +18,7 @@ impl Default for WebConfig {
                 WebProviderConfig {
                     shebang: "ddg".into(),
                     name: "DuckDuckGo".into(),
-                    icon: "\u{f1a5}".into(),
+                    icon: "\u{f535}".into(),
                     url: "https://duckduckgo.com/?q={query}".into(),
                     default: true,
                 },
