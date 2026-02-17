@@ -3,14 +3,13 @@
 mod config;
 pub use config::KeyboardLayoutConfig;
 
-use futures_signals::signal::SignalExt;
-use futures_util::StreamExt;
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{div, prelude::*, px, Context, MouseButton, Window};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, radius};
+use ui::{radius, ActiveTheme};
 
 use super::style;
 use crate::config::ActiveConfig;
+use crate::state::watch;
 use crate::state::AppState;
 
 const KEYBOARD_ICON: &str = "󰌌";
@@ -28,21 +27,10 @@ impl KeyboardLayout {
         let state = compositor.get();
 
         // Subscribe to compositor state changes
-        cx.spawn({
-            let mut signal = compositor.subscribe().to_stream();
-            async move |this, cx| {
-                while let Some(new_state) = signal.next().await {
-                    let result = this.update(cx, |this, cx| {
-                        this.state = new_state;
-                        cx.notify();
-                    });
-                    if result.is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, compositor.subscribe(), |this, new_state, cx| {
+            this.state = new_state;
+            cx.notify();
+        });
 
         Self { compositor, state }
     }

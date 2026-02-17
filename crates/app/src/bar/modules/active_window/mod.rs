@@ -3,14 +3,13 @@
 mod config;
 pub use config::ActiveWindowConfig;
 
-use futures_signals::signal::SignalExt;
-use futures_util::StreamExt;
-use gpui::{Context, Render, Window, div, prelude::*, px};
+use gpui::{div, prelude::*, px, Context, Render, Window};
 use services::CompositorState;
-use ui::{ActiveTheme, radius, spacing};
+use ui::{radius, spacing, ActiveTheme};
 
 use super::style;
 use crate::config::ActiveConfig;
+use crate::state::watch;
 use crate::state::AppState;
 
 /// Widget that displays the currently focused window's title.
@@ -26,21 +25,10 @@ impl ActiveWindow {
         let state = compositor.get();
 
         // Subscribe to compositor state changes
-        cx.spawn({
-            let mut signal = compositor.subscribe().to_stream();
-            async move |this, cx| {
-                while let Some(new_state) = signal.next().await {
-                    let result = this.update(cx, |this, cx| {
-                        this.state = new_state;
-                        cx.notify();
-                    });
-                    if result.is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, compositor.subscribe(), |this, new_state, cx| {
+            this.state = new_state;
+            cx.notify();
+        });
 
         Self {
             _compositor: compositor,

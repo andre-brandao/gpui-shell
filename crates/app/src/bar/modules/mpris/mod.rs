@@ -3,7 +3,6 @@
 mod config;
 pub use config::MprisConfig;
 
-use futures_signals::signal::SignalExt;
 use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
 use ui::{ActiveTheme, radius};
@@ -13,6 +12,7 @@ use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::{PanelConfig, panel_placement, toggle_panel};
 use crate::state::AppState;
+use crate::state::watch;
 
 mod panel;
 pub use panel::MprisPanel;
@@ -35,22 +35,10 @@ impl Mpris {
         let subscriber = AppState::mpris(cx).clone();
         let data = subscriber.get();
 
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let result = this.update(cx, |this, cx| {
-                        this.data = data;
-                        cx.notify();
-                    });
-                    if result.is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         Self {
             slot,

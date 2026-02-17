@@ -1,6 +1,8 @@
 //! Application-wide runtime state stored as a GPUI global.
 
-use gpui::{App, Global};
+use futures_signals::signal::{Signal, SignalExt};
+use futures_util::StreamExt;
+use gpui::{App, Context, Global};
 
 /// Shared services container for all system integrations.
 ///
@@ -58,6 +60,31 @@ pub(crate) async fn init_services() -> anyhow::Result<Services> {
         wallpaper,
     })
 }
+
+/// Watch a signal and apply updates to component state.
+pub(crate) fn watch<C, S, T, F>(cx: &mut Context<C>, signal: S, on_update: F)
+where
+    C: 'static,
+    S: Signal<Item = T> + Unpin + 'static,
+    T: Clone + 'static,
+    F: Fn(&mut C, T, &mut Context<C>) + 'static,
+{
+    cx.spawn(async move |this, cx| {
+        let mut stream = signal.to_stream();
+        while let Some(data) = stream.next().await {
+            if this
+                .update(cx, |this, cx| {
+                    on_update(this, data.clone(), cx);
+                })
+                .is_err()
+            {
+                break;
+            }
+        }
+    })
+    .detach();
+}
+
 
 /// Global runtime state shared across views/widgets.
 #[derive(Clone)]

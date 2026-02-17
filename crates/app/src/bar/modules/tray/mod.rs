@@ -4,8 +4,6 @@ mod config;
 pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, toggle_panel};
-use futures_signals::signal::SignalExt;
-use futures_util::StreamExt;
 use gpui::{
     App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px,
 };
@@ -17,6 +15,7 @@ use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
 use crate::state::AppState;
+use crate::state::watch;
 
 /// System tray widget that displays tray icons.
 pub struct Tray {
@@ -32,21 +31,10 @@ impl Tray {
         let data = subscriber.get();
 
         // Subscribe to tray data changes
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                while let Some(new_data) = signal.next().await {
-                    let result = this.update(cx, |this, cx| {
-                        this.data = new_data;
-                        cx.notify();
-                    });
-                    if result.is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, new_data, cx| {
+            this.data = new_data;
+            cx.notify();
+        });
 
         Self {
             slot,

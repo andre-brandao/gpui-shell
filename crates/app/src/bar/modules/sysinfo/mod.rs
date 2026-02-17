@@ -3,7 +3,6 @@
 //! Clicking the widget opens a detailed system information panel.
 
 use crate::panel::{PanelConfig, toggle_panel};
-use futures_signals::signal::SignalExt;
 use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
 use services::SysInfoData;
 use ui::{ActiveTheme, radius};
@@ -16,6 +15,7 @@ use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
 use crate::state::AppState;
+use crate::state::watch;
 
 mod panel;
 pub use panel::SysInfoPanel;
@@ -62,25 +62,10 @@ impl SysInfo {
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the sysinfo service
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.data = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         SysInfo {
             slot,

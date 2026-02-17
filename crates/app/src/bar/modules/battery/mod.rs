@@ -3,13 +3,13 @@
 mod config;
 pub use config::BatteryConfig;
 
-use futures_signals::signal::SignalExt;
-use gpui::{Context, Window, div, prelude::*, px};
+use gpui::{div, prelude::*, px, Context, Window};
 use services::{BatteryState, UPowerData};
-use ui::{ActiveTheme, radius};
+use ui::{radius, ActiveTheme};
 
 use super::style;
 use crate::config::ActiveConfig;
+use crate::state::watch;
 use crate::state::AppState;
 
 /// A battery widget that displays the current battery percentage and status.
@@ -24,25 +24,10 @@ impl Battery {
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the UPower service
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.data = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         Battery { data: initial_data }
     }
