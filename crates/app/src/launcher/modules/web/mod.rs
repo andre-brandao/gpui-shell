@@ -8,108 +8,21 @@ use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, font_size, radius, s
 use self::config::{WebConfig, WebProviderConfig};
 use crate::launcher::view::{LauncherView, ViewContext};
 
-struct SearchProvider {
-    shebang: String,
-    name: String,
-    icon: String,
-    url_template: String,
-    is_default: bool,
-}
-
-fn default_providers() -> Vec<SearchProvider> {
-    vec![
-        SearchProvider {
-            shebang: "g".into(),
-            name: "Google".into(),
-            icon: "\u{f1a0}".into(),
-            url_template: "https://www.google.com/search?q={query}".into(),
-            is_default: false,
-        },
-        SearchProvider {
-            shebang: "yt".into(),
-            name: "YouTube".into(),
-            icon: "\u{f167}".into(),
-            url_template: "https://www.youtube.com/results?search_query={query}".into(),
-            is_default: false,
-        },
-        SearchProvider {
-            shebang: "gh".into(),
-            name: "GitHub".into(),
-            icon: "\u{f09b}".into(),
-            url_template: "https://github.com/search?q={query}".into(),
-            is_default: false,
-        },
-        SearchProvider {
-            shebang: "nix".into(),
-            name: "Nixpkgs".into(),
-            icon: "\u{f313}".into(),
-            url_template: "https://search.nixos.org/packages?query={query}".into(),
-            is_default: false,
-        },
-        SearchProvider {
-            shebang: "ddg".into(),
-            name: "DuckDuckGo".into(),
-            icon: "\u{f1a5}".into(),
-            url_template: "https://duckduckgo.com/?q={query}".into(),
-            is_default: true,
-        },
-        SearchProvider {
-            shebang: "w".into(),
-            name: "Wikipedia".into(),
-            icon: "\u{f266}".into(),
-            url_template: "https://en.wikipedia.org/wiki/Special:Search?search={query}".into(),
-            is_default: false,
-        },
-        SearchProvider {
-            shebang: "rs".into(),
-            name: "crates.io".into(),
-            icon: "\u{e7a8}".into(),
-            url_template: "https://crates.io/search?q={query}".into(),
-            is_default: false,
-        },
-        SearchProvider {
-            shebang: "r".into(),
-            name: "Reddit".into(),
-            icon: "\u{f281}".into(),
-            url_template: "https://www.reddit.com/search?q={query}".into(),
-            is_default: false,
-        },
-    ]
-}
-
-fn providers_from_config(config_providers: &[WebProviderConfig]) -> Vec<SearchProvider> {
-    config_providers
-        .iter()
-        .map(|p| SearchProvider {
-            shebang: p.shebang.clone(),
-            name: p.name.clone(),
-            icon: p.icon.clone(),
-            url_template: p.url.clone(),
-            is_default: p.default,
-        })
-        .collect()
-}
-
 /// Web search view - search the web with various providers.
 pub struct WebSearchView {
     prefix: String,
-    providers: Vec<SearchProvider>,
+    providers: Vec<WebProviderConfig>,
 }
 
 impl WebSearchView {
     pub fn new(config: &WebConfig) -> Self {
-        let providers = if config.providers.is_empty() {
-            default_providers()
-        } else {
-            providers_from_config(&config.providers)
-        };
         Self {
             prefix: config.prefix.clone(),
-            providers,
+            providers: config.providers.clone(),
         }
     }
 
-    fn parse_query<'a>(&'a self, query: &'a str) -> (&'a SearchProvider, &'a str) {
+    fn parse_query<'a>(&'a self, query: &'a str) -> (&'a WebProviderConfig, &'a str) {
         let query = query.trim();
 
         for provider in &self.providers {
@@ -124,7 +37,7 @@ impl WebSearchView {
         let default = self
             .providers
             .iter()
-            .find(|p| p.is_default)
+            .find(|p| p.default)
             .or_else(|| self.providers.first())
             .expect("at least one provider must exist");
         (default, query)
@@ -358,7 +271,7 @@ impl LauncherView for WebSearchView {
         }
 
         let url = provider
-            .url_template
+            .url
             .replace("{query}", &url_encode(search_query));
         open_url(&url);
         true
