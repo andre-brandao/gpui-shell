@@ -1,30 +1,35 @@
 //! Theme browser view for the launcher.
-//!
-//! Lists available theme schemes with color preview swatches.
-//! Supports multiple GitHub theme providers with download/update actions.
-//! Stylix system theme and provider actions are shown in the header.
+
+pub mod config;
 
 use std::sync::Mutex;
 
-use crate::config::Config;
-use crate::launcher::view::{LauncherView, ViewContext};
-use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
-use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
+use gpui::{div, prelude::*, px, AnyElement, App, FontWeight};
+use services::{load_stylix_scheme, ThemeProvider, ThemeRepository, THEME_PROVIDERS};
 use ui::{
-    ActiveTheme, Base16Colors, Theme, ThemeScheme, builtin_schemes, font_size, radius, spacing,
+    builtin_schemes, font_size, radius, spacing, ActiveTheme, Base16Colors, Theme, ThemeScheme,
 };
 
-/// Maximum number of theme cards to render at once.
+use self::config::ThemesConfig;
+use crate::config::Config;
+use crate::launcher::view::{LauncherView, ViewContext};
+
 const MAX_VISIBLE_THEMES: usize = 50;
 
-/// Cached scheme data. `None` means not yet loaded; populated on first access.
 static CACHED_SCHEMES: Mutex<Option<Vec<ThemeScheme>>> = Mutex::new(None);
 
 /// Launcher view for browsing and applying themes.
-pub struct ThemeView;
+pub struct ThemeView {
+    prefix: String,
+}
 
 impl ThemeView {
-    /// Get filtered and capped schemes for the current query.
+    pub fn new(config: &ThemesConfig) -> Self {
+        Self {
+            prefix: config.prefix.clone(),
+        }
+    }
+
     fn visible_schemes(query: &str) -> Vec<ThemeScheme> {
         all_schemes(query)
             .into_iter()
@@ -34,8 +39,8 @@ impl ThemeView {
 }
 
 impl LauncherView for ThemeView {
-    fn prefix(&self) -> &'static str {
-        "~"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {
@@ -65,14 +70,12 @@ impl LauncherView for ThemeView {
             .gap(px(spacing::SM))
             .p(px(spacing::SM));
 
-        // Stylix card (if available)
         if let Some(stylix) = stylix_scheme() {
             let is_active = colors_match(stylix.theme.accent.primary, current_accent)
                 && colors_match(stylix.theme.bg.primary, current_bg);
             header = header.child(render_stylix_card(&stylix, is_active, theme));
         }
 
-        // Provider cards
         for provider in THEME_PROVIDERS {
             let repo = ThemeRepository::new(provider);
             header = header.child(render_provider_card(provider, repo.is_cached(), theme));
@@ -112,10 +115,6 @@ impl LauncherView for ThemeView {
     }
 }
 
-// =============================================================================
-// Stylix
-// =============================================================================
-
 fn stylix_scheme() -> Option<ThemeScheme> {
     let b16 = load_stylix_scheme()?;
     let p = &b16.palette;
@@ -131,10 +130,6 @@ fn stylix_scheme() -> Option<ThemeScheme> {
         theme: colors.to_theme(),
     })
 }
-
-// =============================================================================
-// Scheme Loading
-// =============================================================================
 
 fn build_schemes() -> Vec<ThemeScheme> {
     let mut schemes = builtin_schemes();
@@ -188,10 +183,6 @@ fn all_schemes(query: &str) -> Vec<ThemeScheme> {
         .cloned()
         .collect()
 }
-
-// =============================================================================
-// Rendering
-// =============================================================================
 
 fn colors_match(a: gpui::Hsla, b: gpui::Hsla) -> bool {
     (a.h - b.h).abs() < 0.01 && (a.s - b.s).abs() < 0.01 && (a.l - b.l).abs() < 0.01
@@ -305,7 +296,6 @@ fn render_provider_card(
         .cursor_pointer()
         .hover(move |s| s.bg(interactive_hover))
         .on_click(move |_, _, _cx| {
-            // Find the provider and fetch in a background thread
             let provider = THEME_PROVIDERS.iter().find(|p| p.id == provider_id);
             if let Some(provider) = provider {
                 let repo = ThemeRepository::new(provider);

@@ -1,31 +1,50 @@
 //! Wallpaper view for browsing and applying wallpapers.
 
+pub mod config;
+
 use std::path::PathBuf;
 
 use gpui::{AnyElement, App, div, img, prelude::*, px};
 use services::WallpaperCommand;
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
+use self::config::WallpaperConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
 
-const WALLPAPER_DIR: &str = "Pictures/Wallpapers";
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
 
 /// Wallpaper view - browse and set wallpapers.
-pub struct WallpaperView;
+pub struct WallpaperView {
+    prefix: String,
+    directory: PathBuf,
+}
+
+impl WallpaperView {
+    pub fn new(config: &WallpaperConfig) -> Self {
+        let directory = expand_tilde(&config.directory);
+        Self {
+            prefix: config.prefix.clone(),
+            directory,
+        }
+    }
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
+    }
+    PathBuf::from(path)
+}
 
 struct WallpaperEntry {
     path: PathBuf,
     name: String,
 }
 
-fn scan_wallpapers() -> Vec<WallpaperEntry> {
-    let Ok(home) = std::env::var("HOME") else {
-        return Vec::new();
-    };
-    let wallpaper_dir = PathBuf::from(home).join(WALLPAPER_DIR);
-
-    let Ok(read_dir) = std::fs::read_dir(&wallpaper_dir) else {
+fn scan_wallpapers(wallpaper_dir: &PathBuf) -> Vec<WallpaperEntry> {
+    let Ok(read_dir) = std::fs::read_dir(wallpaper_dir) else {
         tracing::warn!(
             "Could not read wallpaper directory: {}",
             wallpaper_dir.display()
@@ -58,17 +77,17 @@ fn scan_wallpapers() -> Vec<WallpaperEntry> {
     entries
 }
 
-fn filtered_entries(query: &str) -> Vec<WallpaperEntry> {
+fn filtered_entries(dir: &PathBuf, query: &str) -> Vec<WallpaperEntry> {
     let query_lower = query.to_lowercase();
-    scan_wallpapers()
+    scan_wallpapers(dir)
         .into_iter()
         .filter(|e| query_lower.is_empty() || e.name.to_lowercase().contains(&query_lower))
         .collect()
 }
 
 impl LauncherView for WallpaperView {
-    fn prefix(&self) -> &'static str {
-        ";wp"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {
@@ -84,11 +103,11 @@ impl LauncherView for WallpaperView {
     }
 
     fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        filtered_entries(vx.query).len()
+        filtered_entries(&self.directory, vx.query).len()
     }
 
     fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let entries = filtered_entries(vx.query);
+        let entries = filtered_entries(&self.directory, vx.query);
         let Some(entry) = entries.get(index) else {
             return div().into_any_element();
         };
@@ -137,12 +156,12 @@ impl LauncherView for WallpaperView {
     }
 
     fn on_select(&self, index: usize, vx: &ViewContext, _cx: &mut App) -> bool {
-        let entries = filtered_entries(vx.query);
+        let entries = filtered_entries(&self.directory, vx.query);
         if let Some(entry) = entries.get(index) {
             vx.services
                 .wallpaper
                 .dispatch(WallpaperCommand::SetWallpaper(entry.path.clone()));
-            false // Stay open for browsing
+            false
         } else {
             false
         }

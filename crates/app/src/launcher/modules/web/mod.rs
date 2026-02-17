@@ -1,114 +1,139 @@
 //! Web search view for searching various web providers.
-//!
-//! Supports multiple search providers via "shebangs":
-//! - `!g query` - Google
-//! - `!yt query` - YouTube
-//! - `!gh query` - GitHub
-//! - `!nix query` - Nixpkgs
-//! - `!ddg query` - DuckDuckGo (default)
-//! - `! query` - Default provider
+
+pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, font_size, radius, spacing};
 
+use self::config::{WebConfig, WebProviderConfig};
 use crate::launcher::view::{LauncherView, ViewContext};
 
-/// A search provider with its shebang and URL template.
 struct SearchProvider {
-    shebang: &'static str,
-    name: &'static str,
-    icon: &'static str,
-    url_template: &'static str,
+    shebang: String,
+    name: String,
+    icon: String,
+    url_template: String,
     is_default: bool,
 }
 
-const PROVIDERS: &[SearchProvider] = &[
-    SearchProvider {
-        shebang: "g",
-        name: "Google",
-        icon: "\u{f1a0}",
-        url_template: "https://www.google.com/search?q={query}",
-        is_default: false,
-    },
-    SearchProvider {
-        shebang: "yt",
-        name: "YouTube",
-        icon: "\u{f167}",
-        url_template: "https://www.youtube.com/results?search_query={query}",
-        is_default: false,
-    },
-    SearchProvider {
-        shebang: "gh",
-        name: "GitHub",
-        icon: "\u{f09b}",
-        url_template: "https://github.com/search?q={query}",
-        is_default: false,
-    },
-    SearchProvider {
-        shebang: "nix",
-        name: "Nixpkgs",
-        icon: "\u{f313}",
-        url_template: "https://search.nixos.org/packages?query={query}",
-        is_default: false,
-    },
-    SearchProvider {
-        shebang: "ddg",
-        name: "DuckDuckGo",
-        icon: "\u{f1a5}",
-        url_template: "https://duckduckgo.com/?q={query}",
-        is_default: true,
-    },
-    SearchProvider {
-        shebang: "w",
-        name: "Wikipedia",
-        icon: "\u{f266}",
-        url_template: "https://en.wikipedia.org/wiki/Special:Search?search={query}",
-        is_default: false,
-    },
-    SearchProvider {
-        shebang: "rs",
-        name: "crates.io",
-        icon: "\u{e7a8}",
-        url_template: "https://crates.io/search?q={query}",
-        is_default: false,
-    },
-    SearchProvider {
-        shebang: "r",
-        name: "Reddit",
-        icon: "\u{f281}",
-        url_template: "https://www.reddit.com/search?q={query}",
-        is_default: false,
-    },
-];
+fn default_providers() -> Vec<SearchProvider> {
+    vec![
+        SearchProvider {
+            shebang: "g".into(),
+            name: "Google".into(),
+            icon: "\u{f1a0}".into(),
+            url_template: "https://www.google.com/search?q={query}".into(),
+            is_default: false,
+        },
+        SearchProvider {
+            shebang: "yt".into(),
+            name: "YouTube".into(),
+            icon: "\u{f167}".into(),
+            url_template: "https://www.youtube.com/results?search_query={query}".into(),
+            is_default: false,
+        },
+        SearchProvider {
+            shebang: "gh".into(),
+            name: "GitHub".into(),
+            icon: "\u{f09b}".into(),
+            url_template: "https://github.com/search?q={query}".into(),
+            is_default: false,
+        },
+        SearchProvider {
+            shebang: "nix".into(),
+            name: "Nixpkgs".into(),
+            icon: "\u{f313}".into(),
+            url_template: "https://search.nixos.org/packages?query={query}".into(),
+            is_default: false,
+        },
+        SearchProvider {
+            shebang: "ddg".into(),
+            name: "DuckDuckGo".into(),
+            icon: "\u{f1a5}".into(),
+            url_template: "https://duckduckgo.com/?q={query}".into(),
+            is_default: true,
+        },
+        SearchProvider {
+            shebang: "w".into(),
+            name: "Wikipedia".into(),
+            icon: "\u{f266}".into(),
+            url_template: "https://en.wikipedia.org/wiki/Special:Search?search={query}".into(),
+            is_default: false,
+        },
+        SearchProvider {
+            shebang: "rs".into(),
+            name: "crates.io".into(),
+            icon: "\u{e7a8}".into(),
+            url_template: "https://crates.io/search?q={query}".into(),
+            is_default: false,
+        },
+        SearchProvider {
+            shebang: "r".into(),
+            name: "Reddit".into(),
+            icon: "\u{f281}".into(),
+            url_template: "https://www.reddit.com/search?q={query}".into(),
+            is_default: false,
+        },
+    ]
+}
+
+fn providers_from_config(config_providers: &[WebProviderConfig]) -> Vec<SearchProvider> {
+    config_providers
+        .iter()
+        .map(|p| SearchProvider {
+            shebang: p.shebang.clone(),
+            name: p.name.clone(),
+            icon: p.icon.clone(),
+            url_template: p.url.clone(),
+            is_default: p.default,
+        })
+        .collect()
+}
 
 /// Web search view - search the web with various providers.
-pub struct WebSearchView;
+pub struct WebSearchView {
+    prefix: String,
+    providers: Vec<SearchProvider>,
+}
 
 impl WebSearchView {
-    /// Parse the query to extract provider and search terms.
-    fn parse_query<'a>(&self, query: &'a str) -> (&'static SearchProvider, &'a str) {
+    pub fn new(config: &WebConfig) -> Self {
+        let providers = if config.providers.is_empty() {
+            default_providers()
+        } else {
+            providers_from_config(&config.providers)
+        };
+        Self {
+            prefix: config.prefix.clone(),
+            providers,
+        }
+    }
+
+    fn parse_query<'a>(&'a self, query: &'a str) -> (&'a SearchProvider, &'a str) {
         let query = query.trim();
 
-        for provider in PROVIDERS {
-            let prefix = provider.shebang;
-            if let Some(rest) = query.strip_prefix(prefix)
+        for provider in &self.providers {
+            let prefix = &provider.shebang;
+            if let Some(rest) = query.strip_prefix(prefix.as_str())
                 && (rest.is_empty() || rest.starts_with(' '))
             {
                 return (provider, rest.trim());
             }
         }
 
-        let default = PROVIDERS
+        let default = self
+            .providers
             .iter()
             .find(|p| p.is_default)
-            .unwrap_or(&PROVIDERS[0]);
+            .or_else(|| self.providers.first())
+            .expect("at least one provider must exist");
         (default, query)
     }
 }
 
 impl LauncherView for WebSearchView {
-    fn prefix(&self) -> &'static str {
-        "!"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {
@@ -148,6 +173,10 @@ impl LauncherView for WebSearchView {
         let accent_selection = theme.accent.selection;
         let interactive_hover = theme.interactive.hover;
 
+        let provider_icon = provider.icon.clone();
+        let provider_name = provider.name.clone();
+        let provider_shebang = provider.shebang.clone();
+
         Some(
             div()
                 .flex_1()
@@ -155,7 +184,6 @@ impl LauncherView for WebSearchView {
                 .flex_col()
                 .gap(px(spacing::MD))
                 .p(px(spacing::MD))
-                // Search preview
                 .child(
                     div()
                         .w_full()
@@ -165,7 +193,6 @@ impl LauncherView for WebSearchView {
                         .flex()
                         .flex_col()
                         .gap(px(spacing::SM))
-                        // Provider header with search action
                         .child(
                             div()
                                 .flex()
@@ -177,11 +204,11 @@ impl LauncherView for WebSearchView {
                                         .items_center()
                                         .gap(px(spacing::SM))
                                         .child(
-                                            Label::new(provider.icon)
+                                            Label::new(provider_icon)
                                                 .size(LabelSize::Large)
                                                 .color(Color::Default),
                                         )
-                                        .child(Label::new(provider.name).size(LabelSize::Default))
+                                        .child(Label::new(provider_name).size(LabelSize::Default))
                                         .child(
                                             div()
                                                 .px(px(6.))
@@ -189,13 +216,12 @@ impl LauncherView for WebSearchView {
                                                 .rounded(px(4.))
                                                 .bg(interactive_default)
                                                 .child(
-                                                    Label::new(format!("!{}", provider.shebang))
+                                                    Label::new(format!("!{}", provider_shebang))
                                                         .size(LabelSize::XSmall)
                                                         .color(Color::Muted),
                                                 ),
                                         ),
                                 )
-                                // Search hint
                                 .child(
                                     div()
                                         .flex()
@@ -236,7 +262,6 @@ impl LauncherView for WebSearchView {
                                         ),
                                 ),
                         )
-                        // Search query display
                         .child(
                             div()
                                 .w_full()
@@ -253,7 +278,6 @@ impl LauncherView for WebSearchView {
                                 }),
                         ),
                 )
-                // Provider list
                 .child(
                     div()
                         .w_full()
@@ -267,8 +291,10 @@ impl LauncherView for WebSearchView {
                                 .color(Color::Disabled),
                         )
                         .child(div().flex().flex_wrap().gap(px(spacing::SM)).children(
-                            PROVIDERS.iter().map(|p| {
+                            self.providers.iter().map(|p| {
                                 let is_active = p.shebang == provider.shebang;
+                                let icon = p.icon.clone();
+                                let shebang = p.shebang.clone();
                                 div()
                                     .px(px(spacing::SM))
                                     .py(px(4.))
@@ -279,19 +305,18 @@ impl LauncherView for WebSearchView {
                                     .items_center()
                                     .gap(px(4.))
                                     .child(
-                                        Label::new(p.icon)
+                                        Label::new(icon)
                                             .size(LabelSize::Small)
                                             .color(Color::Default),
                                     )
                                     .child(
-                                        Label::new(format!("!{}", p.shebang))
+                                        Label::new(format!("!{}", shebang))
                                             .size(LabelSize::Small)
                                             .color(Color::Muted),
                                     )
                             }),
                         )),
                 )
-                // Help text
                 .child(
                     div()
                         .w_full()
@@ -336,7 +361,7 @@ impl LauncherView for WebSearchView {
             .url_template
             .replace("{query}", &url_encode(search_query));
         open_url(&url);
-        true // Close launcher
+        true
     }
 
     fn footer_actions(&self, vx: &ViewContext) -> Vec<(&'static str, &'static str)> {

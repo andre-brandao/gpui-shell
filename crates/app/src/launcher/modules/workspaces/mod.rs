@@ -1,15 +1,26 @@
 //! Workspaces view for switching between compositor workspaces.
 
-use gpui::{AnyElement, App, div, prelude::*, px};
+pub mod config;
+
+use gpui::{div, prelude::*, px, AnyElement, App};
 use services::CompositorCommand;
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
+use self::config::WorkspacesConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Workspaces view - displays and switches between workspaces.
-pub struct WorkspacesView;
+pub struct WorkspacesView {
+    prefix: String,
+}
 
 impl WorkspacesView {
+    pub fn new(config: &WorkspacesConfig) -> Self {
+        Self {
+            prefix: config.prefix.clone(),
+        }
+    }
+
     fn filtered_workspaces(&self, vx: &ViewContext) -> Vec<services::compositor::Workspace> {
         let compositor = vx.services.compositor.get();
         let query_lower = vx.query.to_lowercase();
@@ -34,8 +45,8 @@ impl WorkspacesView {
 }
 
 impl LauncherView for WorkspacesView {
-    fn prefix(&self) -> &'static str {
-        ";ws"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {

@@ -1,7 +1,7 @@
 //! Application configuration stored as a GPUI global.
 
 mod bar;
-mod launcher;
+pub mod launcher;
 mod osd;
 mod persistence;
 mod theme_persistence;

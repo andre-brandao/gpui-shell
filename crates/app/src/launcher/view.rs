@@ -74,7 +74,7 @@ pub trait LauncherView: Send + Sync {
     /// - "!" for web search
     /// - "?" for help
     /// - ";ws" for workspaces
-    fn prefix(&self) -> &'static str;
+    fn prefix(&self) -> &str;
 
     /// Display name for the view.
     fn name(&self) -> &'static str;

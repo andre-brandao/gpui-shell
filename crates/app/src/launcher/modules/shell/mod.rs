@@ -1,16 +1,31 @@
 //! Shell command view for running shell commands directly.
 
-use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, font_size, radius, spacing};
+pub mod config;
 
+use gpui::{div, prelude::*, px, rgba, AnyElement, App};
+use ui::{font_size, radius, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize};
+
+use self::config::ShellConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Shell view - executes shell commands in a terminal.
-pub struct ShellView;
+pub struct ShellView {
+    prefix: String,
+    terminal: String,
+}
+
+impl ShellView {
+    pub fn new(config: &ShellConfig) -> Self {
+        Self {
+            prefix: config.prefix.clone(),
+            terminal: config.terminal.clone(),
+        }
+    }
+}
 
 impl LauncherView for ShellView {
-    fn prefix(&self) -> &'static str {
-        "$"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {
@@ -26,7 +41,11 @@ impl LauncherView for ShellView {
     }
 
     fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        if vx.query.trim().is_empty() { 0 } else { 1 }
+        if vx.query.trim().is_empty() {
+            0
+        } else {
+            1
+        }
     }
 
     fn render_item(
@@ -56,7 +75,6 @@ impl LauncherView for ShellView {
                 .flex_col()
                 .gap(px(spacing::MD))
                 .p(px(spacing::MD))
-                // Command preview
                 .child(
                     div()
                         .w_full()
@@ -66,7 +84,6 @@ impl LauncherView for ShellView {
                         .flex()
                         .flex_col()
                         .gap(px(spacing::SM))
-                        // Header with run action
                         .child(
                             div()
                                 .flex()
@@ -96,7 +113,6 @@ impl LauncherView for ShellView {
                                                 ),
                                         ),
                                 )
-                                // Run hint
                                 .child(
                                     div()
                                         .flex()
@@ -137,7 +153,6 @@ impl LauncherView for ShellView {
                                         ),
                                 ),
                         )
-                        // Command display
                         .child(
                             div()
                                 .w_full()
@@ -154,7 +169,6 @@ impl LauncherView for ShellView {
                                 }),
                         ),
                 )
-                // Help text
                 .child(
                     div()
                         .w_full()
@@ -193,8 +207,8 @@ impl LauncherView for ShellView {
             return false;
         }
 
-        run_in_terminal(command);
-        true // Close launcher
+        run_in_terminal(command, &self.terminal);
+        true
     }
 
     fn footer_actions(&self, vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
@@ -206,10 +220,26 @@ impl LauncherView for ShellView {
     }
 }
 
-/// Run a command in the default terminal emulator.
-fn run_in_terminal(command: &str) {
+fn run_in_terminal(command: &str, preferred: &str) {
     let command = command.to_string();
+    let preferred = preferred.to_string();
     std::thread::spawn(move || {
+        if !preferred.is_empty() {
+            let full_command =
+                format!("{}; echo ''; echo 'Press Enter to close...'; read", command);
+            if std::process::Command::new(&preferred)
+                .args(["-e", "sh", "-c", &full_command])
+                .spawn()
+                .is_ok()
+            {
+                return;
+            }
+            tracing::warn!(
+                "Configured terminal '{}' not found, trying defaults",
+                preferred
+            );
+        }
+
         let terminals: &[(&str, &[&str])] = &[
             ("ghostty", &["-e", "sh", "-c"]),
             ("kitty", &["--", "sh", "-c"]),

@@ -8,7 +8,7 @@
 //! - Viewing help and available commands (? prefix)
 
 pub mod view;
-mod views;
+pub mod modules;
 
 use futures_signals::signal::SignalExt;
 use gpui::{
@@ -19,8 +19,8 @@ use gpui::{
 use services::{LauncherRequest, Services};
 use tokio::sync::mpsc::UnboundedReceiver;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
-use view::{InputResult, LauncherView, ViewContext, ViewInput, is_special_char};
-use views::{HelpView, all_views};
+use view::{InputResult, LauncherView, ViewContext, ViewInput};
+use modules::{HelpView, all_views};
 
 use crate::config::Config;
 use crate::state::AppState;
@@ -91,8 +91,9 @@ impl Launcher {
         })
         .detach();
 
-        let views = all_views();
-        let help_view = HelpView::new(&views);
+        let launcher_config = Config::global(cx).launcher.clone();
+        let views = all_views(&launcher_config);
+        let help_view = HelpView::new(&launcher_config.modules.help, &views);
 
         Launcher {
             services,
@@ -162,10 +163,14 @@ impl Launcher {
             return (Some(view), rest);
         }
 
-        // Check if starts with a special char but no matching prefix
+        // Check if starts with a known prefix character but no matching prefix
         // In this case, show help view
         if let Some(first_char) = query.chars().next()
-            && is_special_char(first_char)
+            && (self
+                .views
+                .iter()
+                .any(|v| v.prefix().starts_with(first_char))
+                || self.help_view.prefix().starts_with(first_char))
         {
             // Unknown special prefix - show help
             return (Some(&self.help_view), query);

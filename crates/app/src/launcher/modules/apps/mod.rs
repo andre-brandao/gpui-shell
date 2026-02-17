@@ -1,16 +1,29 @@
 //! Applications view for searching and launching desktop applications.
 
-use gpui::{AnyElement, App, div, img, prelude::*, px};
+pub mod config;
+
+use gpui::{div, img, prelude::*, px, AnyElement, App};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
+use self::config::AppsConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Applications view - searches and launches desktop applications.
-pub struct AppsView;
+pub struct AppsView {
+    prefix: String,
+}
+
+impl AppsView {
+    pub fn new(config: &AppsConfig) -> Self {
+        Self {
+            prefix: config.prefix.clone(),
+        }
+    }
+}
 
 impl LauncherView for AppsView {
-    fn prefix(&self) -> &'static str {
-        "@"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {
@@ -89,18 +102,16 @@ impl LauncherView for AppsView {
 
         if let Some(app) = apps.get(index) {
             launch_app(&app.exec);
-            true // Close launcher
+            true
         } else {
             false
         }
     }
 }
 
-/// Launch an application by exec command.
 fn launch_app(exec: &str) {
     let exec = exec.to_string();
     std::thread::spawn(move || {
-        // Remove field codes like %f, %F, %u, %U, etc.
         let exec_cleaned = exec
             .replace("%f", "")
             .replace("%F", "")

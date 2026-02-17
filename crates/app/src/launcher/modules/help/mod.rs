@@ -1,16 +1,20 @@
 //! Help view showing available launcher commands and system information.
 
-use gpui::{AnyElement, App, div, prelude::*, px};
+pub mod config;
+
+use gpui::{div, prelude::*, px, AnyElement, App};
 use ui::{
-    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, font_size,
-    icon_size, spacing,
+    font_size, icon_size, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem,
+    ListItemSpacing,
 };
 
+use self::config::HelpConfig;
 use crate::bar::widgets::sysinfo::icons;
 use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Help view - shows available commands and system status.
 pub struct HelpView {
+    prefix: String,
     entries: Vec<HelpEntry>,
 }
 
@@ -22,8 +26,7 @@ struct HelpEntry {
 }
 
 impl HelpView {
-    /// Create a new help view from the available launcher views.
-    pub fn new(views: &[Box<dyn LauncherView>]) -> Self {
+    pub fn new(config: &HelpConfig, views: &[Box<dyn LauncherView>]) -> Self {
         let entries = views
             .iter()
             .filter(|v| v.show_in_help())
@@ -35,7 +38,10 @@ impl HelpView {
             })
             .collect();
 
-        HelpView { entries }
+        HelpView {
+            prefix: config.prefix.clone(),
+            entries,
+        }
     }
 
     fn render_system_info(&self, vx: &ViewContext, cx: &App) -> AnyElement {
@@ -82,7 +88,6 @@ impl HelpView {
             .flex()
             .items_center()
             .justify_between()
-            // CPU
             .child(
                 div()
                     .flex()
@@ -101,7 +106,6 @@ impl HelpView {
                             .child(format!("{}%", cpu_usage)),
                     ),
             )
-            // RAM
             .child(
                 div()
                     .flex()
@@ -120,7 +124,6 @@ impl HelpView {
                             .child(format!("{}%", memory_usage)),
                     ),
             )
-            // Temp
             .child(
                 div()
                     .flex()
@@ -139,7 +142,6 @@ impl HelpView {
                             .child(temp_text),
                     ),
             )
-            // Battery
             .child(
                 div()
                     .flex()
@@ -163,7 +165,6 @@ impl HelpView {
             .into_any_element()
     }
 
-    /// Get the prefix of the filtered entry at the given index.
     pub fn selected_prefix(&self, index: usize, query: &str) -> Option<&str> {
         let query_lower = query.to_lowercase();
         self.entries
@@ -197,8 +198,8 @@ impl HelpView {
 }
 
 impl LauncherView for HelpView {
-    fn prefix(&self) -> &'static str {
-        "?"
+    fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     fn name(&self) -> &'static str {
