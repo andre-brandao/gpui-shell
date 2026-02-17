@@ -368,6 +368,7 @@ fn render_theme_card(
     let preview_colors = scheme.preview_colors();
     let name = scheme.name;
     let description = scheme.description;
+    let card_theme = scheme.theme.clone();
 
     div()
         .id(format!("theme-{}", name))
@@ -377,6 +378,12 @@ fn render_theme_card(
         .rounded(px(radius::LG))
         .border_1()
         .cursor_pointer()
+        .on_click(move |_, _, cx| {
+            Theme::set(card_theme.clone(), cx);
+            if let Err(err) = Config::save_theme(cx) {
+                tracing::warn!("Failed to persist selected theme: {}", err);
+            }
+        })
         .when(is_selected, move |el| {
             el.bg(accent_selection).border_color(accent_primary)
         })

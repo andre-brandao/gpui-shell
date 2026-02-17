@@ -163,6 +163,23 @@ impl HelpView {
             .into_any_element()
     }
 
+    /// Get the prefix of the filtered entry at the given index.
+    pub fn selected_prefix(&self, index: usize, query: &str) -> Option<&str> {
+        let query_lower = query.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|entry| {
+                if query.is_empty() {
+                    return true;
+                }
+                entry.prefix.to_lowercase().contains(&query_lower)
+                    || entry.name.to_lowercase().contains(&query_lower)
+                    || entry.description.to_lowercase().contains(&query_lower)
+            })
+            .nth(index)
+            .map(|e| e.prefix.as_str())
+    }
+
     fn filtered_count(&self, query: &str) -> usize {
         let query_lower = query.to_lowercase();
         self.entries
@@ -231,8 +248,8 @@ impl LauncherView for HelpView {
             .toggle_state(selected)
             .start_slot(
                 div()
-                    .w(px(32.))
-                    .h(px(32.))
+                    .w(px(28.))
+                    .h(px(28.))
                     .rounded(px(6.))
                     .bg(interactive_default)
                     .flex()
@@ -245,7 +262,7 @@ impl LauncherView for HelpView {
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
+                    .gap(px(1.))
                     .child(
                         div()
                             .flex()

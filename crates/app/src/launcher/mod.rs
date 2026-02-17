@@ -283,12 +283,17 @@ impl Launcher {
 
         // Check if we're in help view and selected a command
         if std::ptr::eq(view, &self.help_view as &dyn LauncherView) {
-            // In help view, switch to selected view
-            if let Some(target_view) = self.views.get(self.selected_index) {
-                let prefix = target_view.prefix();
-                self.search_query = format!("{} ", prefix);
-                self.selected_index = 0;
-                return false;
+            let vx = self.view_context();
+            if let Some(prefix) = self
+                .help_view
+                .selected_prefix(self.selected_index, vx.query)
+            {
+                let target = self.views.iter().find(|v| v.prefix() == prefix);
+                if let Some(target_view) = target {
+                    self.search_query = format!("{} ", target_view.prefix());
+                    self.selected_index = 0;
+                    return false;
+                }
             }
         }
 

@@ -142,7 +142,7 @@ impl LauncherView for WallpaperView {
             vx.services
                 .wallpaper
                 .dispatch(WallpaperCommand::SetWallpaper(entry.path.clone()));
-            true
+            false // Stay open for browsing
         } else {
             false
         }
