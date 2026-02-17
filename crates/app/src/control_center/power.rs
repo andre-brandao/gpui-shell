@@ -3,16 +3,16 @@
 //! Displays battery status and power profile controls when expanded.
 
 use gpui::{App, Hsla, MouseButton, div, prelude::*, px};
-use services::{PowerProfile, Services, UPowerCommand};
+use services::{PowerProfile, UPowerCommand};
+use crate::state::AppState;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use super::icons;
 
 /// Render the power section (expanded view with battery details and profiles)
-pub fn render_power_section(services: &Services, cx: &App) -> impl IntoElement {
+pub fn render_power_section(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let upower = services.upower.get();
-    let services_clone = services.clone();
+    let upower = AppState::upower(cx).get();
 
     div()
         .w_full()
@@ -106,22 +106,14 @@ pub fn render_power_section(services: &Services, cx: &App) -> impl IntoElement {
             )
         })
         // Power profiles
-        .child(render_power_profiles(
-            &services_clone,
-            upower.power_profile,
-            cx,
-        ))
+        .child(render_power_profiles(upower.power_profile, cx))
 }
 
 /// Render power profile selector
-fn render_power_profiles(
-    services: &Services,
-    current_profile: PowerProfile,
-    cx: &App,
-) -> impl IntoElement {
-    let services_saver = services.clone();
-    let services_balanced = services.clone();
-    let services_performance = services.clone();
+fn render_power_profiles(current_profile: PowerProfile, cx: &App) -> impl IntoElement {
+    let services_saver = AppState::upower(cx).clone();
+    let services_balanced = AppState::upower(cx).clone();
+    let services_performance = AppState::upower(cx).clone();
 
     div()
         .flex()
@@ -138,7 +130,6 @@ fn render_power_profiles(
                 let s = services_saver.clone();
                 cx.spawn(async move |_| {
                     let _ = s
-                        .upower
                         .dispatch(UPowerCommand::SetPowerProfile(PowerProfile::PowerSaver))
                         .await;
                 })
@@ -155,7 +146,6 @@ fn render_power_profiles(
                 let s = services_balanced.clone();
                 cx.spawn(async move |_| {
                     let _ = s
-                        .upower
                         .dispatch(UPowerCommand::SetPowerProfile(PowerProfile::Balanced))
                         .await;
                 })
@@ -172,7 +162,6 @@ fn render_power_profiles(
                 let s = services_performance.clone();
                 cx.spawn(async move |_| {
                     let _ = s
-                        .upower
                         .dispatch(UPowerCommand::SetPowerProfile(PowerProfile::Performance))
                         .await;
                 })

@@ -10,6 +10,7 @@ use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSp
 
 use self::config::WallpaperConfig;
 use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use crate::state::AppState;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
 
@@ -115,7 +116,7 @@ impl LauncherView for WallpaperView {
         let theme = cx.theme();
         let path = entry.path.clone();
         let preview_path = entry.path.clone();
-        let wallpaper_service = vx.services.wallpaper.clone();
+        let wallpaper_service = AppState::wallpaper(cx).clone();
         let interactive_default = theme.interactive.default;
 
         let extension = entry
@@ -155,12 +156,10 @@ impl LauncherView for WallpaperView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, _cx: &mut App) -> bool {
+    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
         let entries = filtered_entries(&self.directory, vx.query);
         if let Some(entry) = entries.get(index) {
-            vx.services
-                .wallpaper
-                .dispatch(WallpaperCommand::SetWallpaper(entry.path.clone()));
+            AppState::wallpaper(cx).dispatch(WallpaperCommand::SetWallpaper(entry.path.clone()));
             false
         } else {
             false

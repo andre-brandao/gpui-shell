@@ -66,16 +66,16 @@ pub struct Settings {
 impl Settings {
     /// Create a new settings widget.
     pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
-        let services = AppState::services(cx).clone();
-        let audio = services.audio.get();
-        let bluetooth = services.bluetooth.get();
-        let network = services.network.get();
-        let privacy = services.privacy.get();
-        let upower = services.upower.get();
+        let audio = AppState::audio(cx).get();
+        let bluetooth = AppState::bluetooth(cx).get();
+        let network = AppState::network(cx).get();
+        let privacy = AppState::privacy(cx).get();
+        let upower = AppState::upower(cx).get();
 
         // Subscribe to audio updates
         cx.spawn({
-            let mut signal = services.audio.subscribe().to_stream();
+            let audio_service = AppState::audio(cx).clone();
+            let mut signal = audio_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while let Some(data) = signal.next().await {
@@ -95,7 +95,8 @@ impl Settings {
 
         // Subscribe to bluetooth updates
         cx.spawn({
-            let mut signal = services.bluetooth.subscribe().to_stream();
+            let bluetooth_service = AppState::bluetooth(cx).clone();
+            let mut signal = bluetooth_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while let Some(data) = signal.next().await {
@@ -115,7 +116,8 @@ impl Settings {
 
         // Subscribe to network updates
         cx.spawn({
-            let mut signal = services.network.subscribe().to_stream();
+            let network_service = AppState::network(cx).clone();
+            let mut signal = network_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while let Some(data) = signal.next().await {
@@ -135,7 +137,8 @@ impl Settings {
 
         // Subscribe to privacy updates
         cx.spawn({
-            let mut signal = services.privacy.subscribe().to_stream();
+            let privacy_service = AppState::privacy(cx).clone();
+            let mut signal = privacy_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while let Some(data) = signal.next().await {
@@ -155,7 +158,8 @@ impl Settings {
 
         // Subscribe to upower updates
         cx.spawn({
-            let mut signal = services.upower.subscribe().to_stream();
+            let upower_service = AppState::upower(cx).clone();
+            let mut signal = upower_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while let Some(data) = signal.next().await {
@@ -185,7 +189,6 @@ impl Settings {
 
     /// Toggle the control center panel.
     fn toggle_panel(&self, cx: &mut gpui::App) {
-        let services = AppState::services(cx).clone();
         let config = Config::global(cx);
         let (anchor, margin) = panel_placement(config.bar.position, self.slot);
         let config = PanelConfig {
@@ -197,7 +200,7 @@ impl Settings {
         };
 
         toggle_panel("control-center", config, cx, move |cx| {
-            ControlCenter::new(services, cx)
+            ControlCenter::new(cx)
         });
     }
 

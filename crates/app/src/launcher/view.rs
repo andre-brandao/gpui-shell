@@ -13,7 +13,6 @@
 //!   the launcher skips the item loop.
 
 use gpui::{div, prelude::*, px, AnyElement, App};
-use services::Services;
 use ui::{font_size, radius, spacing, ActiveTheme};
 
 /// Input event passed to views for handling.
@@ -50,7 +49,6 @@ pub enum InputResult {
 
 /// Context passed to views for rendering and actions.
 pub struct ViewContext<'a> {
-    pub services: &'a Services,
     pub query: &'a str,
     pub selected_index: usize,
 }

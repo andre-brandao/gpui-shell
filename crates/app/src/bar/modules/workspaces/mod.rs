@@ -22,7 +22,7 @@ pub struct Workspaces {
 impl Workspaces {
     /// Create a new Workspaces widget.
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let compositor = AppState::services(cx).compositor.clone();
+        let compositor = AppState::compositor(cx).clone();
         let state = compositor.get();
 
         // Subscribe to compositor state changes

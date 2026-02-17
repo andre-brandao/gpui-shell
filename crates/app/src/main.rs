@@ -9,7 +9,7 @@
 
 use assets::Assets;
 use gpui::Application;
-use services::{Services, ShellSubscriber};
+use services::ShellSubscriber;
 use tracing_subscriber::EnvFilter;
 
 mod args;
@@ -42,7 +42,7 @@ async fn main() {
     };
 
     // Initialize services (requires async)
-    let services = Services::new()
+    let services = state::init_services()
         .await
         .expect("Failed to initialize services");
 

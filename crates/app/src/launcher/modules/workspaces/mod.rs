@@ -8,6 +8,7 @@ use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSp
 
 use self::config::WorkspacesConfig;
 use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
+use crate::state::AppState;
 
 /// Workspaces view - displays and switches between workspaces.
 pub struct WorkspacesView {
@@ -21,8 +22,12 @@ impl WorkspacesView {
         }
     }
 
-    fn filtered_workspaces(&self, vx: &ViewContext) -> Vec<services::compositor::Workspace> {
-        let compositor = vx.services.compositor.get();
+    fn filtered_workspaces(
+        &self,
+        vx: &ViewContext,
+        cx: &App,
+    ) -> Vec<services::compositor::Workspace> {
+        let compositor = AppState::compositor(cx).get();
         let query_lower = vx.query.to_lowercase();
         compositor
             .workspaces
@@ -61,12 +66,12 @@ impl LauncherView for WorkspacesView {
         "Switch between workspaces"
     }
 
-    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        self.filtered_workspaces(vx).len()
+    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
+        self.filtered_workspaces(vx, cx).len()
     }
 
     fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let filtered = self.filtered_workspaces(vx);
+        let filtered = self.filtered_workspaces(vx, cx);
         let Some(ws) = filtered.get(index) else {
             return div().into_any_element();
         };
@@ -79,7 +84,7 @@ impl LauncherView for WorkspacesView {
         };
         let subtitle = format!("{} windows on {}", ws.windows, ws.monitor);
         let ws_id = ws.id;
-        let compositor_clone = vx.services.compositor.clone();
+        let compositor_clone = AppState::compositor(cx).clone();
         let interactive_default = theme.interactive.default;
 
         ListItem::new(format!("ws-{}", ws.id))
@@ -115,13 +120,10 @@ impl LauncherView for WorkspacesView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, _cx: &mut App) -> bool {
-        let filtered = self.filtered_workspaces(vx);
+    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
+        let filtered = self.filtered_workspaces(vx, cx);
         if let Some(ws) = filtered.get(index) {
-            let _ = vx
-                .services
-                .compositor
-                .dispatch(CompositorCommand::FocusWorkspace(ws.id));
+            let _ = AppState::compositor(cx).dispatch(CompositorCommand::FocusWorkspace(ws.id));
             true
         } else {
             false

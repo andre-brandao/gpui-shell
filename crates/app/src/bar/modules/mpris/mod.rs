@@ -32,7 +32,7 @@ pub struct Mpris {
 
 impl Mpris {
     pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
-        let subscriber = AppState::services(cx).mpris.clone();
+        let subscriber = AppState::mpris(cx).clone();
         let data = subscriber.get();
 
         cx.spawn({

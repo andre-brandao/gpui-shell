@@ -16,7 +16,7 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
     div, layer_shell::*, prelude::*, px,
 };
-use services::{LauncherRequest, Services};
+use services::LauncherRequest;
 use tokio::sync::mpsc::UnboundedReceiver;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
@@ -32,7 +32,6 @@ const ITEMS_PER_PAGE: usize = 7;
 
 /// The main launcher struct.
 pub struct Launcher {
-    services: Services,
     search_query: String,
     selected_index: usize,
     focus_handle: FocusHandle,
@@ -44,13 +43,15 @@ pub struct Launcher {
 impl Launcher {
     /// Create a new launcher with optional initial input.
     pub fn new(initial_input: Option<String>, cx: &mut Context<Self>) -> Self {
-        let services = AppState::services(cx).clone();
+        let compositor = AppState::compositor(cx).clone();
+        let sysinfo = AppState::sysinfo(cx).clone();
+        let upower = AppState::upower(cx).clone();
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
 
         // Subscribe to service updates for reactive rendering
         cx.spawn({
-            let mut compositor_signal = services.compositor.subscribe().to_stream();
+            let mut compositor_signal = compositor.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while compositor_signal.next().await.is_some() {
@@ -64,7 +65,7 @@ impl Launcher {
         .detach();
 
         cx.spawn({
-            let mut sysinfo_signal = services.sysinfo.subscribe().to_stream();
+            let mut sysinfo_signal = sysinfo.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while sysinfo_signal.next().await.is_some() {
@@ -78,7 +79,7 @@ impl Launcher {
         .detach();
 
         cx.spawn({
-            let mut upower_signal = services.upower.subscribe().to_stream();
+            let mut upower_signal = upower.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while upower_signal.next().await.is_some() {
@@ -96,7 +97,6 @@ impl Launcher {
         let help_view = HelpView::new(&launcher_config.modules.help, &views);
 
         Launcher {
-            services,
             search_query: initial_input.unwrap_or_default(),
             selected_index: 0,
             focus_handle,
@@ -203,7 +203,6 @@ impl Launcher {
     fn view_context(&self) -> ViewContext<'_> {
         let (_, search) = self.parse_query();
         ViewContext {
-            services: &self.services,
             query: search,
             selected_index: self.selected_index,
         }

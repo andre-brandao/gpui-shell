@@ -7,6 +7,7 @@ use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSp
 
 use self::config::AppsConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
+use crate::state::AppState;
 
 /// Applications view - searches and launches desktop applications.
 pub struct AppsView {
@@ -42,14 +43,14 @@ impl LauncherView for AppsView {
         true
     }
 
-    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
+    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
         let query_lower = vx.query.to_lowercase();
-        vx.services.applications.search(&query_lower).len()
+        AppState::applications(cx).search(&query_lower).len()
     }
 
     fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
         let query_lower = vx.query.to_lowercase();
-        let apps = vx.services.applications.search(&query_lower);
+        let apps = AppState::applications(cx).search(&query_lower);
         let Some(app) = apps.get(index) else {
             return div().into_any_element();
         };
@@ -96,9 +97,9 @@ impl LauncherView for AppsView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, _cx: &mut App) -> bool {
+    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
         let query_lower = vx.query.to_lowercase();
-        let apps = vx.services.applications.search(&query_lower);
+        let apps = AppState::applications(cx).search(&query_lower);
 
         if let Some(app) = apps.get(index) {
             launch_app(&app.exec);

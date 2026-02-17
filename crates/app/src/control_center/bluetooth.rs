@@ -4,17 +4,19 @@
 //! Supports connecting and disconnecting from devices.
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
-use services::{BluetoothCommand, BluetoothDevice, Services};
+use services::{BluetoothCommand, BluetoothDevice};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+
+use crate::state::AppState;
 use zbus::zvariant::OwnedObjectPath;
 
 use super::icons;
 
 /// Render the Bluetooth section (device list)
-pub fn render_bluetooth_section(services: &Services, cx: &App) -> impl IntoElement {
+pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let bluetooth = services.bluetooth.get();
-    let services_clone = services.clone();
+    let bluetooth = AppState::bluetooth(cx).get();
+    let services_clone = AppState::bluetooth(cx).clone();
 
     // Sort devices: connected first, then by name
     let mut devices: Vec<BluetoothDevice> = bluetooth.devices.clone();
@@ -60,7 +62,7 @@ pub fn render_bluetooth_section(services: &Services, cx: &App) -> impl IntoEleme
                                 .child("Devices"),
                         ),
                 )
-                .child(render_scan_button(&services_clone, cx)),
+                .child(render_scan_button(cx)),
         )
         .when(devices.is_empty(), |el| {
             el.child(
@@ -88,12 +90,10 @@ pub fn render_bluetooth_section(services: &Services, cx: &App) -> impl IntoEleme
                             cx.spawn(async move |_| {
                                 if connected {
                                     let _ = s
-                                        .bluetooth
                                         .dispatch(BluetoothCommand::DisconnectDevice(path))
                                         .await;
                                 } else {
                                     let _ = s
-                                        .bluetooth
                                         .dispatch(BluetoothCommand::ConnectDevice(path))
                                         .await;
                                 }
@@ -246,9 +246,9 @@ fn get_device_icon(device: &BluetoothDevice) -> &'static str {
 }
 
 /// Render scan button for discovering devices
-fn render_scan_button(services: &Services, cx: &App) -> impl IntoElement {
+fn render_scan_button(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let services = services.clone();
+    let services = AppState::bluetooth(cx).clone();
 
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
@@ -268,7 +268,7 @@ fn render_scan_button(services: &Services, cx: &App) -> impl IntoElement {
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             let s = services.clone();
             cx.spawn(async move |_| {
-                let _ = s.bluetooth.dispatch(BluetoothCommand::StartDiscovery).await;
+                let _ = s.dispatch(BluetoothCommand::StartDiscovery).await;
             })
             .detach();
         })

@@ -4,10 +4,11 @@
 
 use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{
-    AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand, PowerProfile, Services,
-    UPowerCommand,
+    AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand, PowerProfile, UPowerCommand,
 };
 use ui::{ActiveTheme, icon_size, radius, spacing};
+
+use crate::state::AppState;
 
 use super::icons;
 
@@ -23,15 +24,14 @@ pub enum ExpandedSection {
 
 /// Render the quick toggles row
 pub fn render_quick_toggles(
-    services: &Services,
     expanded: ExpandedSection,
     on_toggle_section: impl Fn(ExpandedSection, &mut App) + Clone + 'static,
     cx: &App,
 ) -> impl IntoElement {
-    let network = services.network.get();
-    let bluetooth = services.bluetooth.get();
-    let audio = services.audio.get();
-    let upower = services.upower.get();
+    let network = AppState::network(cx).get();
+    let bluetooth = AppState::bluetooth(cx).get();
+    let audio = AppState::audio(cx).get();
+    let upower = AppState::upower(cx).get();
 
     let wifi_enabled = network.wifi_enabled;
     let bt_active = bluetooth.state == BluetoothState::Active;
@@ -48,10 +48,10 @@ pub fn render_quick_toggles(
         .map(|b| b.is_charging())
         .unwrap_or(false);
 
-    let services_wifi = services.clone();
-    let services_bt = services.clone();
-    let services_mic = services.clone();
-    let services_power = services.clone();
+    let services_wifi = AppState::network(cx).clone();
+    let services_bt = AppState::bluetooth(cx).clone();
+    let services_mic = AppState::audio(cx).clone();
+    let services_power = AppState::upower(cx).clone();
 
     let on_toggle_wifi = on_toggle_section.clone();
     let on_toggle_bt = on_toggle_section.clone();
@@ -76,7 +76,7 @@ pub fn render_quick_toggles(
             move |cx| {
                 let services = services_wifi.clone();
                 cx.spawn(async move |_| {
-                    let _ = services.network.dispatch(NetworkCommand::ToggleWifi).await;
+                    let _ = services.dispatch(NetworkCommand::ToggleWifi).await;
                 })
                 .detach();
             },
@@ -98,7 +98,7 @@ pub fn render_quick_toggles(
             move |cx| {
                 let services = services_bt.clone();
                 cx.spawn(async move |_| {
-                    let _ = services.bluetooth.dispatch(BluetoothCommand::Toggle).await;
+                    let _ = services.dispatch(BluetoothCommand::Toggle).await;
                 })
                 .detach();
             },
@@ -117,7 +117,7 @@ pub fn render_quick_toggles(
             !mic_muted,
             cx,
             move |_cx| {
-                services_mic.audio.dispatch(AudioCommand::ToggleSourceMute);
+                services_mic.dispatch(AudioCommand::ToggleSourceMute);
             },
         ))
         // Battery/Power toggle (only if battery present)
@@ -132,7 +132,7 @@ pub fn render_quick_toggles(
                     let services = services_power.clone();
                     move |cx| {
                         // Cycle through power profiles on click
-                        let current = services.upower.get().power_profile;
+                        let current = services.get().power_profile;
                         let next = match current {
                             PowerProfile::PowerSaver => PowerProfile::Balanced,
                             PowerProfile::Balanced => PowerProfile::Performance,
@@ -141,10 +141,7 @@ pub fn render_quick_toggles(
                         };
                         let s = services.clone();
                         cx.spawn(async move |_| {
-                            let _ = s
-                                .upower
-                                .dispatch(UPowerCommand::SetPowerProfile(next))
-                                .await;
+                            let _ = s.dispatch(UPowerCommand::SetPowerProfile(next)).await;
                         })
                         .detach();
                     }

@@ -4,8 +4,10 @@
 //! Supports connecting to open and protected networks with password input.
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
-use services::{AccessPoint, NetworkCommand, Services};
+use services::{AccessPoint, NetworkCommand};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+
+use crate::state::AppState;
 
 use super::icons;
 
@@ -47,14 +49,13 @@ impl WifiPasswordState {
 
 /// Render the WiFi section (network list)
 pub fn render_wifi_section(
-    services: &Services,
     password_state: &WifiPasswordState,
     on_connect: impl Fn(String, Option<String>, &mut App) + Clone + 'static,
     on_cancel_password: impl Fn(&mut App) + Clone + 'static,
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
-    let network = services.network.get();
+    let network = AppState::network(cx).get();
 
     // Get current connection name
     let connected_name: Option<String> = network.active_connections.iter().find_map(|c| {
@@ -108,7 +109,7 @@ pub fn render_wifi_section(
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child("Networks"),
                 )
-                .child(render_refresh_button(services, cx)),
+                .child(render_refresh_button(cx)),
         )
         .when(aps.is_empty(), |el| {
             el.child(
@@ -430,9 +431,9 @@ fn render_password_input(
 }
 
 /// Render a refresh button for rescanning networks
-pub fn render_refresh_button(services: &Services, cx: &App) -> impl IntoElement {
+pub fn render_refresh_button(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let services = services.clone();
+    let services = AppState::network(cx).clone();
 
     // Pre-compute colors for closures
     let interactive_default = theme.interactive.default;
@@ -453,7 +454,7 @@ pub fn render_refresh_button(services: &Services, cx: &App) -> impl IntoElement 
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             let s = services.clone();
             cx.spawn(async move |_| {
-                let _ = s.network.dispatch(NetworkCommand::RequestScan).await;
+                let _ = s.dispatch(NetworkCommand::RequestScan).await;
             })
             .detach();
         })

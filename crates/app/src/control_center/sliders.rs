@@ -1,26 +1,27 @@
 //! Volume and brightness slider components for the Control Center.
 
 use gpui::{App, Entity, MouseButton, div, prelude::*, px};
-use services::{AudioCommand, BrightnessCommand, Services};
+use services::{AudioCommand, BrightnessCommand};
 use ui::{ActiveTheme, Slider, font_size, icon_size, radius, spacing};
+
+use crate::state::AppState;
 
 use super::icons;
 
 /// Render the volume slider row
 pub fn render_volume_slider(
-    services: &Services,
     volume_slider: &Entity<Slider>,
     cx: &App,
 ) -> impl IntoElement {
-    let audio = services.audio.get();
+    let audio = AppState::audio(cx).get();
     let volume = audio.sink_volume;
     let muted = audio.sink_muted;
 
     let icon = icons::volume_icon(volume, muted);
 
-    let services_toggle = services.clone();
-    let services_dec = services.clone();
-    let services_inc = services.clone();
+    let services_toggle = AppState::audio(cx).clone();
+    let services_dec = AppState::audio(cx).clone();
+    let services_inc = AppState::audio(cx).clone();
 
     div()
         .flex()
@@ -34,7 +35,7 @@ pub fn render_volume_slider(
             muted,
             cx,
             move |_cx| {
-                services_toggle.audio.dispatch(AudioCommand::ToggleSinkMute);
+                services_toggle.dispatch(AudioCommand::ToggleSinkMute);
             },
         ))
         // Slider
@@ -46,26 +47,21 @@ pub fn render_volume_slider(
             "volume",
             cx,
             move |_cx| {
-                services_dec
-                    .audio
-                    .dispatch(AudioCommand::AdjustSinkVolume(-5));
+                services_dec.dispatch(AudioCommand::AdjustSinkVolume(-5));
             },
             move |_cx| {
-                services_inc
-                    .audio
-                    .dispatch(AudioCommand::AdjustSinkVolume(5));
+                services_inc.dispatch(AudioCommand::AdjustSinkVolume(5));
             },
         ))
 }
 
 /// Render the brightness slider row (returns empty if no brightness control available)
 pub fn render_brightness_slider(
-    services: &Services,
     brightness_slider: &Entity<Slider>,
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
-    let brightness = services.brightness.get();
+    let brightness = AppState::brightness(cx).get();
 
     if brightness.max == 0 {
         return div().into_any_element();
@@ -81,8 +77,8 @@ pub fn render_brightness_slider(
         icons::BRIGHTNESS_HIGH
     };
 
-    let services_dec = services.clone();
-    let services_inc = services.clone();
+    let services_dec = AppState::brightness(cx).clone();
+    let services_inc = AppState::brightness(cx).clone();
 
     // Pre-compute colors
     let interactive_default = theme.interactive.default;
@@ -122,14 +118,14 @@ pub fn render_brightness_slider(
             move |cx| {
                 let s = services_dec.clone();
                 cx.spawn(async move |_| {
-                    let _ = s.brightness.dispatch(BrightnessCommand::Decrease(5)).await;
+                    let _ = s.dispatch(BrightnessCommand::Decrease(5)).await;
                 })
                 .detach();
             },
             move |cx| {
                 let s = services_inc.clone();
                 cx.spawn(async move |_| {
-                    let _ = s.brightness.dispatch(BrightnessCommand::Increase(5)).await;
+                    let _ = s.dispatch(BrightnessCommand::Increase(5)).await;
                 })
                 .detach();
             },

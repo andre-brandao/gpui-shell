@@ -28,7 +28,7 @@ pub struct Tray {
 impl Tray {
     /// Create a new system tray widget.
     pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
-        let subscriber = AppState::services(cx).tray.clone();
+        let subscriber = AppState::tray(cx).clone();
         let data = subscriber.get();
 
         // Subscribe to tray data changes

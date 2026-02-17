@@ -24,7 +24,7 @@ pub struct NotificationWidget {
 
 impl NotificationWidget {
     pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
-        let subscriber = AppState::services(cx).notification.clone();
+        let subscriber = AppState::notification(cx).clone();
         let data = subscriber.get();
 
         cx.spawn({

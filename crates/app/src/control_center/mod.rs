@@ -26,8 +26,10 @@ use gpui::{
     App, Context, Entity, FocusHandle, Focusable, KeyBinding, ScrollHandle, Window, actions, div,
     prelude::*, px,
 };
-use services::{AudioCommand, BrightnessCommand, NetworkCommand, Services};
+use services::{AudioCommand, BrightnessCommand, NetworkCommand};
 use ui::{ActiveTheme, Slider, SliderEvent, radius, spacing};
+
+use crate::state::AppState;
 
 // Keyboard actions for password input
 actions!(control_center, [Backspace, Cancel, Submit]);
@@ -39,8 +41,6 @@ pub use wifi::WifiPasswordState;
 ///
 /// Provides a unified interface for system settings and quick actions.
 pub struct ControlCenter {
-    /// Services container for system interactions
-    services: Services,
     /// Currently expanded section (WiFi or Bluetooth)
     expanded: ExpandedSection,
     /// Scroll handle for the panel content
@@ -66,12 +66,12 @@ impl ControlCenter {
     }
 
     /// Create a new control center panel.
-    pub fn new(services: Services, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
 
         // Create volume slider
-        let audio = services.audio.get();
+        let audio = AppState::audio(cx).get();
         let volume_slider = cx.new(|_| {
             Slider::new()
                 .min(0.0)
@@ -81,7 +81,7 @@ impl ControlCenter {
         });
 
         // Create brightness slider
-        let brightness = services.brightness.get();
+        let brightness = AppState::brightness(cx).get();
         let brightness_slider = cx.new(|_| {
             Slider::new()
                 .min(0.0)
@@ -91,20 +91,18 @@ impl ControlCenter {
         });
 
         // Subscribe to slider events
-        let audio_services = services.clone();
+        let audio_services = AppState::audio(cx).clone();
         cx.subscribe(
             &volume_slider,
             move |_this, _slider, event: &SliderEvent, _cx| {
                 let SliderEvent::Change(value) = event;
                 let target = *value as u8;
-                audio_services
-                    .audio
-                    .dispatch(AudioCommand::SetSinkVolume(target));
+                audio_services.dispatch(AudioCommand::SetSinkVolume(target));
             },
         )
         .detach();
 
-        let brightness_services = services.clone();
+        let brightness_services = AppState::brightness(cx).clone();
         cx.subscribe(
             &brightness_slider,
             move |_this, _slider, event: &SliderEvent, cx| {
@@ -112,10 +110,7 @@ impl ControlCenter {
                 let target = *value as u8;
                 let s = brightness_services.clone();
                 cx.spawn(async move |_, _| {
-                    let _ = s
-                        .brightness
-                        .dispatch(BrightnessCommand::SetPercent(target))
-                        .await;
+                    let _ = s.dispatch(BrightnessCommand::SetPercent(target)).await;
                 })
                 .detach();
             },
@@ -123,10 +118,9 @@ impl ControlCenter {
         .detach();
 
         // Subscribe to service updates
-        Self::subscribe_to_services(&services, cx);
+        Self::subscribe_to_services(cx);
 
         ControlCenter {
-            services,
             expanded: ExpandedSection::None,
             scroll_handle,
             focus_handle,
@@ -137,11 +131,11 @@ impl ControlCenter {
     }
 
     /// Subscribe to service updates to keep UI in sync
-    fn subscribe_to_services(services: &Services, cx: &mut Context<Self>) {
+    fn subscribe_to_services(cx: &mut Context<Self>) {
         // Audio - sync volume slider
         cx.spawn({
-            let mut signal = services.audio.subscribe().to_stream();
-            let audio_service = services.audio.clone();
+            let audio_service = AppState::audio(cx).clone();
+            let mut signal = audio_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
@@ -165,7 +159,8 @@ impl ControlCenter {
 
         // Bluetooth
         cx.spawn({
-            let mut signal = services.bluetooth.subscribe().to_stream();
+            let bluetooth_service = AppState::bluetooth(cx).clone();
+            let mut signal = bluetooth_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
@@ -179,8 +174,8 @@ impl ControlCenter {
 
         // Brightness - sync brightness slider
         cx.spawn({
-            let mut signal = services.brightness.subscribe().to_stream();
-            let brightness_service = services.brightness.clone();
+            let brightness_service = AppState::brightness(cx).clone();
+            let mut signal = brightness_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
@@ -204,7 +199,8 @@ impl ControlCenter {
 
         // Network
         cx.spawn({
-            let mut signal = services.network.subscribe().to_stream();
+            let network_service = AppState::network(cx).clone();
+            let mut signal = network_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
@@ -218,7 +214,8 @@ impl ControlCenter {
 
         // UPower
         cx.spawn({
-            let mut signal = services.upower.subscribe().to_stream();
+            let upower_service = AppState::upower(cx).clone();
+            let mut signal = upower_service.subscribe().to_stream();
             async move |this, cx| {
                 use futures_util::StreamExt;
                 while signal.next().await.is_some() {
@@ -253,7 +250,7 @@ impl Render for ControlCenter {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let expanded = self.expanded;
-        let services = self.services.clone();
+        let network_service = AppState::network(cx).clone();
 
         // Create entity-based callbacks for section toggling
         let entity = cx.entity().clone();
@@ -268,7 +265,7 @@ impl Render for ControlCenter {
         };
 
         // WiFi callbacks
-        let wifi_services = services.clone();
+        let wifi_services = network_service.clone();
         let on_wifi_connect = {
             let entity = entity.clone();
             let services = wifi_services.clone();
@@ -277,7 +274,7 @@ impl Render for ControlCenter {
                 let services = services.clone();
                 if let Some(pwd) = password {
                     // Connect with password
-                    let network = services.network.get();
+                    let network = services.get();
                     if let Some(ap) = network
                         .wireless_access_points
                         .iter()
@@ -297,7 +294,6 @@ impl Render for ControlCenter {
                             let entity = entity.clone();
                             async move |cx| {
                                 let result = services
-                                    .network
                                     .dispatch(NetworkCommand::ConnectToAccessPoint {
                                         device_path,
                                         ap_path,
@@ -379,14 +375,14 @@ impl Render for ControlCenter {
             })
             .on_action({
                 let entity = entity.clone();
-                let services = services.clone();
+                let services = network_service.clone();
                 move |_: &Submit, _window, cx| {
                     let entity = entity.clone();
                     let services = services.clone();
                     entity.update(cx, |this, cx| {
                         if let Some(ssid) = this.wifi_password.ssid.clone() {
                             let password = this.wifi_password.password.clone();
-                            let network = services.network.get();
+                            let network = services.get();
                             if let Some(ap) = network
                                 .wireless_access_points
                                 .iter()
@@ -409,7 +405,6 @@ impl Render for ControlCenter {
                                     let entity = cx.entity().clone();
                                     async move |_, cx| {
                                         let result = services
-                                            .network
                                             .dispatch(NetworkCommand::ConnectToAccessPoint {
                                                 device_path,
                                                 ap_path,
@@ -474,7 +469,6 @@ impl Render for ControlCenter {
             })
             // Quick toggles row
             .child(quick_toggles::render_quick_toggles(
-                &self.services,
                 expanded,
                 on_toggle_section,
                 cx,
@@ -482,7 +476,6 @@ impl Render for ControlCenter {
             // WiFi section (when expanded) - right after toggle
             .when(expanded == ExpandedSection::WiFi, |el| {
                 el.child(wifi::render_wifi_section(
-                    &services,
                     &self.wifi_password,
                     on_wifi_connect,
                     on_cancel_password,
@@ -491,23 +484,15 @@ impl Render for ControlCenter {
             })
             // Bluetooth section (when expanded) - right after toggle
             .when(expanded == ExpandedSection::Bluetooth, |el| {
-                el.child(bluetooth::render_bluetooth_section(&self.services, cx))
+                el.child(bluetooth::render_bluetooth_section(cx))
             })
             // Power section (when expanded) - right after toggle
             .when(expanded == ExpandedSection::Power, |el| {
-                el.child(power::render_power_section(&self.services, cx))
+                el.child(power::render_power_section(cx))
             })
             // Volume slider
-            .child(sliders::render_volume_slider(
-                &self.services,
-                &self.volume_slider,
-                cx,
-            ))
+            .child(sliders::render_volume_slider(&self.volume_slider, cx))
             // Brightness slider (if available)
-            .child(sliders::render_brightness_slider(
-                &self.services,
-                &self.brightness_slider,
-                cx,
-            ))
+            .child(sliders::render_brightness_slider(&self.brightness_slider, cx))
     }
 }

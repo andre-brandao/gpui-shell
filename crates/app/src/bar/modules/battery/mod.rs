@@ -20,7 +20,7 @@ pub struct Battery {
 impl Battery {
     /// Create a new battery widget.
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let subscriber = AppState::services(cx).upower.clone();
+        let subscriber = AppState::upower(cx).clone();
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the UPower service

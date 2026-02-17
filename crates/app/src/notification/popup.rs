@@ -210,7 +210,7 @@ fn sync_popup(subscriber: &NotificationSubscriber, cx: &mut App) {
 }
 
 pub fn init(cx: &mut App) {
-    let subscriber = AppState::services(cx).notification.clone();
+    let subscriber = AppState::notification(cx).clone();
     cx.spawn({
         let mut signal = subscriber.subscribe().to_stream();
         let service = subscriber.clone();

@@ -58,7 +58,7 @@ pub struct SysInfo {
 impl SysInfo {
     /// Create a new SysInfo widget.
     pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
-        let subscriber = AppState::services(cx).sysinfo.clone();
+        let subscriber = AppState::sysinfo(cx).clone();
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the sysinfo service

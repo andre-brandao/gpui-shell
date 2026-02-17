@@ -359,18 +359,19 @@ fn schedule_dismiss(cx: &mut App) {
 ///
 /// Should be called once during app initialization.
 pub fn init(cx: &mut App) {
-    let services = AppState::services(cx).clone();
+    let audio_service = AppState::audio(cx).clone();
+    let brightness_service = AppState::brightness(cx).clone();
     let position = Config::global(cx).osd.position;
     *OSD_POSITION.lock().unwrap() = position;
 
     // Track initial values to only show OSD on changes (not on startup)
-    let initial_audio = services.audio.get();
-    let initial_brightness = services.brightness.get();
+    let initial_audio = audio_service.get();
+    let initial_brightness = brightness_service.get();
 
     // Audio listener
     cx.spawn({
-        let mut signal = services.audio.subscribe().to_stream();
-        let audio = services.audio.clone();
+        let mut signal = audio_service.subscribe().to_stream();
+        let audio = audio_service.clone();
         let mut prev_volume = initial_audio.sink_volume;
         let mut prev_muted = initial_audio.sink_muted;
 
@@ -396,8 +397,8 @@ pub fn init(cx: &mut App) {
 
     // Brightness listener
     cx.spawn({
-        let mut signal = services.brightness.subscribe().to_stream();
-        let brightness = services.brightness.clone();
+        let mut signal = brightness_service.subscribe().to_stream();
+        let brightness = brightness_service.clone();
         let mut prev_percent = initial_brightness.percentage();
 
         async move |cx| {

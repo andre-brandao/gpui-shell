@@ -11,6 +11,7 @@ use ui::{
 use self::config::HelpConfig;
 use crate::bar::modules::sysinfo::icons;
 use crate::launcher::view::{LauncherView, ViewContext};
+use crate::state::AppState;
 
 /// Help view - shows available commands and system status.
 pub struct HelpView {
@@ -44,10 +45,10 @@ impl HelpView {
         }
     }
 
-    fn render_system_info(&self, vx: &ViewContext, cx: &App) -> AnyElement {
+    fn render_system_info(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
         let theme = cx.theme();
-        let sysinfo = vx.services.sysinfo.get();
-        let upower = vx.services.upower.get();
+        let sysinfo = AppState::sysinfo(cx).get();
+        let upower = AppState::upower(cx).get();
 
         let cpu_usage = sysinfo.cpu_usage;
         let memory_usage = sysinfo.memory_usage;
