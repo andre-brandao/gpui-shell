@@ -1,6 +1,6 @@
 //! Applications view for searching and launching desktop applications.
 
-use gpui::{AnyElement, App, div, prelude::*, px};
+use gpui::{AnyElement, App, div, img, prelude::*, px};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use crate::launcher::view::{LauncherView, ViewContext};
@@ -44,7 +44,6 @@ impl LauncherView for AppsView {
         let theme = cx.theme();
         let exec = app.exec.clone();
         let interactive_default = theme.interactive.default;
-
         ListItem::new(format!("app-{}", app.name))
             .spacing(ListItemSpacing::Sparse)
             .toggle_state(selected)
@@ -53,12 +52,16 @@ impl LauncherView for AppsView {
                     .w(px(28.))
                     .h(px(28.))
                     .rounded(px(6.))
-                    .bg(interactive_default)
+                    .overflow_hidden()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(14.))
-                    .child(""),
+                    .when_some(app.icon_path.clone(), |el, path| {
+                        el.child(img(path).size_full())
+                    })
+                    .when(app.icon_path.is_none(), |el| {
+                        el.bg(interactive_default).text_size(px(14.)).child("")
+                    }),
             )
             .on_click(move |_, _, _cx| {
                 launch_app(&exec);

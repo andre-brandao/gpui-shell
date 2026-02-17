@@ -3,6 +3,8 @@
 //! This module provides functionality for scanning and launching desktop
 //! applications from standard XDG directories.
 
+pub mod icons;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -20,6 +22,8 @@ pub struct Application {
     pub exec: String,
     /// Icon name or path.
     pub icon: Option<String>,
+    /// Resolved icon filesystem path (for rendering).
+    pub icon_path: Option<PathBuf>,
     /// Description or comment.
     pub description: Option<String>,
     /// Path to the desktop file.
@@ -231,10 +235,13 @@ fn parse_desktop_file(path: &PathBuf) -> Option<Application> {
     let name = name?;
     let exec = exec?;
 
+    let icon_path = icon.as_deref().and_then(icons::lookup_icon);
+
     Some(Application {
         name,
         exec,
         icon,
+        icon_path,
         description,
         desktop_file: path.clone(),
     })
