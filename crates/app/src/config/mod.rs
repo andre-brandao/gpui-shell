@@ -18,6 +18,7 @@ use tokio::sync::mpsc;
 use ui::Theme;
 
 pub use bar::{BarConfig, BarPosition, ModulesConfig};
+pub use crate::notification::NotificationConfig;
 pub use launcher::LauncherConfig;
 pub use osd::{OsdConfig, OsdPosition};
 
@@ -28,6 +29,7 @@ pub struct Config {
     pub bar: BarConfig,
     pub launcher: LauncherConfig,
     pub osd: OsdConfig,
+    pub notification: NotificationConfig,
 }
 
 impl Default for Config {
@@ -36,6 +38,7 @@ impl Default for Config {
             bar: BarConfig::default(),
             launcher: LauncherConfig::default(),
             osd: OsdConfig::default(),
+            notification: NotificationConfig::default(),
         }
     }
 }
