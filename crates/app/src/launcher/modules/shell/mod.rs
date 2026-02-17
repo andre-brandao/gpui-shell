@@ -6,7 +6,7 @@ use gpui::{div, prelude::*, px, rgba, AnyElement, App};
 use ui::{font_size, radius, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize};
 
 use self::config::ShellConfig;
-use crate::launcher::view::{LauncherView, ViewContext};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 
 /// Shell view - executes shell commands in a terminal.
 pub struct ShellView {
@@ -211,12 +211,13 @@ impl LauncherView for ShellView {
         true
     }
 
-    fn footer_actions(&self, vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-        if vx.query.trim().is_empty() {
+    fn render_footer_bar(&self, vx: &ViewContext, cx: &App) -> AnyElement {
+        let actions = if vx.query.trim().is_empty() {
             vec![("Close", "Esc")]
         } else {
             vec![("Run", "Enter"), ("Close", "Esc")]
-        }
+        };
+        render_footer_hints(actions, cx)
     }
 }
 

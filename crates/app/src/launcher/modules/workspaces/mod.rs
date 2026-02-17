@@ -7,7 +7,7 @@ use services::CompositorCommand;
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use self::config::WorkspacesConfig;
-use crate::launcher::view::{LauncherView, ViewContext};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 
 /// Workspaces view - displays and switches between workspaces.
 pub struct WorkspacesView {
@@ -128,7 +128,7 @@ impl LauncherView for WorkspacesView {
         }
     }
 
-    fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-        vec![("Switch", "Enter"), ("Close", "Esc")]
+    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
+        render_footer_hints(vec![("Switch", "Enter"), ("Close", "Esc")], cx)
     }
 }

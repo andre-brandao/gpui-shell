@@ -12,7 +12,7 @@ use ui::{
 
 use self::config::ThemesConfig;
 use crate::config::Config;
-use crate::launcher::view::{LauncherView, ViewContext};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 
 const MAX_VISIBLE_THEMES: usize = 50;
 
@@ -110,8 +110,8 @@ impl LauncherView for ThemeView {
         false
     }
 
-    fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-        vec![("Apply", "Enter"), ("Close", "Esc")]
+    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
+        render_footer_hints(vec![("Apply", "Enter"), ("Close", "Esc")], cx)
     }
 }
 

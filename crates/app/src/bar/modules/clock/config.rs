@@ -13,8 +13,8 @@ pub struct ClockConfig {
 impl Default for ClockConfig {
     fn default() -> Self {
         Self {
-            format_horizontal: "%a %H:%M".into(),
-            format_vertical: "%H\n%M".into(),
+            format_horizontal: "%d/%m/%Y %H:%M:%S".into(),
+            format_vertical: "%H\n%M\n%S".into(),
         }
     }
 }

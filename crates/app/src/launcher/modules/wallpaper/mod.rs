@@ -9,7 +9,7 @@ use services::WallpaperCommand;
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use self::config::WallpaperConfig;
-use crate::launcher::view::{LauncherView, ViewContext};
+use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
 
@@ -167,7 +167,7 @@ impl LauncherView for WallpaperView {
         }
     }
 
-    fn footer_actions(&self, _vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-        vec![("Apply", "Enter"), ("Close", "Esc")]
+    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
+        render_footer_hints(vec![("Apply", "Enter"), ("Close", "Esc")], cx)
     }
 }

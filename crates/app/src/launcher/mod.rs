@@ -19,7 +19,7 @@ use gpui::{
 use services::{LauncherRequest, Services};
 use tokio::sync::mpsc::UnboundedReceiver;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
-use view::{InputResult, LauncherView, ViewContext, ViewInput};
+use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 use modules::{HelpView, all_views};
 
 use crate::config::Config;
@@ -142,7 +142,7 @@ impl Launcher {
 
         for view in &self.views {
             let prefix = view.prefix();
-            if query.starts_with(prefix) {
+            if is_prefix(query, prefix) {
                 // Check if this is a better (longer) match
                 if best_match.is_none() || prefix.len() > best_match.unwrap().1 {
                     best_match = Some((view.as_ref(), prefix.len()));
@@ -151,7 +151,7 @@ impl Launcher {
         }
 
         // Also check help view
-        if query.starts_with(self.help_view.prefix()) {
+        if is_prefix(query, self.help_view.prefix()) {
             let prefix_len = self.help_view.prefix().len();
             if best_match.is_none() || prefix_len > best_match.unwrap().1 {
                 best_match = Some((&self.help_view, prefix_len));
@@ -344,7 +344,7 @@ impl Render for Launcher {
         let vx = self.view_context();
         let current_view = self.current_view();
         let item_count = current_view.match_count(&vx, cx);
-        let footer_actions = current_view.footer_actions(&vx);
+        let footer_bar = current_view.render_footer_bar(&vx, cx);
         let selected_index = self.selected_index;
         let header = current_view.render_header(&vx, cx);
         let footer = current_view.render_footer(&vx, cx);
@@ -515,30 +515,7 @@ impl Render for Launcher {
                             ),
                     )
                     // Right side - action hints from view
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(spacing::LG))
-                            .text_size(px(font_size::SM))
-                            .text_color(text_muted)
-                            .children(footer_actions.into_iter().map(|(action, key)| {
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(spacing::SM - 2.0))
-                                    .child(action)
-                                    .child(
-                                        div()
-                                            .px(px(spacing::SM - 2.0))
-                                            .py(px(2.))
-                                            .rounded(px(radius::SM - 1.0))
-                                            .bg(interactive_default)
-                                            .text_size(px(font_size::XS))
-                                            .child(key),
-                                    )
-                            })),
-                    ),
+                    .child(footer_bar),
             )
     }
 }
