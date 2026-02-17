@@ -10,7 +10,6 @@
 pub mod view;
 pub mod modules;
 
-use futures_signals::signal::SignalExt;
 use gpui::{
     App, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, ScrollHandle, Size, Window,
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
@@ -23,7 +22,7 @@ use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 use modules::{HelpView, all_views};
 
 use crate::config::Config;
-use crate::state::AppState;
+use crate::state::{AppState, watch};
 
 actions!(launcher, [Escape, Enter]);
 
@@ -50,47 +49,17 @@ impl Launcher {
         let scroll_handle = ScrollHandle::new();
 
         // Subscribe to service updates for reactive rendering
-        cx.spawn({
-            let mut compositor_signal = compositor.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while compositor_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, compositor.subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
-        cx.spawn({
-            let mut sysinfo_signal = sysinfo.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while sysinfo_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, sysinfo.subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
-        cx.spawn({
-            let mut upower_signal = upower.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while upower_signal.next().await.is_some() {
-                    let should_continue = this.update(cx, |_, cx| cx.notify()).is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, upower.subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
         let launcher_config = Config::global(cx).launcher.clone();
         let views = all_views(&launcher_config);

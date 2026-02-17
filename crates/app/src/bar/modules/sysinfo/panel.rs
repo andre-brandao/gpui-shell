@@ -3,10 +3,10 @@
 //! This panel displays CPU, memory, swap, temperature, network, and disk information.
 
 use super::icons;
-use futures_signals::signal::SignalExt;
-use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
+use crate::state::watch;
+use gpui::{div, prelude::*, px, App, Context, FontWeight, Hsla, ScrollHandle, Window};
 use services::{SysInfoData, SysInfoSubscriber};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{font_size, icon_size, radius, spacing, ActiveTheme};
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanel {
@@ -20,25 +20,10 @@ impl SysInfoPanel {
         let initial_data = subscriber.get();
 
         // Subscribe to updates from the sysinfo service
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.data = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         SysInfoPanel {
             data: initial_data,

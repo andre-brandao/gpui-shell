@@ -1,16 +1,11 @@
-use futures_signals::signal::SignalExt;
-use futures_util::StreamExt;
-use gpui::{
-    App, Context, MouseButton, Render, StatefulInteractiveElement as _, Window, div, prelude::*,
-    px,
-};
+use gpui::{div, prelude::*, px, App, Context, MouseButton, Render, Window};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{font_size, icon_size, radius, spacing, ActiveTheme};
 
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement, toggle_panel};
-use crate::state::AppState;
+use crate::panel::{panel_placement, toggle_panel, PanelConfig};
+use crate::state::{watch, AppState};
 
 use super::dispatch_notification_command;
 use super::pannel::NotificationCenter;
@@ -27,23 +22,10 @@ impl NotificationWidget {
         let subscriber = AppState::notification(cx).clone();
         let data = subscriber.get();
 
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                while let Some(data) = signal.next().await {
-                    let ok = this
-                        .update(cx, |this, cx| {
-                            this.data = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !ok {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         Self {
             slot,

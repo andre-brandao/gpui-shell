@@ -1,13 +1,10 @@
-use futures_signals::signal::SignalExt;
-use futures_util::StreamExt;
-use gpui::{
-    Context, MouseButton, Render, ScrollHandle, StatefulInteractiveElement as _, Window, div, px,
-};
 use gpui::prelude::*;
+use gpui::{div, px, Context, MouseButton, Render, ScrollHandle, Window};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, font_size, radius, spacing};
+use ui::{font_size, radius, spacing, ActiveTheme};
 
 use crate::config::ActiveConfig;
+use crate::state::watch;
 
 use super::card::notification_card_body;
 use super::dispatch_notification_command;
@@ -22,23 +19,10 @@ impl NotificationCenter {
     pub(super) fn new(subscriber: NotificationSubscriber, cx: &mut Context<Self>) -> Self {
         let data = subscriber.get();
         let scroll_handle = ScrollHandle::new();
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                while let Some(data) = signal.next().await {
-                    let ok = this
-                        .update(cx, |this, cx| {
-                            this.data = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !ok {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         Self {
             subscriber,

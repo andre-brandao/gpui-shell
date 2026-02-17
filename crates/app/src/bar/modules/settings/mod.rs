@@ -10,13 +10,12 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use futures_signals::signal::SignalExt;
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{div, prelude::*, px, Context, MouseButton, Window};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
 };
-use ui::{ActiveTheme, radius};
+use ui::{radius, ActiveTheme};
 
 mod config;
 pub use config::SettingsConfig;
@@ -25,8 +24,8 @@ use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
-use crate::panel::{PanelConfig, panel_placement, toggle_panel};
-use crate::state::AppState;
+use crate::panel::{panel_placement, toggle_panel, PanelConfig};
+use crate::state::{watch, AppState};
 
 /// Nerd Font icons for status display.
 mod icons {
@@ -73,109 +72,34 @@ impl Settings {
         let upower = AppState::upower(cx).get();
 
         // Subscribe to audio updates
-        cx.spawn({
-            let audio_service = AppState::audio(cx).clone();
-            let mut signal = audio_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.audio = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::audio(cx).subscribe(), |this, data, cx| {
+            this.audio = data;
+            cx.notify();
+        });
 
         // Subscribe to bluetooth updates
-        cx.spawn({
-            let bluetooth_service = AppState::bluetooth(cx).clone();
-            let mut signal = bluetooth_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.bluetooth = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::bluetooth(cx).subscribe(), |this, data, cx| {
+            this.bluetooth = data;
+            cx.notify();
+        });
 
         // Subscribe to network updates
-        cx.spawn({
-            let network_service = AppState::network(cx).clone();
-            let mut signal = network_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.network = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::network(cx).subscribe(), |this, data, cx| {
+            this.network = data;
+            cx.notify();
+        });
 
         // Subscribe to privacy updates
-        cx.spawn({
-            let privacy_service = AppState::privacy(cx).clone();
-            let mut signal = privacy_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.privacy = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::privacy(cx).subscribe(), |this, data, cx| {
+            this.privacy = data;
+            cx.notify();
+        });
 
         // Subscribe to upower updates
-        cx.spawn({
-            let upower_service = AppState::upower(cx).clone();
-            let mut signal = upower_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let should_continue = this
-                        .update(cx, |this, cx| {
-                            this.upower = data;
-                            cx.notify();
-                        })
-                        .is_ok();
-                    if !should_continue {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::upower(cx).subscribe(), |this, data, cx| {
+            this.upower = data;
+            cx.notify();
+        });
 
         Settings {
             slot,

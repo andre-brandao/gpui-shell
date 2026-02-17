@@ -21,7 +21,6 @@ mod quick_toggles;
 mod sliders;
 mod wifi;
 
-use futures_signals::signal::SignalExt;
 use gpui::{
     App, Context, Entity, FocusHandle, Focusable, KeyBinding, ScrollHandle, Window, actions, div,
     prelude::*, px,
@@ -29,7 +28,7 @@ use gpui::{
 use services::{AudioCommand, BrightnessCommand, NetworkCommand};
 use ui::{ActiveTheme, Slider, SliderEvent, radius, spacing};
 
-use crate::state::AppState;
+use crate::state::{AppState, watch};
 
 // Keyboard actions for password input
 actions!(control_center, [Backspace, Cancel, Submit]);
@@ -133,99 +132,37 @@ impl ControlCenter {
     /// Subscribe to service updates to keep UI in sync
     fn subscribe_to_services(cx: &mut Context<Self>) {
         // Audio - sync volume slider
-        cx.spawn({
-            let audio_service = AppState::audio(cx).clone();
-            let mut signal = audio_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while signal.next().await.is_some() {
-                    let audio = audio_service.get();
-                    let volume = audio.sink_volume as f32;
-                    if this
-                        .update(cx, |control_center, cx| {
-                            control_center.volume_slider.update(cx, |slider, cx| {
-                                slider.set_value(volume, cx);
-                            });
-                            cx.notify();
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::audio(cx).subscribe(), |control_center, data, cx| {
+            let volume = data.sink_volume as f32;
+            control_center.volume_slider.update(cx, |slider, cx| {
+                slider.set_value(volume, cx);
+            });
+            cx.notify();
+        });
 
         // Bluetooth
-        cx.spawn({
-            let bluetooth_service = AppState::bluetooth(cx).clone();
-            let mut signal = bluetooth_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while signal.next().await.is_some() {
-                    if this.update(cx, |_, cx| cx.notify()).is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::bluetooth(cx).subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
         // Brightness - sync brightness slider
-        cx.spawn({
-            let brightness_service = AppState::brightness(cx).clone();
-            let mut signal = brightness_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while signal.next().await.is_some() {
-                    let brightness = brightness_service.get();
-                    let percent = brightness.percentage() as f32;
-                    if this
-                        .update(cx, |control_center, cx| {
-                            control_center.brightness_slider.update(cx, |slider, cx| {
-                                slider.set_value(percent, cx);
-                            });
-                            cx.notify();
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::brightness(cx).subscribe(), |control_center, data, cx| {
+            let percent = data.percentage() as f32;
+            control_center.brightness_slider.update(cx, |slider, cx| {
+                slider.set_value(percent, cx);
+            });
+            cx.notify();
+        });
 
         // Network
-        cx.spawn({
-            let network_service = AppState::network(cx).clone();
-            let mut signal = network_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while signal.next().await.is_some() {
-                    if this.update(cx, |_, cx| cx.notify()).is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::network(cx).subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
         // UPower
-        cx.spawn({
-            let upower_service = AppState::upower(cx).clone();
-            let mut signal = upower_service.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while signal.next().await.is_some() {
-                    if this.update(cx, |_, cx| cx.notify()).is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, AppState::upower(cx).subscribe(), |_, _, cx| {
+            cx.notify();
+        });
     }
 
     /// Toggle a section's expanded state

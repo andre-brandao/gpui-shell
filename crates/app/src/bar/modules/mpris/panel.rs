@@ -1,11 +1,11 @@
 //! MPRIS panel with a list of players and transport controls.
 
-use futures_signals::signal::SignalExt;
 use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::config::ActiveConfig;
+use crate::state::watch;
 mod icons {
     pub const HEADER: &str = "󰕾";
     pub const PLAY: &str = "󰐊";
@@ -26,22 +26,10 @@ impl MprisPanel {
     pub fn new(subscriber: MprisSubscriber, cx: &mut Context<Self>) -> Self {
         let data = subscriber.get();
 
-        cx.spawn({
-            let mut signal = subscriber.subscribe().to_stream();
-            async move |this, cx| {
-                use futures_util::StreamExt;
-                while let Some(data) = signal.next().await {
-                    let result = this.update(cx, |this, cx| {
-                        this.data = data;
-                        cx.notify();
-                    });
-                    if result.is_err() {
-                        break;
-                    }
-                }
-            }
-        })
-        .detach();
+        watch(cx, subscriber.subscribe(), |this, data, cx| {
+            this.data = data;
+            cx.notify();
+        });
 
         Self { subscriber, data }
     }
