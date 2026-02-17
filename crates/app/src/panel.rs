@@ -4,12 +4,12 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, Point, Render, Size, WindowBackgroundAppearance, WindowBounds,
-    WindowKind, WindowOptions, layer_shell::*, prelude::*, px,
+    layer_shell::*, prelude::*, px, AnyWindowHandle, App, Bounds, Point, Render, Size,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
 };
 use std::sync::Mutex;
 
-use crate::bar::widgets::WidgetSlot;
+use crate::bar::modules::WidgetSlot;
 use crate::config::BarPosition;
 
 /// Panel configuration for positioning and sizing.

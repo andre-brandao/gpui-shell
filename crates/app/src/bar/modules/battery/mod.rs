@@ -1,5 +1,8 @@
 //! Battery widget that displays battery status using the UPower service.
 
+mod config;
+pub use config::BatteryConfig;
+
 use futures_signals::signal::SignalExt;
 use gpui::{Context, Window, div, prelude::*, px};
 use services::{BatteryState, UPowerData};
@@ -101,8 +104,17 @@ impl Render for Battery {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
 
-        let icon = self.battery_icon();
-        let text = self.battery_text(is_vertical);
+        let config = &cx.config().bar.modules.battery;
+        let icon = if config.show_icon {
+            Some(self.battery_icon())
+        } else {
+            None
+        };
+        let text = if config.show_percentage {
+            self.battery_text(is_vertical)
+        } else {
+            String::new()
+        };
         let icon_size = style::icon(is_vertical);
         let text_size = style::label(is_vertical);
 
@@ -152,12 +164,14 @@ impl Render for Battery {
                 .py(px(style::CHIP_PADDING_Y))
                 .rounded(px(radius::SM))
                 // Battery icon
-                .child(
-                    div()
-                        .text_size(px(icon_size))
-                        .text_color(icon_color)
-                        .child(icon),
-                )
+                .when_some(icon, |el, icon| {
+                    el.child(
+                        div()
+                            .text_size(px(icon_size))
+                            .text_color(icon_color)
+                            .child(icon),
+                    )
+                })
                 // Battery percentage
                 .when(!text.is_empty(), |this| {
                     this.child(
@@ -177,12 +191,14 @@ impl Render for Battery {
                 .py(px(style::CHIP_PADDING_Y))
                 .rounded(px(radius::SM))
                 // Battery icon
-                .child(
-                    div()
-                        .text_size(px(icon_size))
-                        .text_color(icon_color)
-                        .child(icon),
-                )
+                .when_some(icon, |el, icon| {
+                    el.child(
+                        div()
+                            .text_size(px(icon_size))
+                            .text_color(icon_color)
+                            .child(icon),
+                    )
+                })
                 // Battery percentage
                 .when(!text.is_empty(), |this| {
                     this.child(

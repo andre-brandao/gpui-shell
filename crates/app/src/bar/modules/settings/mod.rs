@@ -18,8 +18,11 @@ use services::{
 };
 use ui::{ActiveTheme, radius};
 
+mod config;
+pub use config::SettingsConfig;
+
 use super::style;
-use crate::bar::widgets::WidgetSlot;
+use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::ControlCenter;
 use crate::panel::{PanelConfig, panel_placement, toggle_panel};

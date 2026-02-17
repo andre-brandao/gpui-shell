@@ -9,7 +9,7 @@ use ui::{
 };
 
 use self::config::HelpConfig;
-use crate::bar::widgets::sysinfo::icons;
+use crate::bar::modules::sysinfo::icons;
 use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Help view - shows available commands and system status.

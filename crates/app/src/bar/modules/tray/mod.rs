@@ -1,5 +1,8 @@
 //! System tray widget displaying StatusNotifierItem icons.
 
+mod config;
+pub use config::TrayConfig;
+
 use crate::panel::{PanelConfig, toggle_panel};
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
@@ -10,7 +13,7 @@ use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, Tra
 use ui::{ActiveTheme, font_size, radius, spacing};
 
 use super::style;
-use crate::bar::widgets::WidgetSlot;
+use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
 use crate::state::AppState;
@@ -88,6 +91,9 @@ impl Render for Tray {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
         let items: Vec<_> = self.data.items.clone();
+        let config = &cx.config().bar.modules.tray;
+        let icon_size = config.icon_size;
+        let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
 
         // Pre-compute colors for closures
         let interactive_default = theme.interactive.default;
@@ -121,7 +127,7 @@ impl Render for Tray {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .size(px(style::TRAY_ITEM_SIZE))
+                    .size(px(item_size))
                     .rounded(px(radius::SM))
                     .cursor_pointer()
                     .bg(interactive_default)
@@ -135,7 +141,7 @@ impl Render for Tray {
                     )
                     .child(
                         div()
-                            .text_size(px(style::icon(is_vertical)))
+                            .text_size(px(icon_size))
                             .text_color(if has_menu { text_primary } else { text_muted })
                             .child(icon_char),
                     )

@@ -1,5 +1,8 @@
 //! Workspaces widget for displaying and switching compositor workspaces.
 
+mod config;
+pub use config::WorkspacesConfig;
+
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
@@ -62,17 +65,39 @@ impl Workspaces {
         }
     }
 
-    fn workspace_label(ws: &services::Workspace, is_vertical: bool) -> String {
+    fn workspace_label(
+        ws: &services::Workspace,
+        is_vertical: bool,
+        show_numbers: bool,
+        show_icons: bool,
+    ) -> String {
+        if !show_numbers && !show_icons {
+            return String::new();
+        }
+
+        let name = ws.name.trim();
+        let is_numeric_name = !name.is_empty() && name.chars().all(|ch| ch.is_ascii_digit());
+
+        if show_icons && !show_numbers {
+            if name.is_empty() || is_numeric_name {
+                return String::new();
+            }
+            return name.chars().take(3).collect::<String>().to_uppercase();
+        }
+
+        if show_numbers && !show_icons {
+            return ws.id.to_string();
+        }
+
         if is_vertical {
             return ws.id.to_string();
         }
 
-        let name = ws.name.trim();
         if name.is_empty() {
             return ws.id.to_string();
         }
 
-        if name.chars().all(|ch| ch.is_ascii_digit()) {
+        if is_numeric_name {
             name.to_string()
         } else {
             name.chars().take(3).collect::<String>().to_uppercase()
@@ -85,6 +110,9 @@ impl Render for Workspaces {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
         let active_workspace_id = self.state.active_workspace_id;
+        let config = &cx.config().bar.modules.workspaces;
+        let show_numbers = config.show_numbers;
+        let show_icons = config.show_icons;
 
         // Pre-compute colors for closures
         let accent_primary = theme.accent.primary;
@@ -122,7 +150,8 @@ impl Render for Workspaces {
                         let workspace_id = ws.id;
                         let is_active = active_workspace_id == Some(ws.id);
                         let has_windows = ws.windows > 0;
-                        let label = Self::workspace_label(ws, is_vertical);
+                        let label =
+                            Self::workspace_label(ws, is_vertical, show_numbers, show_icons);
 
                         div()
                             .id(format!("workspace-{}", ws.id))
@@ -167,18 +196,20 @@ impl Render for Workspaces {
                                     this.focus_workspace(workspace_id);
                                 }),
                             )
-                            .child(
-                                div()
-                                    .text_size(px(style::label(is_vertical)))
-                                    .text_color(if is_active {
-                                        bg_primary
-                                    } else if has_windows {
-                                        text_secondary
-                                    } else {
-                                        text_muted
-                                    })
-                                    .child(label),
-                            )
+                            .when(!label.is_empty(), |this| {
+                                this.child(
+                                    div()
+                                        .text_size(px(style::label(is_vertical)))
+                                        .text_color(if is_active {
+                                            bg_primary
+                                        } else if has_windows {
+                                            text_secondary
+                                        } else {
+                                            text_muted
+                                        })
+                                        .child(label),
+                                )
+                            })
                     }),
             )
     }

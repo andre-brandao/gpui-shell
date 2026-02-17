@@ -1,8 +1,11 @@
 //! Launcher button widget for opening the application launcher.
 
+mod config;
+pub use config::LauncherBtnConfig;
+
 use crate::launcher;
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
-use ui::{ActiveTheme, radius};
+use gpui::{div, prelude::*, px, Context, MouseButton, Window};
+use ui::{radius, ActiveTheme};
 
 use super::style;
 use crate::config::ActiveConfig;
@@ -23,6 +26,12 @@ impl Render for LauncherBtn {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
+        let config = &cx.config().bar.modules.launcher_btn;
+        let icon = if config.icon.trim().is_empty() {
+            LAUNCHER_ICON.to_string()
+        } else {
+            config.icon.clone()
+        };
 
         // Pre-compute colors for closures
         let interactive_default = theme.interactive.default;
@@ -53,7 +62,7 @@ impl Render for LauncherBtn {
                     div()
                         .text_size(px(style::icon(is_vertical)))
                         .text_color(text_primary)
-                        .child(LAUNCHER_ICON),
+                        .child(icon),
                 ),
             )
     }

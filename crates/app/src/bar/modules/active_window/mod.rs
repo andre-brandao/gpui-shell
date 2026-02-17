@@ -1,5 +1,8 @@
 //! Active window widget displaying the title of the currently focused window.
 
+mod config;
+pub use config::ActiveWindowConfig;
+
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, Render, Window, div, prelude::*, px};
@@ -9,9 +12,6 @@ use ui::{ActiveTheme, radius, spacing};
 use super::style;
 use crate::config::ActiveConfig;
 use crate::state::AppState;
-
-/// Maximum characters to display before truncating the title.
-const MAX_TITLE_LENGTH_HORIZONTAL: usize = 64;
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
@@ -49,7 +49,7 @@ impl ActiveWindow {
     }
 
     /// Get the display title, truncated if necessary.
-    fn display_title(&self) -> String {
+    fn display_title(&self, max_length: usize) -> String {
         let title = self
             .state
             .active_window
@@ -61,7 +61,11 @@ impl ActiveWindow {
             return String::new();
         }
 
-        if let Some((cutoff, _)) = title.char_indices().nth(MAX_TITLE_LENGTH_HORIZONTAL) {
+        if max_length == 0 {
+            return title.to_string();
+        }
+
+        if let Some((cutoff, _)) = title.char_indices().nth(max_length) {
             format!("{}…", &title[..cutoff])
         } else {
             title.to_string()
@@ -186,8 +190,13 @@ impl Render for ActiveWindow {
             return div().id("active-window");
         }
 
-        let title = self.display_title();
-        let icon = self.window_icon();
+        let config = &cx.config().bar.modules.active_window;
+        let title = self.display_title(config.max_length);
+        let icon = if config.show_app_icon {
+            self.window_icon()
+        } else {
+            None
+        };
         let vertical_lines = self.vertical_lines();
         let interactive_default = theme.interactive.default;
         let border_subtle = theme.border.subtle;

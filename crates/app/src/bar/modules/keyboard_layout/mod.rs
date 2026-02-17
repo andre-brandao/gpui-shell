@@ -1,5 +1,8 @@
 //! Keyboard layout widget for displaying and cycling keyboard layouts.
 
+mod config;
+pub use config::KeyboardLayoutConfig;
+
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{Context, MouseButton, Window, div, prelude::*, px};
@@ -114,13 +117,47 @@ impl KeyboardLayout {
 
         short.to_uppercase()
     }
+
+    fn flag_for_layout(&self) -> Option<&'static str> {
+        match self.short_layout_name().as_str() {
+            "EN" => Some("🇺🇸"),
+            "RU" => Some("🇷🇺"),
+            "DE" => Some("🇩🇪"),
+            "FR" => Some("🇫🇷"),
+            "ES" => Some("🇪🇸"),
+            "IT" => Some("🇮🇹"),
+            "PT" => Some("🇵🇹"),
+            "JP" => Some("🇯🇵"),
+            "CN" => Some("🇨🇳"),
+            "KR" => Some("🇰🇷"),
+            "AR" => Some("🇸🇦"),
+            "HE" => Some("🇮🇱"),
+            "UA" => Some("🇺🇦"),
+            "PL" => Some("🇵🇱"),
+            "CZ" => Some("🇨🇿"),
+            "NL" => Some("🇳🇱"),
+            "SE" => Some("🇸🇪"),
+            "NO" => Some("🇳🇴"),
+            "DK" => Some("🇩🇰"),
+            "FI" => Some("🇫🇮"),
+            "TR" => Some("🇹🇷"),
+            "GR" => Some("🇬🇷"),
+            _ => None,
+        }
+    }
 }
 
 impl Render for KeyboardLayout {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
+        let config = &cx.config().bar.modules.keyboard_layout;
         let short_name = self.short_layout_name();
+        let icon = if config.show_flag {
+            self.flag_for_layout().unwrap_or(KEYBOARD_ICON)
+        } else {
+            KEYBOARD_ICON
+        };
 
         // Pre-compute colors for closures
         let interactive_default = theme.interactive.default;
@@ -155,7 +192,7 @@ impl Render for KeyboardLayout {
                 div()
                     .text_size(px(icon_size))
                     .text_color(text_secondary)
-                    .child(KEYBOARD_ICON),
+                    .child(icon),
             )
             .child(
                 div()

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use ui::Theme;
 
-pub use bar::{BarConfig, BarPosition};
+pub use bar::{BarConfig, BarPosition, ModulesConfig};
 pub use launcher::LauncherConfig;
 pub use osd::{OsdConfig, OsdPosition};
 

@@ -8,8 +8,11 @@ use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
 use services::SysInfoData;
 use ui::{ActiveTheme, radius};
 
+mod config;
+pub use config::SysInfoConfig;
+
 use super::style;
-use crate::bar::widgets::WidgetSlot;
+use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
 use crate::state::AppState;
@@ -137,6 +140,7 @@ impl Render for SysInfo {
         let memory_text = Self::usage_text(memory_usage, is_vertical);
         let cpu_color = theme.status.from_percentage(cpu_usage);
         let memory_color = theme.status.from_percentage(memory_usage);
+        let config = &cx.config().bar.modules.sysinfo;
 
         // Pre-compute colors for closures
         let interactive_default = theme.interactive.default;
@@ -164,45 +168,56 @@ impl Render for SysInfo {
                     this.toggle_panel(cx);
                 }),
             )
-            // CPU usage
-            .child(
-                div()
-                    .flex()
-                    .when(is_vertical, |this| this.flex_col())
-                    .items_center()
-                    .gap(px(style::CHIP_GAP))
-                    .child(
-                        div()
-                            .text_size(px(icon_size))
-                            .text_color(cpu_color)
-                            .child(cpu_icon),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(text_size))
-                            .text_color(cpu_color)
-                            .child(cpu_text),
-                    ),
-            )
-            // Memory usage
-            .child(
-                div()
-                    .flex()
-                    .when(is_vertical, |this| this.flex_col())
-                    .items_center()
-                    .gap(px(style::CHIP_GAP))
-                    .child(
-                        div()
-                            .text_size(px(icon_size))
-                            .text_color(memory_color)
-                            .child(memory_icon),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(text_size))
-                            .text_color(memory_color)
-                            .child(memory_text),
-                    ),
-            )
+            .children({
+                let mut sections: Vec<gpui::AnyElement> = Vec::new();
+
+                let stat = |icon: &'static str, text: String, color: gpui::Hsla| {
+                    div()
+                        .flex()
+                        .when(is_vertical, |this| this.flex_col())
+                        .items_center()
+                        .gap(px(style::CHIP_GAP))
+                        .child(
+                            div()
+                                .text_size(px(icon_size))
+                                .text_color(color)
+                                .child(icon),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(text_size))
+                                .text_color(color)
+                                .child(text),
+                        )
+                        .into_any_element()
+                };
+
+                if config.show_cpu {
+                    sections.push(stat(cpu_icon, cpu_text, cpu_color));
+                }
+
+                if config.show_memory {
+                    sections.push(stat(memory_icon, memory_text, memory_color));
+                }
+
+                if config.show_temp {
+                    if let Some(temp) = self.data.temperature {
+                        let temp_icon = if temp >= 70 {
+                            icons::TEMP_HOT
+                        } else {
+                            icons::TEMP
+                        };
+                        let temp_text = if is_vertical {
+                            format!("{temp}°")
+                        } else {
+                            format!("{temp}°C")
+                        };
+                        let temp_color = theme.status.from_temperature(temp);
+                        sections.push(stat(temp_icon, temp_text, temp_color));
+                    }
+                }
+
+                sections
+            })
     }
 }

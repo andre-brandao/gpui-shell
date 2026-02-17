@@ -1,4 +1,4 @@
 mod bar;
-pub mod widgets;
+pub mod modules;
 
 pub use bar::*;

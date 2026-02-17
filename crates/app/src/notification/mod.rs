@@ -12,7 +12,7 @@ use gpui::{
 use services::{Notification, NotificationCommand, NotificationData, NotificationSubscriber};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
-use crate::bar::widgets::WidgetSlot;
+use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::{PanelConfig, panel_placement, toggle_panel};
 use crate::state::AppState;

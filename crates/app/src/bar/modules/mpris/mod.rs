@@ -1,12 +1,15 @@
 //! MPRIS widget showing active media state and opening a players panel.
 
+mod config;
+pub use config::MprisConfig;
+
 use futures_signals::signal::SignalExt;
 use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
 use ui::{ActiveTheme, radius};
 
 use super::style;
-use crate::bar::widgets::WidgetSlot;
+use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::{PanelConfig, panel_placement, toggle_panel};
 use crate::state::AppState;
@@ -115,6 +118,7 @@ impl Render for Mpris {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let is_vertical = cx.config().bar.is_vertical();
+        let config = &cx.config().bar.modules.mpris;
         let icon = self.icon();
         let label = self.label();
 
@@ -133,7 +137,7 @@ impl Render for Mpris {
             .gap(px(style::CHIP_GAP))
             .px(px(style::chip_padding_x(is_vertical)))
             .py(px(style::CHIP_PADDING_Y))
-            .max_w(px(if is_vertical { 80.0 } else { 220.0 }))
+            .max_w(px(config.max_width))
             .rounded(px(radius::SM))
             .cursor_pointer()
             .bg(interactive_default)

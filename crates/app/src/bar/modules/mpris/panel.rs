@@ -5,6 +5,7 @@ use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, 
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
+use crate::config::ActiveConfig;
 mod icons {
     pub const HEADER: &str = "󰕾";
     pub const PLAY: &str = "󰐊";
@@ -166,6 +167,7 @@ impl MprisPanel {
         };
         let service_name = player.service.clone();
         let subscriber = self.subscriber.clone();
+        let show_cover = cx.config().bar.modules.mpris.show_cover;
 
         let status_color = match player.state {
             PlaybackStatus::Playing => theme.status.success,
@@ -221,37 +223,56 @@ impl MprisPanel {
                             .items_center()
                             .gap(px(spacing::SM))
                             .child(
-                                player
-                                    .art_url
-                                    .clone()
-                                    .map(|source| {
-                                        div()
-                                            .size(px(34.0))
-                                            .rounded(px(radius::SM))
-                                            .overflow_hidden()
-                                            .border_1()
-                                            .border_color(theme.border.subtle)
-                                            .child(img(source).size_full())
-                                            .into_any_element()
-                                    })
-                                    .unwrap_or_else(|| {
-                                        div()
-                                            .size(px(34.0))
-                                            .rounded(px(radius::SM))
-                                            .bg(theme.bg.tertiary)
-                                            .border_1()
-                                            .border_color(theme.border.subtle)
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .child(
-                                                div()
-                                                    .text_size(px(icon_size::SM))
-                                                    .text_color(theme.text.primary)
-                                                    .child(icons::PLAYER),
-                                            )
-                                            .into_any_element()
-                                    }),
+                                if show_cover {
+                                    player
+                                        .art_url
+                                        .clone()
+                                        .map(|source| {
+                                            div()
+                                                .size(px(34.0))
+                                                .rounded(px(radius::SM))
+                                                .overflow_hidden()
+                                                .border_1()
+                                                .border_color(theme.border.subtle)
+                                                .child(img(source).size_full())
+                                                .into_any_element()
+                                        })
+                                        .unwrap_or_else(|| {
+                                            div()
+                                                .size(px(34.0))
+                                                .rounded(px(radius::SM))
+                                                .bg(theme.bg.tertiary)
+                                                .border_1()
+                                                .border_color(theme.border.subtle)
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .child(
+                                                    div()
+                                                        .text_size(px(icon_size::SM))
+                                                        .text_color(theme.text.primary)
+                                                        .child(icons::PLAYER),
+                                                )
+                                                .into_any_element()
+                                        })
+                                } else {
+                                    div()
+                                        .size(px(34.0))
+                                        .rounded(px(radius::SM))
+                                        .bg(theme.bg.tertiary)
+                                        .border_1()
+                                        .border_color(theme.border.subtle)
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .child(
+                                            div()
+                                                .text_size(px(icon_size::SM))
+                                                .text_color(theme.text.primary)
+                                                .child(icons::PLAYER),
+                                        )
+                                        .into_any_element()
+                                },
                             )
                             .child(
                                 div()
