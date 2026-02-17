@@ -1,3 +1,5 @@
+//! OSD module configuration.
+
 use serde::{Deserialize, Serialize};
 
 /// OSD screen position.

@@ -2,7 +2,6 @@
 
 mod bar;
 pub mod launcher;
-mod osd;
 mod persistence;
 mod theme_persistence;
 
@@ -18,9 +17,9 @@ use tokio::sync::mpsc;
 use ui::Theme;
 
 pub use bar::{BarConfig, BarPosition, ModulesConfig};
-pub use crate::notification::NotificationConfig;
+pub use crate::notification::{NotificationConfig, NotificationPopupPosition};
 pub use launcher::LauncherConfig;
-pub use osd::{OsdConfig, OsdPosition};
+pub use crate::osd::{OsdConfig, OsdPosition};
 
 /// Root application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

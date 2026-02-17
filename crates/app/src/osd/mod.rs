@@ -6,6 +6,10 @@
 //! Supports four positions: Top, Bottom, Left, Right.
 //! Left/Right use a vertical layout; Top/Bottom use a horizontal layout.
 
+mod config;
+
+pub use config::{OsdConfig, OsdPosition};
+
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -17,7 +21,7 @@ use gpui::{
 };
 use ui::{ActiveTheme, icon_size, radius, spacing};
 
-use crate::config::{Config, OsdPosition};
+use crate::config::Config;
 use crate::control_center::icons;
 use crate::state::AppState;
 

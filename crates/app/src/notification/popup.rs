@@ -14,7 +14,7 @@ use crate::config::ActiveConfig;
 use crate::state::AppState;
 
 use super::card::notification_card_body;
-use super::config::NotificationConfig;
+use super::config::{NotificationConfig, NotificationPopupPosition};
 use super::dispatch_notification_command;
 
 static POPUP_STATE: Mutex<Option<PopupWindowState>> = Mutex::new(None);
@@ -97,6 +97,7 @@ impl Render for NotificationPopupStack {
 }
 
 fn popup_window_options(config: &NotificationConfig) -> WindowOptions {
+    let margin = popup_margin(config);
     WindowOptions {
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
@@ -108,19 +109,57 @@ fn popup_window_options(config: &NotificationConfig) -> WindowOptions {
         kind: WindowKind::LayerShell(LayerShellOptions {
             namespace: "notification-popup".to_string(),
             layer: Layer::Overlay,
-            anchor: Anchor::TOP | Anchor::RIGHT,
+            anchor: popup_anchor(config.popup_position),
             exclusive_zone: None,
             margin: Some((
-                px(config.popup_margin_top),
-                px(config.popup_margin_right),
-                px(config.popup_margin_bottom),
-                px(config.popup_margin_left),
+                px(margin.0),
+                px(margin.1),
+                px(margin.2),
+                px(margin.3),
             )),
             keyboard_interactivity: KeyboardInteractivity::None,
             ..Default::default()
         }),
         focus: false,
         ..Default::default()
+    }
+}
+
+fn popup_anchor(position: NotificationPopupPosition) -> Anchor {
+    match position {
+        NotificationPopupPosition::TopLeft => Anchor::TOP | Anchor::LEFT,
+        NotificationPopupPosition::TopRight => Anchor::TOP | Anchor::RIGHT,
+        NotificationPopupPosition::BottomLeft => Anchor::BOTTOM | Anchor::LEFT,
+        NotificationPopupPosition::BottomRight => Anchor::BOTTOM | Anchor::RIGHT,
+    }
+}
+
+fn popup_margin(config: &NotificationConfig) -> (f32, f32, f32, f32) {
+    match config.popup_position {
+        NotificationPopupPosition::TopLeft => (
+            config.popup_margin_top,
+            0.0,
+            0.0,
+            config.popup_margin_left,
+        ),
+        NotificationPopupPosition::TopRight => (
+            config.popup_margin_top,
+            config.popup_margin_right,
+            0.0,
+            0.0,
+        ),
+        NotificationPopupPosition::BottomLeft => (
+            0.0,
+            0.0,
+            config.popup_margin_bottom,
+            config.popup_margin_left,
+        ),
+        NotificationPopupPosition::BottomRight => (
+            0.0,
+            config.popup_margin_right,
+            config.popup_margin_bottom,
+            0.0,
+        ),
     }
 }
 

@@ -6,7 +6,7 @@ mod pannel;
 mod popup;
 mod widget;
 
-pub use config::NotificationConfig;
+pub use config::{NotificationConfig, NotificationPopupPosition};
 pub use popup::init;
 pub use widget::NotificationWidget;
 

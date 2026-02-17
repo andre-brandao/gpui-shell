@@ -2,12 +2,24 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Notification popup screen position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NotificationPopupPosition {
+    TopLeft,
+    #[default]
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
 /// Notification module configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationConfig {
     pub center_width: f32,
     pub center_height: f32,
+    pub popup_position: NotificationPopupPosition,
     pub popup_width: f32,
     pub popup_height: f32,
     pub popup_margin_top: f32,
@@ -25,6 +37,7 @@ impl Default for NotificationConfig {
         Self {
             center_width: 420.0,
             center_height: 540.0,
+            popup_position: NotificationPopupPosition::TopRight,
             popup_width: 360.0,
             popup_height: 320.0,
             popup_margin_top: 0.0,
