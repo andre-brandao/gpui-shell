@@ -2,10 +2,10 @@
 //!
 //! Clicking the widget opens a detailed system information panel.
 
-use crate::panel::{PanelConfig, toggle_panel};
-use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
+use crate::panel::{toggle_panel, PanelConfig};
+use gpui::{div, prelude::*, px, App, Context, MouseButton, Window};
 use services::SysInfoData;
-use ui::{ActiveTheme, radius};
+use ui::{radius, ActiveTheme};
 
 mod config;
 pub use config::SysInfoConfig;
@@ -14,8 +14,8 @@ use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement;
-use crate::state::AppState;
 use crate::state::watch;
+use crate::state::AppState;
 
 mod panel;
 pub use panel::SysInfoPanel;
@@ -183,7 +183,7 @@ impl Render for SysInfo {
                             icons::TEMP
                         };
                         let temp_text = if is_vertical {
-                            format!("{temp}°")
+                            format!("{temp}")
                         } else {
                             format!("{temp}°C")
                         };
