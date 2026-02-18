@@ -4,17 +4,18 @@ pub mod config;
 
 use std::sync::Mutex;
 
-use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
-use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
+use gpui::{div, prelude::*, px, AnyElement, App, FontWeight};
+use services::{load_stylix_scheme, ThemeProvider, ThemeRepository, THEME_PROVIDERS};
 use ui::{
-    ActiveTheme, Base16Colors, Theme, ThemeScheme, builtin_schemes, font_size, radius, spacing,
+    builtin_schemes, font_size, radius, spacing, ActiveTheme, Base16Colors, Theme, ThemeScheme,
 };
 
 use self::config::ThemesConfig;
 use crate::config::Config;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 
 const MAX_VISIBLE_THEMES: usize = 50;
+const THEME_ICON: &str = "󰏘";
 
 static CACHED_SCHEMES: Mutex<Option<Vec<ThemeScheme>>> = Mutex::new(None);
 
@@ -48,7 +49,7 @@ impl LauncherView for ThemeView {
     }
 
     fn icon(&self) -> &'static str {
-        ""
+        THEME_ICON
     }
 
     fn description(&self) -> &'static str {
@@ -222,7 +223,7 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                     div()
                         .text_size(px(font_size::LG))
                         .text_color(accent_primary)
-                        .child(""),
+                        .child(THEME_ICON),
                 )
                 .child(
                     div()

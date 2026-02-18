@@ -2,10 +2,10 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*, px};
+use gpui::{div, prelude::*, px, AnyElement, App};
 use ui::{
-    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, font_size,
-    icon_size, spacing,
+    font_size, icon_size, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem,
+    ListItemSpacing,
 };
 
 use self::config::HelpConfig;
@@ -208,7 +208,7 @@ impl LauncherView for HelpView {
     }
 
     fn icon(&self) -> &'static str {
-        ""
+        "󰋗"
     }
 
     fn description(&self) -> &'static str {

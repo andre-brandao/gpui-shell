@@ -287,6 +287,41 @@ impl Launcher {
     fn placeholder(&self) -> String {
         "Search apps or type @, $, !, ? for commands...".to_string()
     }
+
+    fn prefix_hint_label(name: &str) -> String {
+        match name {
+            "Applications" => "apps".to_string(),
+            "Web Search" => "web".to_string(),
+            _ => name.to_lowercase(),
+        }
+    }
+
+    fn format_prefix_hint(prefix: &str, name: &str) -> Option<String> {
+        let prefix = prefix.trim();
+        if prefix.is_empty() {
+            return None;
+        }
+
+        let label = Self::prefix_hint_label(name);
+        let spacer = if prefix.chars().count() > 1 { " " } else { "" };
+        Some(format!("{prefix}{spacer}{label}"))
+    }
+
+    fn footer_prefix_hints(&self) -> String {
+        let mut hints: Vec<String> = self
+            .views
+            .iter()
+            .filter_map(|view| Self::format_prefix_hint(view.prefix(), view.name()))
+            .collect();
+
+        if let Some(help_hint) =
+            Self::format_prefix_hint(self.help_view.prefix(), self.help_view.name())
+        {
+            hints.push(help_hint);
+        }
+
+        hints.join(" · ")
+    }
 }
 
 impl Focusable for Launcher {
@@ -305,6 +340,7 @@ impl Render for Launcher {
         let theme = cx.theme();
 
         let view_name = self.current_view_name().to_string();
+        let prefix_hints = self.footer_prefix_hints();
         let placeholder = self.placeholder();
 
         // Compute item count and clamp selected index before borrowing self
@@ -541,13 +577,7 @@ impl Render for Launcher {
                                     .flex()
                                     .items_center()
                                     .gap(px(4.))
-                                    .child("@apps")
-                                    .child("·")
-                                    .child("$shell")
-                                    .child("·")
-                                    .child("!web")
-                                    .child("·")
-                                    .child("?help"),
+                                    .child(prefix_hints),
                             ),
                     )
                     // Right side - action hints from view

@@ -2,12 +2,12 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*, px};
+use gpui::{div, prelude::*, px, AnyElement, App};
 use services::CompositorCommand;
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use self::config::WorkspacesConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 use crate::state::AppState;
 
 /// Workspaces view - displays and switches between workspaces.
@@ -59,7 +59,7 @@ impl LauncherView for WorkspacesView {
     }
 
     fn icon(&self) -> &'static str {
-        ""
+        "󰍉"
     }
 
     fn description(&self) -> &'static str {
@@ -86,6 +86,7 @@ impl LauncherView for WorkspacesView {
         let ws_id = ws.id;
         let compositor_clone = AppState::compositor(cx).clone();
         let interactive_default = theme.interactive.default;
+        let icon = self.icon();
 
         ListItem::new(format!("ws-{}", ws.id))
             .spacing(ListItemSpacing::Sparse)
@@ -100,7 +101,7 @@ impl LauncherView for WorkspacesView {
                     .items_center()
                     .justify_center()
                     .text_size(px(14.))
-                    .child(""),
+                    .child(icon),
             )
             .on_click(move |_, _, _cx| {
                 let _ = compositor_clone.dispatch(CompositorCommand::FocusWorkspace(ws_id));

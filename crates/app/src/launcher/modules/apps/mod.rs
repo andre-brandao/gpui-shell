@@ -2,7 +2,7 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, img, prelude::*, px};
+use gpui::{div, img, prelude::*, px, AnyElement, App};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use self::config::AppsConfig;
@@ -32,7 +32,7 @@ impl LauncherView for AppsView {
     }
 
     fn icon(&self) -> &'static str {
-        ""
+        "󰀻"
     }
 
     fn description(&self) -> &'static str {
@@ -58,6 +58,7 @@ impl LauncherView for AppsView {
         let theme = cx.theme();
         let exec = app.exec.clone();
         let interactive_default = theme.interactive.default;
+        let fallback_icon = self.icon();
         ListItem::new(format!("app-{}", app.name))
             .spacing(ListItemSpacing::Sparse)
             .toggle_state(selected)
@@ -73,8 +74,10 @@ impl LauncherView for AppsView {
                     .when_some(app.icon_path.clone(), |el, path| {
                         el.child(img(path).size_full())
                     })
-                    .when(app.icon_path.is_none(), |el| {
-                        el.bg(interactive_default).text_size(px(14.)).child("")
+                    .when(app.icon_path.is_none(), move |el| {
+                        el.bg(interactive_default)
+                            .text_size(px(14.))
+                            .child(fallback_icon)
                     }),
             )
             .on_click(move |_, _, _cx| {

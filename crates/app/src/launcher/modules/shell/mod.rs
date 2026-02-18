@@ -2,11 +2,11 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, font_size, radius, spacing};
+use gpui::{div, prelude::*, px, rgba, AnyElement, App};
+use ui::{font_size, radius, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize};
 
 use self::config::ShellConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 
 /// Shell view - executes shell commands in a terminal.
 pub struct ShellView {
@@ -33,7 +33,7 @@ impl LauncherView for ShellView {
     }
 
     fn icon(&self) -> &'static str {
-        ""
+        "󰆍"
     }
 
     fn description(&self) -> &'static str {
@@ -41,7 +41,11 @@ impl LauncherView for ShellView {
     }
 
     fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        if vx.query.trim().is_empty() { 0 } else { 1 }
+        if vx.query.trim().is_empty() {
+            0
+        } else {
+            1
+        }
     }
 
     fn render_item(
@@ -63,6 +67,7 @@ impl LauncherView for ShellView {
         let interactive_default = theme.interactive.default;
         let accent_selection = theme.accent.selection;
         let interactive_hover = theme.interactive.hover;
+        let icon = self.icon();
 
         Some(
             div()
@@ -91,7 +96,7 @@ impl LauncherView for ShellView {
                                         .items_center()
                                         .gap(px(spacing::SM))
                                         .child(
-                                            Label::new("")
+                                            Label::new(icon)
                                                 .size(LabelSize::Large)
                                                 .color(Color::Default),
                                         )
