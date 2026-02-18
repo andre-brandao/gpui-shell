@@ -1,11 +1,3 @@
-//! Shell service for single-instance IPC via Unix sockets.
-//!
-//! This module provides a service that ensures only one instance of gpuishell
-//! runs at a time. When a second instance is launched, it sends a message to
-//! the running instance via a Unix socket and exits immediately.
-//!
-//! Uses Unix sockets instead of D-Bus for near-instant communication.
-
 use std::io::Write;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
@@ -14,83 +6,56 @@ use tokio::net::UnixListener as TokioUnixListener;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-/// Get the socket path for IPC.
-fn socket_path() -> PathBuf {
-    // Prefer XDG_RUNTIME_DIR for security (user-only access, tmpfs)
-    if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(runtime_dir).join("gpuishell.sock")
-    } else {
-        // Fallback to /tmp with UID for uniqueness across users
-        let uid = nix::unistd::getuid();
-        PathBuf::from(format!("/tmp/gpuishell-{}.sock", uid))
-    }
-}
+use crate::args::Args;
 
-/// Command to open the launcher with optional prefilled input.
-#[derive(Debug, Clone, Default)]
-pub struct LauncherRequest {
-    /// Optional input to prefill in the launcher.
-    pub input: Option<String>,
-    /// Unique request ID to ensure each request is distinct.
-    pub id: u64,
-}
+use super::messages::{IpcMessage, command_for_secondary, decode_command, encode_command};
 
-/// Shell service data - tracks pending launcher requests.
-#[derive(Debug, Clone, Default)]
-pub struct ShellData {
-    /// Pending launcher request, if any.
-    pub launcher_request: Option<LauncherRequest>,
-}
+pub type IpcReceiver = mpsc::UnboundedReceiver<IpcMessage>;
 
-/// Result of trying to acquire the single-instance lock.
-pub enum InstanceResult {
-    /// This is the primary instance - the service is now running.
-    Primary(ShellSubscriber),
-    /// Another instance is already running - a message was sent to it.
+enum AcquireResult {
+    Primary(IpcSubscriber),
     Secondary,
-    /// Failed to set up IPC.
     Error(String),
 }
 
-/// Receiver for launcher requests from other instances.
-pub struct ShellSubscriber {
+/// Subscriber for IPC messages from other instances.
+pub struct IpcSubscriber {
     /// The bound Unix listener (not yet accepting connections)
     listener: Option<TokioUnixListener>,
-    /// Initial input to queue when listener starts
-    initial_input: Option<String>,
     /// Socket path for cleanup
     socket_path: PathBuf,
 }
 
-impl std::fmt::Debug for ShellSubscriber {
+impl std::fmt::Debug for IpcSubscriber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ShellSubscriber")
+        f.debug_struct("IpcSubscriber")
             .field("socket_path", &self.socket_path)
             .finish()
     }
 }
 
-impl ShellSubscriber {
-    /// Initialize shell single-instance handling.
+impl IpcSubscriber {
+    /// Initialize IPC single-instance handling.
     ///
-    /// Returns `Some(ShellSubscriber)` when this process should continue as
+    /// Returns `Some(IpcSubscriber)` when this process should continue as
     /// the primary instance, otherwise `None`.
     ///
     /// This performs one retry without initial input when the first acquire
     /// attempt fails with an error.
-    pub fn init(input: Option<String>) -> Option<Self> {
-        match Self::acquire(input) {
-            InstanceResult::Primary(subscriber) => Some(subscriber),
-            InstanceResult::Secondary => None,
-            InstanceResult::Error(err) => {
-                error!("Shell service error: {}", err);
-                warn!("Retrying shell acquire without initial input");
+    pub fn init(args: &Args) -> Option<IpcSubscriber> {
+        match Self::acquire(args) {
+            AcquireResult::Primary(subscriber) => Some(subscriber),
+            AcquireResult::Secondary => None,
+            AcquireResult::Error(err) => {
+                error!("IPC service error: {}", err);
+                warn!("Retrying IPC acquire without initial input");
 
-                match Self::acquire(None) {
-                    InstanceResult::Primary(subscriber) => Some(subscriber),
-                    InstanceResult::Secondary => None,
-                    InstanceResult::Error(retry_err) => {
-                        error!("Failed to acquire shell service on retry: {}", retry_err);
+                let retry_args = Args { input: None };
+                match Self::acquire(&retry_args) {
+                    AcquireResult::Primary(subscriber) => Some(subscriber),
+                    AcquireResult::Secondary => None,
+                    AcquireResult::Error(retry_err) => {
+                        error!("Failed to acquire IPC service on retry: {}", retry_err);
                         None
                     }
                 }
@@ -103,33 +68,37 @@ impl ShellSubscriber {
     /// This function uses synchronous I/O for the secondary path to minimize
     /// startup latency - no async runtime needed to signal an existing instance.
     ///
-    /// If no other instance is running, prepares a Unix socket listener
-    /// and returns `InstanceResult::Primary` with the subscriber.
-    /// Call `start_listener()` to begin accepting connections.
+    /// When becoming the primary instance, a tokio runtime must be active.
     ///
-    /// If another instance is already running, sends a launcher open request
-    /// to it synchronously and returns `InstanceResult::Secondary`.
-    pub fn acquire(input: Option<String>) -> InstanceResult {
+    /// If no other instance is running, prepares a Unix socket listener
+    /// and returns `AcquireResult::Primary` with the subscriber.
+    ///
+    /// If another instance is already running, sends a command
+    /// to it synchronously and returns `AcquireResult::Secondary`.
+    fn acquire(args: &Args) -> AcquireResult {
         let path = socket_path();
+        let command = command_for_secondary(args);
 
         // Try to connect to existing instance (fast, synchronous path)
         if let Ok(mut stream) = UnixStream::connect(&path) {
             // Set a short timeout for the write
             let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(100)));
 
-            // Send the input (empty string means no input)
-            let message = input.as_deref().unwrap_or("");
-            if let Err(e) = stream.write_all(message.as_bytes()) {
+            let payload = encode_command(&command);
+            if let Err(e) = stream.write_all(payload.as_bytes()) {
                 error!("Failed to send message to existing instance: {}", e);
-                return InstanceResult::Error(format!("Failed to signal existing instance: {}", e));
+                return AcquireResult::Error(format!(
+                    "Failed to signal existing instance: {}",
+                    e
+                ));
             }
 
             // Flush and shutdown to signal end of message
             let _ = stream.flush();
             let _ = stream.shutdown(std::net::Shutdown::Write);
 
-            info!("Successfully signaled existing instance to open launcher");
-            return InstanceResult::Secondary;
+            info!("Successfully signaled existing instance");
+            return AcquireResult::Secondary;
         }
 
         // No existing instance, become the primary
@@ -145,14 +114,14 @@ impl ShellSubscriber {
             Ok(l) => l,
             Err(e) => {
                 error!("Failed to bind Unix socket: {}", e);
-                return InstanceResult::Error(format!("Failed to create socket: {}", e));
+                return AcquireResult::Error(format!("Failed to create socket: {}", e));
             }
         };
 
         // Set non-blocking for tokio compatibility
         if let Err(e) = listener.set_nonblocking(true) {
             error!("Failed to set socket non-blocking: {}", e);
-            return InstanceResult::Error(format!("Failed to configure socket: {}", e));
+            return AcquireResult::Error(format!("Failed to configure socket: {}", e));
         }
 
         // Convert to tokio listener (doesn't require runtime yet)
@@ -160,32 +129,25 @@ impl ShellSubscriber {
             Ok(l) => l,
             Err(e) => {
                 error!("Failed to create tokio listener: {}", e);
-                return InstanceResult::Error(format!("Failed to create async listener: {}", e));
+                return AcquireResult::Error(format!("Failed to create async listener: {}", e));
             }
         };
 
         info!("Prepared as primary instance, socket at {:?}", path);
-        InstanceResult::Primary(ShellSubscriber {
+        let subscriber = IpcSubscriber {
             listener: Some(tokio_listener),
-            initial_input: input,
             socket_path: path,
-        })
+        };
+
+        AcquireResult::Primary(subscriber)
     }
 
-    /// Start the listener and return a receiver for launcher requests.
+    /// Start the listener and return a receiver for IPC messages.
     ///
     /// This must be called from within a tokio runtime context.
-    /// Returns a receiver that yields `LauncherRequest` items.
-    pub fn start_listener(&mut self) -> mpsc::UnboundedReceiver<LauncherRequest> {
+    /// Returns a receiver that yields `IpcMessage` items.
+    pub fn start_listener(&mut self) -> IpcReceiver {
         let (sender, receiver) = mpsc::unbounded_channel();
-
-        // If we have an initial input, send it immediately
-        if let Some(input_text) = self.initial_input.take() {
-            let _ = sender.send(LauncherRequest {
-                input: Some(input_text),
-                id: 0,
-            });
-        }
 
         // Take the listener and spawn the accept loop
         if let Some(listener) = self.listener.take() {
@@ -202,7 +164,7 @@ impl ShellSubscriber {
 /// Accept loop for incoming connections.
 async fn accept_loop(
     listener: TokioUnixListener,
-    sender: mpsc::UnboundedSender<LauncherRequest>,
+    sender: mpsc::UnboundedSender<IpcMessage>,
     socket_path: PathBuf,
 ) {
     use std::sync::atomic::AtomicU64;
@@ -230,7 +192,7 @@ async fn accept_loop(
 /// Handle a single connection from a secondary instance.
 async fn handle_connection(
     stream: tokio::net::UnixStream,
-    sender: mpsc::UnboundedSender<LauncherRequest>,
+    sender: mpsc::UnboundedSender<IpcMessage>,
     counter: &std::sync::atomic::AtomicU64,
 ) {
     use tokio::io::AsyncReadExt;
@@ -245,39 +207,31 @@ async fn handle_connection(
     )
     .await;
 
-    let input = match read_result {
-        Ok(Ok(_)) => {
-            let s = String::from_utf8_lossy(&buffer).to_string();
-            if s.is_empty() { None } else { Some(s) }
-        }
+    let payload = match read_result {
+        Ok(Ok(_)) => String::from_utf8_lossy(&buffer).to_string(),
         Ok(Err(e)) => {
             debug!("Error reading from socket: {}", e);
-            None
+            String::new()
         }
         Err(_) => {
             debug!("Timeout reading from socket");
-            None
+            String::new()
         }
     };
 
     let request_id = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-    info!(
-        "Received launcher request: id={}, input={:?}",
-        request_id, input
-    );
-
-    let request = LauncherRequest {
-        input,
+    let command = decode_command(&payload);
+    let message = IpcMessage {
         id: request_id,
+        command,
     };
 
-    if let Err(e) = sender.send(request) {
+    if let Err(e) = sender.send(message) {
         error!("Failed to send request to channel: {}", e);
     }
 }
 
-impl Drop for ShellSubscriber {
+impl Drop for IpcSubscriber {
     fn drop(&mut self) {
         // Clean up socket file on shutdown
         let path = socket_path();
@@ -288,5 +242,20 @@ impl Drop for ShellSubscriber {
                 debug!("Removed socket file on shutdown");
             }
         }
+    }
+}
+
+/// Get the socket path for IPC.
+fn socket_path() -> PathBuf {
+    // Prefer XDG_RUNTIME_DIR for security (user-only access, tmpfs)
+    if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
+        PathBuf::from(runtime_dir).join("gpuishell.sock")
+    } else {
+        // Fallback to /tmp with UID for uniqueness across users
+        let uid = std::env::var("UID")
+            .or_else(|_| std::env::var("SUDO_UID"))
+            .or_else(|_| std::env::var("USER"))
+            .unwrap_or_else(|_| "unknown".to_string());
+        PathBuf::from(format!("/tmp/gpuishell-{}.sock", uid))
     }
 }

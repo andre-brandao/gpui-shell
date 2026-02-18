@@ -12,7 +12,6 @@ pub mod mpris;
 pub mod network;
 pub mod notification;
 pub mod privacy;
-pub mod shell;
 pub mod sysinfo;
 pub mod themes;
 pub mod tray;
@@ -42,7 +41,6 @@ pub use notification::{
     Notification, NotificationCommand, NotificationData, NotificationSubscriber,
 };
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
-pub use shell::{InstanceResult, LauncherRequest, ShellSubscriber};
 pub use sysinfo::{DiskInfo, NetworkInfo, SysInfoData, SysInfoSubscriber};
 pub use themes::{
     Base16Palette, Base16Scheme, PROVIDERS as THEME_PROVIDERS, ThemeProvider, ThemeRepository,

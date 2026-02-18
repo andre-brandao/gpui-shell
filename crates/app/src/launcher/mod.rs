@@ -17,8 +17,6 @@ use gpui::{
     div, layer_shell::*, prelude::*, px,
 };
 use modules::{HelpView, all_views};
-use services::LauncherRequest;
-use tokio::sync::mpsc::UnboundedReceiver;
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 
@@ -501,31 +499,7 @@ pub fn register_keybindings(cx: &mut App) {
     ]);
 }
 
-/// Initialize launcher module runtime listeners.
-///
-/// This starts processing single-instance IPC launcher requests.
-pub fn init(mut receiver: UnboundedReceiver<LauncherRequest>, cx: &mut App) {
-    cx.spawn(async move |cx| {
-        tracing::info!("Launcher request listener started");
-
-        while let Some(request) = receiver.recv().await {
-            tracing::info!(
-                "Processing launcher request: id={}, input={:?}",
-                request.id,
-                request.input
-            );
-
-            let input = request.input;
-            cx.update(move |cx| {
-                tracing::info!("Toggling launcher from IPC: {:?}", input);
-                toggle(input, cx);
-            });
-        }
-
-        tracing::warn!("Launcher request listener ended unexpectedly");
-    })
-    .detach();
-}
+pub fn init(_cx: &mut App) {}
 
 /// Toggle the launcher window with optional prefilled input.
 ///
