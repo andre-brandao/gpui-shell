@@ -22,16 +22,16 @@ mod sliders;
 mod wifi;
 
 use gpui::{
-    App, Context, Entity, FocusHandle, Focusable, KeyBinding, ScrollHandle, Window, actions, div,
-    prelude::*, px,
+    App, Context, Entity, FocusHandle, Focusable, ScrollHandle, Window, div, prelude::*, px,
 };
 use services::{AudioCommand, BrightnessCommand, NetworkCommand};
 use ui::{ActiveTheme, Slider, SliderEvent, radius, spacing};
 
+use crate::keybinds::{
+    Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
+    SelectRight, SelectWordLeft, SelectWordRight, WordLeft, WordRight,
+};
 use crate::state::{AppState, watch};
-
-// Keyboard actions for password input
-actions!(control_center, [Backspace, Cancel, Submit]);
 
 pub use quick_toggles::ExpandedSection;
 pub use wifi::WifiPasswordState;
@@ -55,15 +55,6 @@ pub struct ControlCenter {
 }
 
 impl ControlCenter {
-    /// Register keybindings for the control center
-    pub fn register_keybindings(cx: &mut App) {
-        cx.bind_keys([
-            KeyBinding::new("backspace", Backspace, Some("ControlCenter")),
-            KeyBinding::new("escape", Cancel, Some("ControlCenter")),
-            KeyBinding::new("enter", Submit, Some("ControlCenter")),
-        ]);
-    }
-
     /// Create a new control center panel.
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
@@ -303,7 +294,117 @@ impl Render for ControlCenter {
                 move |_: &Backspace, _window, cx| {
                     entity.update(cx, |this, cx| {
                         if this.wifi_password.ssid.is_some() {
-                            this.wifi_password.password.pop();
+                            this.wifi_password.input.backspace();
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &DeleteWordBack, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.delete_word_back();
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &CursorLeft, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_left(false);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &CursorRight, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_right(false);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &WordLeft, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_word_left(false);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &WordRight, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_word_right(false);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &SelectWordLeft, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_word_left(true);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &SelectWordRight, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_word_right(true);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &SelectLeft, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_left(true);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &SelectRight, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.move_right(true);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .on_action({
+                let entity = entity.clone();
+                move |_: &SelectAll, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.input.select_all();
                             cx.notify();
                         }
                     });
@@ -313,20 +414,22 @@ impl Render for ControlCenter {
                 let entity = entity.clone();
                 move |_: &Cancel, _window, cx| {
                     entity.update(cx, |this, cx| {
-                        this.wifi_password.clear();
-                        cx.notify();
+                        if this.wifi_password.ssid.is_some() {
+                            this.wifi_password.clear();
+                            cx.notify();
+                        }
                     });
                 }
             })
             .on_action({
                 let entity = entity.clone();
                 let services = network_service.clone();
-                move |_: &Submit, _window, cx| {
+                move |_: &Confirm, _window, cx| {
                     let entity = entity.clone();
                     let services = services.clone();
                     entity.update(cx, |this, cx| {
                         if let Some(ssid) = this.wifi_password.ssid.clone() {
-                            let password = this.wifi_password.password.clone();
+                            let password = this.wifi_password.input.text().to_string();
                             let network = services.get();
                             if let Some(ap) = network
                                 .wireless_access_points
@@ -406,7 +509,7 @@ impl Render for ControlCenter {
 
                     entity.update(cx, |this, cx| {
                         if this.wifi_password.ssid.is_some() {
-                            this.wifi_password.password.push(ch);
+                            this.wifi_password.input.insert_str(&ch.to_string());
                             cx.notify();
                         }
                     });

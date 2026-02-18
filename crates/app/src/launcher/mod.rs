@@ -12,25 +12,28 @@ pub mod modules;
 pub mod view;
 
 use gpui::{
-    App, Bounds, Context, FocusHandle, Focusable, KeyBinding, Point, ScrollHandle, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
-    div, layer_shell::*, prelude::*, px,
+    App, Bounds, Context, FocusHandle, Focusable, Point, ScrollHandle, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div,
+    layer_shell::*, prelude::*, px,
 };
 use modules::{HelpView, all_views};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, InputBuffer, font_size, icon_size, radius, render_input_line, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 
 use crate::config::Config;
+use crate::keybinds::{
+    Backspace, Cancel, Confirm, CursorDown, CursorLeft, CursorRight, CursorUp, DeleteWordBack,
+    PageDown, PageUp, SelectAll, SelectLeft, SelectRight, SelectWordLeft, SelectWordRight,
+    WordLeft, WordRight,
+};
 use crate::state::{AppState, watch};
-
-actions!(launcher, [Escape, Enter]);
 
 /// Number of items to jump when using Page Up/Down.
 const ITEMS_PER_PAGE: usize = 7;
 
 /// The main launcher struct.
 pub struct Launcher {
-    search_query: String,
+    input: InputBuffer,
     selected_index: usize,
     focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
@@ -65,7 +68,7 @@ impl Launcher {
         let help_view = HelpView::new(&launcher_config.modules.help, &views);
 
         Launcher {
-            search_query: initial_input.unwrap_or_default(),
+            input: InputBuffer::new(initial_input.unwrap_or_default()),
             selected_index: 0,
             focus_handle,
             scroll_handle,
@@ -76,7 +79,7 @@ impl Launcher {
 
     /// Set the search query (used for IPC input).
     pub fn set_input(&mut self, input: String) {
-        self.search_query = input;
+        self.input.set_text(input);
         self.selected_index = 0;
         self.reset_scroll();
     }
@@ -98,7 +101,7 @@ impl Launcher {
     /// Parse the search query to find which view should handle it.
     /// Returns (matched_view_or_none, search_term_for_view).
     fn parse_query(&self) -> (Option<&dyn LauncherView>, &str) {
-        let query = self.search_query.trim();
+        let query = self.input.text().trim();
 
         if query.is_empty() {
             return (self.default_view(), "");
@@ -188,26 +191,27 @@ impl Launcher {
                 if let Some(v) = matched_view {
                     let prefix = v.prefix();
                     if query.is_empty() {
-                        self.search_query = prefix.to_string();
+                        self.input.set_text(prefix.to_string());
                     } else {
-                        self.search_query = format!("{} {}", prefix, query);
+                        self.input.set_text(format!("{} {}", prefix, query));
                     }
                 } else {
-                    self.search_query = query;
+                    self.input.set_text(query);
                 }
                 self.selected_index = 0;
+                self.reset_scroll();
                 close
             }
             InputResult::Unhandled => {
                 // Default handling
                 match input {
                     ViewInput::Char(c) => {
-                        self.search_query.push_str(&c);
+                        self.input.insert_str(&c);
                         self.selected_index = 0;
                         self.reset_scroll();
                     }
                     ViewInput::Backspace => {
-                        self.search_query.pop();
+                        self.input.backspace();
                         self.selected_index = 0;
                         self.reset_scroll();
                     }
@@ -250,6 +254,12 @@ impl Launcher {
         }
     }
 
+    fn delete_word_back(&mut self) {
+        self.input.delete_word_back();
+        self.selected_index = 0;
+        self.reset_scroll();
+    }
+
     fn execute_selected(&mut self, cx: &mut App) -> bool {
         let view = self.current_view();
 
@@ -262,8 +272,9 @@ impl Launcher {
             {
                 let target = self.views.iter().find(|v| v.prefix() == prefix);
                 if let Some(target_view) = target {
-                    self.search_query = format!("{} ", target_view.prefix());
+                    self.input.set_text(format!("{} ", target_view.prefix()));
                     self.selected_index = 0;
+                    self.reset_scroll();
                     return false;
                 }
             }
@@ -293,10 +304,8 @@ impl Render for Launcher {
 
         let theme = cx.theme();
 
-        let query = self.search_query.clone();
         let view_name = self.current_view_name().to_string();
         let placeholder = self.placeholder();
-        let is_empty = self.search_query.is_empty();
 
         // Compute item count and clamp selected index before borrowing self
         {
@@ -322,7 +331,6 @@ impl Render for Launcher {
         let text_muted = theme.text.muted;
         let text_secondary = theme.text.secondary;
         let text_disabled = theme.text.disabled;
-        let text_placeholder = theme.text.placeholder;
         let bg_primary = theme.bg.primary;
         let border_default = theme.border.default;
         let interactive_default = theme.interactive.default;
@@ -331,12 +339,20 @@ impl Render for Launcher {
             .id("launcher")
             .track_focus(&self.focus_handle)
             .key_context("Launcher")
-            .on_action(cx.listener(|_, _: &Escape, window, _cx| {
-                // Clear the static handle before removing window
-                *LAUNCHER_WINDOW.lock().unwrap() = None;
-                window.remove_window();
+            .on_action(cx.listener(|this, _: &Cancel, window, cx| {
+                if this.input.is_empty() {
+                    // Clear the static handle before removing window
+                    *LAUNCHER_WINDOW.lock().unwrap() = None;
+                    window.remove_window();
+                } else {
+                    // First Esc clears input; second Esc closes.
+                    this.input.clear();
+                    this.selected_index = 0;
+                    this.reset_scroll();
+                    cx.notify();
+                }
             }))
-            .on_action(cx.listener(|this, _: &Enter, window, cx| {
+            .on_action(cx.listener(|this, _: &Confirm, window, cx| {
                 if this.handle_input(ViewInput::Enter, cx) {
                     // Clear the static handle before removing window
                     *LAUNCHER_WINDOW.lock().unwrap() = None;
@@ -344,32 +360,89 @@ impl Render for Launcher {
                 }
                 cx.notify();
             }))
+            .on_action(cx.listener(|this, _: &CursorUp, _window, cx| {
+                this.handle_input(ViewInput::Up, cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &CursorDown, _window, cx| {
+                this.handle_input(ViewInput::Down, cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &PageUp, _window, cx| {
+                this.handle_input(ViewInput::PageUp, cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &PageDown, _window, cx| {
+                this.handle_input(ViewInput::PageDown, cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &Backspace, _window, cx| {
+                this.handle_input(ViewInput::Backspace, cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &DeleteWordBack, _window, cx| {
+                this.delete_word_back();
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &CursorLeft, _window, cx| {
+                this.input.move_left(false);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &CursorRight, _window, cx| {
+                this.input.move_right(false);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &WordLeft, _window, cx| {
+                this.input.move_word_left(false);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &WordRight, _window, cx| {
+                this.input.move_word_right(false);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &SelectWordLeft, _window, cx| {
+                this.input.move_word_left(true);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &SelectWordRight, _window, cx| {
+                this.input.move_word_right(true);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &SelectLeft, _window, cx| {
+                this.input.move_left(true);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &SelectRight, _window, cx| {
+                this.input.move_right(true);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &SelectAll, _window, cx| {
+                this.input.select_all();
+                cx.notify();
+            }))
             .on_key_down(
-                cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
-                    let should_close = match event.keystroke.key.as_str() {
-                        "up" => this.handle_input(ViewInput::Up, cx),
-                        "down" => this.handle_input(ViewInput::Down, cx),
-                        "pageup" => this.handle_input(ViewInput::PageUp, cx),
-                        "pagedown" => this.handle_input(ViewInput::PageDown, cx),
-                        "backspace" => this.handle_input(ViewInput::Backspace, cx),
-                        _ => {
-                            if let Some(key_char) = &event.keystroke.key_char {
-                                this.handle_input(ViewInput::Char(key_char.clone()), cx)
-                            } else if event.keystroke.key.len() == 1
-                                && !event.keystroke.modifiers.control
-                                && !event.keystroke.modifiers.alt
-                            {
-                                this.handle_input(ViewInput::Char(event.keystroke.key.clone()), cx)
-                            } else {
-                                false
-                            }
-                        }
-                    };
-                    if should_close {
-                        // Clear the static handle before removing window
-                        *LAUNCHER_WINDOW.lock().unwrap() = None;
-                        window.remove_window();
+                cx.listener(move |this, event: &gpui::KeyDownEvent, _window, cx| {
+                    if event.keystroke.modifiers.control || event.keystroke.modifiers.alt {
+                        return;
                     }
+
+                    let input_str = event.keystroke.key_char.as_ref().cloned().or_else(|| {
+                        let key = event.keystroke.key.as_str();
+                        if key.chars().count() == 1 {
+                            Some(key.to_string())
+                        } else {
+                            None
+                        }
+                    });
+
+                    let Some(s) = input_str else {
+                        return;
+                    };
+                    if s.chars().any(|c| c.is_control()) {
+                        return;
+                    }
+
+                    this.handle_input(ViewInput::Char(s), cx);
                     cx.notify();
                 }),
             )
@@ -403,12 +476,8 @@ impl Render for Launcher {
                         div()
                             .flex_1()
                             .text_size(px(font_size::MD))
-                            .child(if query.is_empty() { placeholder } else { query })
-                            .text_color(if is_empty {
-                                text_placeholder
-                            } else {
-                                text_primary
-                            }),
+                            .text_color(text_primary)
+                            .child(render_input_line(&self.input, &placeholder, cx)),
                     )
                     // View badge (right side)
                     .child(
@@ -490,14 +559,6 @@ impl Render for Launcher {
 /// Global state to track the launcher window.
 static LAUNCHER_WINDOW: std::sync::Mutex<Option<WindowHandle<Launcher>>> =
     std::sync::Mutex::new(None);
-
-/// Register keybindings for the launcher.
-pub fn register_keybindings(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("escape", Escape, Some("Launcher")),
-        KeyBinding::new("enter", Enter, Some("Launcher")),
-    ]);
-}
 
 pub fn init(_cx: &mut App) {}
 

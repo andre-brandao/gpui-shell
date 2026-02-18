@@ -17,6 +17,7 @@ mod bar;
 pub mod config;
 pub mod control_center;
 mod ipc;
+mod keybinds;
 pub mod launcher;
 pub mod notification;
 pub mod osd;
@@ -54,8 +55,7 @@ async fn main() {
         state::AppState::init(services, cx);
 
         // Register keybindings
-        launcher::register_keybindings(cx);
-        control_center::ControlCenter::register_keybindings(cx);
+        keybinds::register(cx);
 
         bar::init(cx);
         notification::init(cx);

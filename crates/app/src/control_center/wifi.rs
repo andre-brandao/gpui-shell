@@ -5,7 +5,9 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{
+    ActiveTheme, InputBuffer, font_size, icon_size, radius, render_masked_input_line, spacing,
+};
 
 use crate::state::AppState;
 
@@ -17,7 +19,7 @@ pub struct WifiPasswordState {
     /// The SSID we're trying to connect to
     pub ssid: Option<String>,
     /// The current password input
-    pub password: String,
+    pub input: InputBuffer,
     /// Whether we're currently connecting
     pub connecting: bool,
     /// Error message if connection failed
@@ -28,7 +30,7 @@ impl WifiPasswordState {
     /// Start password entry for a network
     pub fn start_for(&mut self, ssid: String) {
         self.ssid = Some(ssid);
-        self.password.clear();
+        self.input.clear();
         self.connecting = false;
         self.error = None;
     }
@@ -36,7 +38,7 @@ impl WifiPasswordState {
     /// Clear the password state
     pub fn clear(&mut self) {
         self.ssid = None;
-        self.password.clear();
+        self.input.clear();
         self.connecting = false;
         self.error = None;
     }
@@ -140,7 +142,7 @@ pub fn render_wifi_section(
                         let is_known = ap.known;
                         let on_connect = on_connect.clone();
                         let on_cancel = on_cancel_password.clone();
-                        let current_password = password_state.password.clone();
+                        let current_password = password_state.input.clone();
                         let is_connecting = password_state.connecting;
 
                         if is_entering_password {
@@ -281,7 +283,7 @@ fn render_network_item(
 fn render_password_input(
     index: usize,
     ssid: &str,
-    current_password: &str,
+    current_password: &InputBuffer,
     connecting: bool,
     error: Option<&str>,
     on_submit: impl Fn(String, &mut App) + 'static,
@@ -289,8 +291,8 @@ fn render_password_input(
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
-    let password = current_password.to_string();
-    let password_for_submit = password.clone();
+    let password_for_submit = current_password.text().to_string();
+    let password_line = render_masked_input_line(current_password, "Type password...", '•', cx);
 
     // Pre-compute colors for closures
     let bg_tertiary = theme.bg.tertiary;
@@ -299,7 +301,6 @@ fn render_password_input(
     let accent_hover = theme.accent.hover;
     let text_primary = theme.text.primary;
     let text_muted = theme.text.muted;
-    let text_placeholder = theme.text.placeholder;
     let status_error = theme.status.error;
 
     div()
@@ -365,24 +366,9 @@ fn render_password_input(
                         .border_color(accent_primary)
                         .child(
                             div()
-                                .flex()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .text_size(px(font_size::SM))
-                                        .text_color(if password.is_empty() {
-                                            text_placeholder
-                                        } else {
-                                            text_primary
-                                        })
-                                        .child(if password.is_empty() {
-                                            "Type password...".to_string()
-                                        } else {
-                                            "•".repeat(password.len())
-                                        }),
-                                )
-                                // Blinking cursor indicator
-                                .child(div().w(px(1.)).h(px(14.)).bg(text_primary).ml(px(1.))),
+                                .text_size(px(font_size::SM))
+                                .text_color(text_primary)
+                                .child(password_line),
                         ),
                 )
                 .child(

@@ -87,10 +87,7 @@ impl IpcSubscriber {
             let payload = encode_command(&command);
             if let Err(e) = stream.write_all(payload.as_bytes()) {
                 error!("Failed to send message to existing instance: {}", e);
-                return AcquireResult::Error(format!(
-                    "Failed to signal existing instance: {}",
-                    e
-                ));
+                return AcquireResult::Error(format!("Failed to signal existing instance: {}", e));
             }
 
             // Flush and shutdown to signal end of message
