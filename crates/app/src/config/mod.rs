@@ -1,7 +1,5 @@
 //! Application configuration stored as a GPUI global.
 
-mod bar;
-pub mod launcher;
 mod persistence;
 mod theme_persistence;
 
@@ -10,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use services::FileWatcher;
 use ui::Theme;
 
+pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
+pub use crate::launcher::config::LauncherConfig;
 pub use crate::notification::{NotificationConfig, NotificationPopupPosition};
 pub use crate::osd::{OsdConfig, OsdPosition};
-pub use bar::{BarConfig, BarPosition, ModulesConfig};
-pub use launcher::LauncherConfig;
 
 /// Root application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

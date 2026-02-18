@@ -1,12 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-pub use crate::launcher::modules::apps::config::AppsConfig;
-pub use crate::launcher::modules::help::config::HelpConfig;
-pub use crate::launcher::modules::shell::config::ShellConfig;
-pub use crate::launcher::modules::theme::config::ThemesConfig;
-pub use crate::launcher::modules::wallpaper::config::WallpaperConfig;
-pub use crate::launcher::modules::web::config::{WebConfig, WebProviderConfig};
-pub use crate::launcher::modules::workspaces::config::WorkspacesConfig;
+use super::modules::{
+    apps::config::AppsConfig, help::config::HelpConfig, shell::config::ShellConfig,
+    theme::config::ThemesConfig, wallpaper::config::WallpaperConfig, web::config::WebConfig,
+    workspaces::config::WorkspacesConfig,
+};
 
 /// Launcher window configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,6 +7,7 @@
 //! - Switching workspaces (;ws prefix)
 //! - Viewing help and available commands (? prefix)
 
+pub mod config;
 pub mod modules;
 pub mod view;
 

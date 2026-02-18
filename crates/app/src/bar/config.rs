@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::bar::modules::{
+use super::modules::{
     ActiveWindowConfig, BatteryConfig, ClockConfig, KeyboardLayoutConfig, LauncherBtnConfig,
     MprisConfig, SettingsConfig, SysInfoConfig, TrayConfig, WorkspacesConfig,
 };

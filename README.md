@@ -1,20 +1,61 @@
-# GPUi shell (Placeholder name)
+# GPUi Shell (Placeholder name)
 
-## In Development
+A Wayland desktop shell built with GPUI (Zed's UI framework) in Rust. Provides a
+system bar, command launcher, and control center for Hyprland and Niri
+compositors.
 
-This project is currently in active development and is not yet stable for
-production use. Expect frequent changes, bugs, and incomplete features. Your
-contributions and feedback are welcome!
+## Scope
+
+GPUi Shell aims to be a lightweight, modular desktop shell replacing components
+like waybar, swaync, rofi/walker, and wlogout. It integrates deeply with Linux
+desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 
 ## Features
 
-- OSD (Volume + Brightness)
-- Launcher with multiple views
-- Bar with control center and widgets
-- Configurable via `config.toml` and `theme.toml`
-- (Planned) bottom dock
-- (Planned) notification module (replace swaync)
-- (Planned) custom launcher views/ bar widgets
+### Bar & Widgets
+
+- **Wayland layer-shell** status bar (top/bottom/left/right)
+- **Workspaces** — workspace switcher with click to switch
+- **Active Window** — shows focused window title
+- **System Tray** — D-Bus system tray integration (libtray)
+- **Clock** — configurable datetime display
+- **Keyboard Layout** — current keyboard layout indicator
+- **Battery** — battery percentage and charging status
+- **SysInfo** — CPU/memory overview widget
+
+### Launcher
+
+- **Command launcher** with prefix-based view routing
+- **Apps** — application search and launcher (freedesktop desktop files)
+- **Shell** — run shell commands
+- **Workspaces** — workspace management
+- **Theme** — switch between light/dark and accent colors
+- **Wallpaper** — set desktop wallpaper
+- **Web** — quick web search
+- **Help** — keyboard shortcuts reference
+
+### Control Center
+
+- **Audio** — volume control with PulseAudio (libpulse-binding)
+- **Brightness** — screen brightness control
+- **Network** — WiFi/Bluetooth toggle via NetworkManager (libnm)
+- **Bluetooth** — device pairing and connection (bluez)
+- **Power** — battery status and session power actions (UPower)
+- **Notifications** — notification center with Do Not Disturb
+- **Media** — MPRIS media player controls
+
+### OSD (On-Screen Display)
+
+- Volume and brightness indicators on key press
+
+### System Integration
+
+- **Compositor abstraction** — auto-detects Hyprland or Niri
+- **Single-instance** — running again opens launcher (via socket)
+- **Privacy mode** — temporarily disable screenshare/camera indicators
+- **Applications** — desktop file parsing and icon loading
+
+## Screenshots
 
 ![Desktop](./docs/images/desktop.png)
 
@@ -22,58 +63,13 @@ contributions and feedback are welcome!
 
 ![Web](./docs/images/web.png)
 
-## Known Issues
-
-- Mouse interactions missing
-- Control center interactions missing
-
 ## Installation
 
-### NixOS
-
-Add the shell as a flake input and the default package to the user/environment
-packages.
-
-```nix
-{
-  inputs = {
-    shell.url = "github:andre-brandao/gpuishell";
-  };
-}
-```
-
-```nix
-{inputs, pkgs, ...}:{
-  # NixOS
-  environment.systemPackages = [ inputs.shell.packages.default ];
-  # Home Manager
-  home.packages = [ inputs.shell.packages.default ];
-}
-```
-
-### Usage
-
-#### Hyprland
-
-```hyprconf
-exec-once gpuishell
-
-bindr = SUPER, SUPER_L, exec, gpuishell
-```
-
-#### bash
-
-```bash
-# Calling again will signal the running instance to open the launcher
-gpuishell
-
-# Prefill input to open a custom provider
-gpuishell -i "~"
-```
+See [`docs/INSTALL.md`](./docs/INSTALL.md) for platform-specific instructions.
 
 ## Configuration
 
-See [`docs/CONFIG.md`](./docs/CONFIG.md) for all fields.
+See [`docs/CONFIG.md`](./docs/CONFIG.md) for all configuration options.
 
 ## Thanks
 

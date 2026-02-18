@@ -9,8 +9,9 @@ use gpui::{
 };
 use ui::{ActiveTheme, font_size, spacing};
 
+use super::config::BarPosition;
 use super::modules::{Widget, WidgetSlot};
-use crate::config::{ActiveConfig, BarPosition, Config};
+use crate::config::{ActiveConfig, Config};
 
 /// The main bar view.
 struct Bar {

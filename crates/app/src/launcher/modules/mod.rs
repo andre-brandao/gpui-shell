@@ -20,8 +20,8 @@ pub use wallpaper::WallpaperView;
 pub use web::WebSearchView;
 pub use workspaces::WorkspacesView;
 
+use super::config::LauncherConfig;
 use super::view::LauncherView;
-use crate::config::launcher::LauncherConfig;
 
 pub fn all_views(config: &LauncherConfig) -> Vec<Box<dyn LauncherView>> {
     vec![
