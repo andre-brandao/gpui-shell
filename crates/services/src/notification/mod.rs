@@ -17,6 +17,8 @@ use zbus::{
     zvariant::OwnedValue,
 };
 
+use crate::applications::icons::lookup_icon;
+
 const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
 const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
@@ -67,6 +69,7 @@ pub enum NotificationCommand {
     DismissAll,
     SetDnd(bool),
     MarkAllRead,
+    InvokeAction(u32, String),
 }
 
 /// Event-driven notification service.
@@ -162,9 +165,25 @@ impl NotificationSubscriber {
                 }
                 data.recompute_unread();
             }
+            NotificationCommand::InvokeAction(id, action_key) => {
+                self.emit_action_invoked(id, &action_key).await;
+                self.dismiss_by_id(id).await?;
+            }
         }
 
         Ok(())
+    }
+
+    async fn emit_action_invoked(&self, id: u32, action_key: &str) {
+        if let Some(conn) = &self.conn
+            && let Ok(iface) = conn
+                .object_server()
+                .interface::<_, NotificationServer>(OBJECT_PATH)
+                .await
+        {
+            let ctx = iface.signal_emitter();
+            let _ = NotificationServer::action_invoked(ctx, id, action_key).await;
+        }
     }
 
     async fn dismiss_by_id(&self, id: u32) -> anyhow::Result<()> {
@@ -266,13 +285,27 @@ impl NotificationServer {
             .get("urgency")
             .and_then(|v| u8::try_from(v.clone()).ok())
             .unwrap_or(1);
-        let image_path = hint_string(&hints, &["image-path", "image_path", "image_path"]);
+        let image_path = hint_string(&hints, &["image-path", "image_path"]);
         let app_icon_path = if is_image_source(app_icon) {
             Some(app_icon.to_string())
         } else {
             hint_string(&hints, &["app_icon", "icon-path", "icon_path"])
                 .filter(|value| is_image_source(value))
         };
+        // Fallback: resolve named icon via XDG icon theme lookup
+        let app_icon_path = app_icon_path.or_else(|| {
+            if !app_icon.is_empty() {
+                lookup_icon(app_icon).map(|p| p.to_string_lossy().into_owned())
+            } else {
+                None
+            }
+        });
+        // Fallback: try desktop-entry hint for icon lookup
+        let app_icon_path = app_icon_path.or_else(|| {
+            hint_string(&hints, &["desktop-entry"])
+                .and_then(|entry| lookup_icon(&entry))
+                .map(|p| p.to_string_lossy().into_owned())
+        });
         let timeout_ms = if expire_timeout < 0 {
             DEFAULT_TIMEOUT_MS
         } else {
@@ -320,6 +353,7 @@ impl NotificationServer {
             }
 
             let conn = self.conn.clone();
+            let data = self.data.clone();
             let timer_generations = self.timer_generations.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(timeout_ms as u64));
@@ -334,13 +368,27 @@ impl NotificationServer {
                     return;
                 }
 
+                if let Ok(mut timers) = timer_generations.lock() {
+                    timers.remove(&id);
+                }
+
+                if !deactivate_notification(&data, id) {
+                    return;
+                }
+
+                // Emit NotificationClosed with reason 1 (expired)
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .expect("failed to build tokio runtime for notification timeout");
                 rt.block_on(async move {
-                    if let Ok(proxy) = NotificationsProxy::new(&conn).await {
-                        let _ = proxy.close_notification(id).await;
+                    if let Ok(iface) = conn
+                        .object_server()
+                        .interface::<_, NotificationServer>(OBJECT_PATH)
+                        .await
+                    {
+                        let ctx = iface.signal_emitter();
+                        let _ = NotificationServer::notification_closed(ctx, id, 1).await;
                     }
                 });
             });

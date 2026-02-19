@@ -54,7 +54,7 @@ impl Render for NotificationCenter {
                         .bg(theme.bg.primary)
                         .border_1()
                         .border_color(theme.border.default)
-                        .child(notification_card_body(&item, cx, true))
+                        .child(notification_card_body(&item, cx, true, &self.subscriber))
                         .child(
                             div()
                                 .absolute()

@@ -59,7 +59,6 @@ impl Render for NotificationPopupStack {
                         let id = notification.id;
 
                         div()
-                            .h(px(config.popup_card_collapsed_height))
                             .overflow_hidden()
                             .bg(theme.bg.primary)
                             .border_1()
@@ -67,11 +66,15 @@ impl Render for NotificationPopupStack {
                             .rounded(px(radius::LG))
                             .p(px(spacing::SM))
                             .hover(move |el| {
-                                el.h(px(config.popup_card_expanded_height))
-                                    .bg(theme.bg.elevated)
+                                el.bg(theme.interactive.hover)
                                     .border_color(theme.accent.primary)
                             })
-                            .child(notification_card_body(&notification, cx, true))
+                            .child(notification_card_body(
+                                &notification,
+                                cx,
+                                false,
+                                &self.subscriber,
+                            ))
                             .child(
                                 div()
                                     .absolute()

@@ -1,12 +1,15 @@
 use gpui::prelude::*;
-use gpui::{Context, div, img, px};
-use services::Notification;
+use gpui::{Context, MouseButton, div, img, px};
+use services::{Notification, NotificationCommand, NotificationSubscriber};
 use ui::{ActiveTheme, font_size, radius, spacing};
+
+use super::dispatch_notification_command;
 
 pub(super) fn notification_card_body<V>(
     notification: &Notification,
     cx: &Context<V>,
     show_image: bool,
+    subscriber: &NotificationSubscriber,
 ) -> gpui::AnyElement {
     let theme = cx.theme();
     let app_name = notification.app_name.clone();
@@ -21,24 +24,26 @@ pub(super) fn notification_card_body<V>(
         .filter(|source| is_image_source(source));
     let summary = notification.summary.clone();
     let body = notification.body.clone();
+    let actions = notification.actions.clone();
     let timestamp = format_notification_time(notification.timestamp_ms);
     let urgency_color = urgency_color(notification.urgency, cx);
 
     div()
         .w_full()
         .flex()
-        .items_start()
+        .items_stretch()
         .gap(px(spacing::SM))
         .child(
             div()
                 .w(px(3.0))
-                .h_full()
+                .flex_shrink_0()
                 .rounded(px(radius::SM))
                 .bg(urgency_color),
         )
         .child(
             div()
                 .size(px(28.0))
+                .flex_shrink_0()
                 .rounded(px(radius::SM))
                 .bg(theme.bg.secondary)
                 .border_1()
@@ -105,6 +110,43 @@ pub(super) fn notification_card_body<V>(
                             .text_color(theme.text.muted)
                             .line_height(px(16.0))
                             .child(body),
+                    )
+                })
+                .when(!actions.is_empty(), |el| {
+                    el.child(
+                        div()
+                            .mt(px(4.0))
+                            .flex()
+                            .flex_wrap()
+                            .gap(px(spacing::XS))
+                            .children(actions.into_iter().map(|(key, label)| {
+                                let sub = subscriber.clone();
+                                let notification_id = notification.id;
+                                div()
+                                    .px(px(spacing::SM))
+                                    .py(px(2.0))
+                                    .rounded(px(radius::SM))
+                                    .bg(theme.bg.tertiary)
+                                    .border_1()
+                                    .border_color(theme.border.subtle)
+                                    .text_size(px(font_size::XS))
+                                    .text_color(theme.text.secondary)
+                                    .cursor_pointer()
+                                    .hover(move |el| {
+                                        el.bg(theme.interactive.hover)
+                                            .text_color(theme.text.primary)
+                                    })
+                                    .on_mouse_down(MouseButton::Left, move |_, _, _| {
+                                        dispatch_notification_command(
+                                            sub.clone(),
+                                            NotificationCommand::InvokeAction(
+                                                notification_id,
+                                                key.clone(),
+                                            ),
+                                        );
+                                    })
+                                    .child(label)
+                            })),
                     )
                 })
                 .when(show_image, |el| {

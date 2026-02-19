@@ -113,7 +113,7 @@ if [[ "$QUICK" -eq 0 ]]; then
   notify-send -t 8000 "Long timeout" "Should stay longer in popup"
   sleep_between
 
-  echo "[6/7] app icon path (if available)"
+  echo "[6/10] app icon path (if available)"
   icon_path="$(resolve_default_image || true)"
   if [[ -n "${icon_path:-}" ]]; then
     notify-send -a "IconPathApp" -i "$icon_path" "Icon path test" "Using icon: $icon_path"
@@ -122,12 +122,28 @@ if [[ "$QUICK" -eq 0 ]]; then
   fi
   sleep_between
 
-  echo "[7/7] image hint (if available)"
+  echo "[7/10] image hint (if available)"
   if [[ -n "${icon_path:-}" ]]; then
     notify-send -h "string:image-path:$icon_path" "Image hint test" "Image should render in popup card"
   else
     echo "No image source found; skipping image-hint test."
   fi
+  sleep_between
+
+  echo "[8/10] named app icon (XDG lookup)"
+  notify-send -a "Firefox" -i "firefox" "Named icon test" "Should show Firefox icon, not 'fi' text"
+  sleep_between
+  notify-send -a "Files" -i "org.gnome.Nautilus" "Named icon test 2" "Should show Nautilus icon via XDG lookup"
+  sleep_between
+
+  echo "[9/10] desktop-entry hint fallback"
+  notify-send -h "string:desktop-entry:firefox" "Desktop entry hint" "Icon should resolve via desktop-entry hint"
+  sleep_between
+
+  echo "[10/10] actions"
+  notify-send -a "ActionApp" -i "firefox" \
+    -A "reply=Reply" -A "mark-read=Mark as Read" -A "open=Open" \
+    "Action test" "Click an action button below" &
 fi
 
 echo "Done. Open notification center to verify history retention and dismiss behavior."
