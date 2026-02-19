@@ -93,7 +93,7 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .max_h(px(220.))
+                    .max_h(px(240.))
                     .overflow_y_scroll()
                     .children(devices.into_iter().enumerate().map(|(idx, device)| {
                         let services_connect = services_clone.clone();

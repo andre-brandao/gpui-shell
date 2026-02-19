@@ -25,8 +25,8 @@ mod wifi;
 pub use config::{ControlCenterConfig, PowerActionsConfig};
 
 use gpui::{
-    App, Context, Entity, FocusHandle, Focusable, MouseButton, ScrollHandle, Window, div,
-    prelude::*, px,
+    App, Context, Entity, FocusHandle, Focusable, MouseButton, Size, Window, div, prelude::*,
+    px,
 };
 use services::{AudioCommand, BrightnessCommand, NetworkCommand, UPowerCommand};
 use ui::{ActiveTheme, Slider, SliderEvent, font_size, icon_size, radius, spacing};
@@ -40,14 +40,19 @@ use crate::state::{AppState, watch};
 pub use quick_toggles::ExpandedSection;
 pub use wifi::WifiPasswordState;
 
+pub const CONTROL_CENTER_PANEL_WIDTH: f32 = 340.0;
+pub const CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED: f32 = 288.0;
+
+const CONTROL_CENTER_PANEL_HEIGHT_POWER: f32 = 336.0;
+const CONTROL_CENTER_PANEL_HEIGHT_EXPANDED: f32 = 560.0;
+const CONTROL_CENTER_PANEL_BRIGHTNESS_DELTA: f32 = 56.0;
+
 /// Control Center panel component.
 ///
 /// Provides a unified interface for system settings and quick actions.
 pub struct ControlCenter {
     /// Currently expanded section (WiFi or Bluetooth)
     expanded: ExpandedSection,
-    /// Scroll handle for the panel content
-    scroll_handle: ScrollHandle,
     /// Focus handle for keyboard navigation
     focus_handle: FocusHandle,
     /// Volume slider entity
@@ -62,7 +67,6 @@ impl ControlCenter {
     /// Create a new control center panel.
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let scroll_handle = ScrollHandle::new();
 
         // Create volume slider
         let audio = AppState::audio(cx).get();
@@ -116,7 +120,6 @@ impl ControlCenter {
 
         ControlCenter {
             expanded: ExpandedSection::None,
-            scroll_handle,
             focus_handle,
             volume_slider,
             brightness_slider,
@@ -183,6 +186,22 @@ impl ControlCenter {
         // Clear password state when switching sections
         self.wifi_password.clear();
     }
+
+    fn desired_panel_height(expanded: ExpandedSection, show_brightness: bool) -> f32 {
+        let mut height = match expanded {
+            ExpandedSection::None => CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
+            ExpandedSection::Power => CONTROL_CENTER_PANEL_HEIGHT_POWER,
+            ExpandedSection::WiFi | ExpandedSection::Bluetooth => {
+                CONTROL_CENTER_PANEL_HEIGHT_EXPANDED
+            }
+        };
+
+        if !show_brightness {
+            height -= CONTROL_CENTER_PANEL_BRIGHTNESS_DELTA;
+        }
+
+        height
+    }
 }
 
 impl Focusable for ControlCenter {
@@ -192,7 +211,7 @@ impl Focusable for ControlCenter {
 }
 
 impl Render for ControlCenter {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let expanded = self.expanded;
         let network_service = AppState::network(cx).clone();
@@ -264,6 +283,26 @@ impl Render for ControlCenter {
                 .detach();
             }
         };
+
+        let mut desired_height = Self::desired_panel_height(expanded, show_brightness);
+        let mut desired_width = CONTROL_CENTER_PANEL_WIDTH;
+
+        if let Some(display) = window.display(cx) {
+            let bounds = display.visible_bounds();
+            let visible_width: f32 = bounds.size.width.into();
+            let visible_height: f32 = bounds.size.height.into();
+            let gutter = spacing::SM * 2.0;
+            let max_width = (visible_width - gutter).max(240.0);
+            let max_height = (visible_height - gutter).max(240.0);
+
+            desired_width = desired_width.min(max_width);
+            desired_height = desired_height.min(max_height);
+        }
+
+        let desired_size = Size::new(px(desired_width), px(desired_height));
+        if window.viewport_size() != desired_size {
+            window.resize(desired_size);
+        }
 
         // WiFi callbacks
         let wifi_services = network_service.clone();
@@ -352,7 +391,6 @@ impl Render for ControlCenter {
             .track_focus(&self.focus_handle)
             .key_context("ControlCenter")
             .w_full()
-            .h_full()
             .p(px(spacing::MD))
             .bg(theme.bg.primary)
             .border_1()
@@ -362,8 +400,6 @@ impl Render for ControlCenter {
             .flex()
             .flex_col()
             .gap(px(spacing::MD))
-            .overflow_y_scroll()
-            .track_scroll(&self.scroll_handle)
             // Keyboard event handling for password input
             .on_action({
                 let entity = entity.clone();
@@ -611,51 +647,58 @@ impl Render for ControlCenter {
                             .rounded(px(radius::MD))
                             .child(
                                 div()
-                                    .text_size(px(icon_size::LG))
-                                    .text_color(battery_color)
-                                    .child(battery_icon),
-                            )
-                            .child(
-                                div()
+                                    .flex_1()
                                     .flex()
-                                    .flex_col()
-                                    .gap(px(2.))
+                                    .items_center()
+                                    .gap(px(spacing::SM))
                                     .child(
                                         div()
-                                            .text_size(px(font_size::SM))
-                                            .text_color(text_primary)
-                                            .child(battery_line),
+                                            .text_size(px(icon_size::LG))
+                                            .text_color(battery_color)
+                                            .child(battery_icon),
                                     )
                                     .child(
                                         div()
-                                            .text_size(px(font_size::XS))
-                                            .text_color(text_muted)
-                                            .child(battery_sub),
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(2.))
+                                            .child(
+                                                div()
+                                                    .text_size(px(font_size::SM))
+                                                    .text_color(text_primary)
+                                                    .child(battery_line),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_size(px(font_size::XS))
+                                                    .text_color(text_muted)
+                                                    .child(battery_sub),
+                                            ),
                                     ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("power-profile-cycle")
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .w(px(36.))
-                            .h(px(36.))
-                            .bg(interactive_default)
-                            .border_1()
-                            .border_color(border_subtle)
-                            .rounded(px(radius::MD))
-                            .cursor_pointer()
-                            .hover(move |s| s.bg(interactive_hover))
-                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                on_cycle_power_profile(cx);
-                            })
+                            )
                             .child(
                                 div()
-                                    .text_size(px(icon_size::SM))
-                                    .text_color(text_primary)
-                                    .child(upower.power_profile.icon()),
+                                    .id("power-profile-cycle")
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .w(px(32.))
+                                    .h(px(32.))
+                                    .bg(interactive_default)
+                                    .border_1()
+                                    .border_color(border_subtle)
+                                    .rounded(px(radius::MD))
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(interactive_hover))
+                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                        on_cycle_power_profile(cx);
+                                    })
+                                    .child(
+                                        div()
+                                            .text_size(px(icon_size::SM))
+                                            .text_color(text_primary)
+                                            .child(upower.power_profile.icon()),
+                                    ),
                             ),
                     )
                     .child(
@@ -722,7 +765,6 @@ impl Render for ControlCenter {
                     div()
                         .id("control-center-dropdown")
                         .w_full()
-                        .min_h(px(180.))
                         .p(px(spacing::SM))
                         .bg(bg_secondary)
                         .border_1()

@@ -23,7 +23,9 @@ pub use config::SettingsConfig;
 use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::control_center::ControlCenter;
+use crate::control_center::{
+    ControlCenter, CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH,
+};
 use crate::panel::{PanelConfig, panel_placement, toggle_panel};
 use crate::state::{AppState, watch};
 
@@ -116,8 +118,8 @@ impl Settings {
         let config = Config::global(cx);
         let (anchor, margin) = panel_placement(config.bar.position, self.slot);
         let config = PanelConfig {
-            width: 300.0,
-            height: 380.0,
+            width: CONTROL_CENTER_PANEL_WIDTH,
+            height: CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
             anchor,
             margin,
             namespace: "control-center".to_string(),

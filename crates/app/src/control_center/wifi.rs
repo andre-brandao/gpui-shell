@@ -152,7 +152,7 @@ pub fn render_wifi_section(
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .max_h(px(220.))
+                    .max_h(px(240.))
                     .overflow_y_scroll()
                     .children(aps.into_iter().enumerate().map(|(idx, ap)| {
                         let is_connected = connected_name.as_ref() == Some(&ap.ssid);
