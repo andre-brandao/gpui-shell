@@ -167,7 +167,7 @@ impl Render for ActiveWindow {
         } else {
             None
         };
-        let vertical_lines = self.vertical_lines(25);
+        let vertical_lines = self.vertical_lines(15);
         let interactive_default = theme.interactive.default;
         let border_subtle = theme.border.subtle;
         let text_primary = theme.text.primary;
