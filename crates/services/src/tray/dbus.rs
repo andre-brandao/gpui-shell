@@ -246,6 +246,15 @@ pub trait StatusNotifierItem {
 
     #[zbus(property)]
     fn tooltip(&self) -> zbus::Result<(String, Vec<IconPixmap>, String, String)>;
+
+    /// Left-click activation.
+    fn activate(&self, x: i32, y: i32) -> zbus::Result<()>;
+
+    /// Middle-click activation.
+    fn secondary_activate(&self, x: i32, y: i32) -> zbus::Result<()>;
+
+    /// Right-click context menu.
+    fn context_menu(&self, x: i32, y: i32) -> zbus::Result<()>;
 }
 
 /// Menu layout from DBusMenu.

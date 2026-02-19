@@ -101,6 +101,14 @@ impl TrayData {
 pub enum TrayCommand {
     /// Activate a menu item.
     MenuItemClicked { item_name: String, menu_id: i32 },
+    /// Left-click activation (for apps without menus, e.g. "show window").
+    Activate { item_name: String },
+    /// Middle-click activation.
+    SecondaryActivate { item_name: String },
+    /// Right-click context menu.
+    ContextMenu { item_name: String },
+    /// Notify app that a submenu is about to be shown (triggers lazy population).
+    AboutToShow { item_name: String, menu_id: i32 },
 }
 
 /// Event-driven system tray subscriber.
@@ -140,6 +148,24 @@ impl TraySubscriber {
         self.data.get_cloned()
     }
 
+    /// Build a StatusNotifierItem proxy for the given item name.
+    async fn item_proxy(&self, item_name: &str) -> Option<StatusNotifierItemProxy<'_>> {
+        let (dest, path) = if let Some(idx) = item_name.find('/') {
+            (&item_name[..idx], &item_name[idx..])
+        } else {
+            (item_name, "/StatusNotifierItem")
+        };
+
+        StatusNotifierItemProxy::builder(&self.conn)
+            .destination(dest.to_owned())
+            .ok()?
+            .path(path.to_owned())
+            .ok()?
+            .build()
+            .await
+            .ok()
+    }
+
     /// Execute a tray command.
     pub async fn dispatch(&self, command: TrayCommand) -> anyhow::Result<()> {
         match command {
@@ -166,6 +192,51 @@ impl TraySubscriber {
                         let mut data = self.data.lock_mut();
                         if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name) {
                             item.menu = Some(new_layout);
+                        }
+                    }
+                }
+            }
+            TrayCommand::Activate { item_name } => {
+                if let Some(proxy) = self.item_proxy(&item_name).await {
+                    debug!("Activating tray item {}", item_name);
+                    let _ = proxy.activate(0, 0).await;
+                }
+            }
+            TrayCommand::SecondaryActivate { item_name } => {
+                if let Some(proxy) = self.item_proxy(&item_name).await {
+                    debug!("Secondary-activating tray item {}", item_name);
+                    let _ = proxy.secondary_activate(0, 0).await;
+                }
+            }
+            TrayCommand::ContextMenu { item_name } => {
+                if let Some(proxy) = self.item_proxy(&item_name).await {
+                    debug!("Context menu for tray item {}", item_name);
+                    let _ = proxy.context_menu(0, 0).await;
+                }
+            }
+            TrayCommand::AboutToShow { item_name, menu_id } => {
+                let data = self.data.lock_ref();
+                if let Some(item) = data.items.iter().find(|i| i.name == item_name)
+                    && !item.menu_path.is_empty()
+                    && item.menu_path != "/"
+                {
+                    let menu_proxy = DBusMenuProxy::builder(&self.conn)
+                        .destination(item.dest.clone())?
+                        .path(item.menu_path.clone())?
+                        .build()
+                        .await?;
+
+                    debug!("about_to_show({}) for {}", menu_id, item_name);
+                    let needs_update = menu_proxy.about_to_show(menu_id).await.unwrap_or(false);
+
+                    if needs_update {
+                        drop(data);
+                        if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
+                            let mut data = self.data.lock_mut();
+                            if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name)
+                            {
+                                item.menu = Some(new_layout);
+                            }
                         }
                     }
                 }
@@ -352,9 +423,9 @@ async fn run_listener(data: &Mutable<TrayData>, conn: &zbus::Connection) -> anyh
         if let Ok(builder) = item_proxy_result
             && let Ok(proxy) = builder.build().await
         {
+            // Icon pixmap changes
             let name = item.name.clone();
             let data_icon = data.clone();
-
             icon_streams.push(
                 proxy
                     .receive_icon_pixmap_changed()

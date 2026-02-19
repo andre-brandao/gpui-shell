@@ -43,34 +43,47 @@ impl Tray {
         }
     }
 
-    /// Handle clicking on a tray item - opens a panel with the menu.
+    /// Handle left-clicking on a tray item.
+    /// Opens menu panel if the item has a menu, otherwise calls Activate.
     fn on_item_click(&self, item: &TrayItem, cx: &mut App) {
-        let Some(menu) = item.menu.clone() else {
-            return;
-        };
+        if let Some(menu) = item.menu.clone() {
+            let panel_id = format!("systray-{}", item.name);
+            let subscriber = self.subscriber.clone();
+            let item_name = item.name.clone();
+            let config = Config::global(cx);
+            let (anchor, margin) = panel_placement(config.bar.position, self.slot);
 
-        let panel_id = format!("systray-{}", item.name);
+            let config = PanelConfig {
+                width: 250.0,
+                height: 400.0,
+                anchor,
+                margin,
+                namespace: "systray-menu".to_string(),
+            };
+
+            toggle_panel(&panel_id, config, cx, move |cx| {
+                TrayMenuPanel::new(menu, item_name, subscriber, cx)
+            });
+        } else {
+            // No menu — activate the item directly (e.g. show window)
+            let subscriber = self.subscriber.clone();
+            let item_name = item.name.clone();
+            cx.spawn(async move |_| {
+                let _ = subscriber
+                    .dispatch(TrayCommand::Activate { item_name })
+                    .await;
+            })
+            .detach();
+        }
+    }
+
+    /// Dispatch a tray command asynchronously.
+    fn dispatch_command(&self, command: TrayCommand, cx: &mut App) {
         let subscriber = self.subscriber.clone();
-        let item_name = item.name.clone();
-
-        // Calculate menu height based on top-level visible items only (submenus start collapsed)
-        let visible_items = count_top_level_menu_items(&menu.2);
-        // Each item is ~26px (py: 6px * 2 + font ~14px), separators ~9px, plus panel padding 8px
-        let menu_height = (visible_items * 26).min(400) as f32 + 8.0;
-        let config = Config::global(cx);
-        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
-
-        let config = PanelConfig {
-            width: 250.0,
-            height: menu_height,
-            anchor,
-            margin,
-            namespace: "systray-menu".to_string(),
-        };
-
-        toggle_panel(&panel_id, config, cx, move |_cx| {
-            TrayMenuPanel::new(menu, item_name, subscriber)
-        });
+        cx.spawn(async move |_| {
+            let _ = subscriber.dispatch(command).await;
+        })
+        .detach();
     }
 }
 
@@ -88,7 +101,6 @@ impl Render for Tray {
         let interactive_hover = theme.interactive.hover;
         let interactive_active = theme.interactive.active;
         let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
 
         div()
             .id("systray")
@@ -97,8 +109,9 @@ impl Render for Tray {
             .items_center()
             .gap(px(style::CHIP_GAP))
             .children(items.into_iter().map(|item| {
-                let item_clone = item.clone();
-                let has_menu = item.menu.is_some();
+                let item_for_left = item.clone();
+                let item_for_right = item.clone();
+                let item_for_middle = item.clone();
 
                 // Get the best icon representation - prefer icon name for nerd font rendering
                 let icon_char = match &item.icon {
@@ -124,26 +137,39 @@ impl Render for Tray {
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _event, _window, cx| {
-                            this.on_item_click(&item_clone, cx);
+                            this.on_item_click(&item_for_left, cx);
+                        }),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |this, _event, _window, cx| {
+                            this.dispatch_command(
+                                TrayCommand::ContextMenu {
+                                    item_name: item_for_right.name.clone(),
+                                },
+                                cx,
+                            );
+                        }),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Middle,
+                        cx.listener(move |this, _event, _window, cx| {
+                            this.dispatch_command(
+                                TrayCommand::SecondaryActivate {
+                                    item_name: item_for_middle.name.clone(),
+                                },
+                                cx,
+                            );
                         }),
                     )
                     .child(
                         div()
                             .text_size(px(icon_size))
-                            .text_color(if has_menu { text_primary } else { text_muted })
+                            .text_color(text_primary)
                             .child(icon_char),
                     )
             }))
     }
-}
-
-/// Count top-level visible menu items for height calculation.
-/// Does not recurse into submenus since they start collapsed.
-fn count_top_level_menu_items(items: &[MenuLayout]) -> usize {
-    items
-        .iter()
-        .filter(|MenuLayout(_, props, _)| props.visible != Some(false))
-        .count()
 }
 
 // ============================================================================
@@ -160,7 +186,24 @@ struct TrayMenuPanel {
 }
 
 impl TrayMenuPanel {
-    fn new(menu: MenuLayout, item_name: String, subscriber: services::TraySubscriber) -> Self {
+    fn new(
+        menu: MenuLayout,
+        item_name: String,
+        subscriber: services::TraySubscriber,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        // Subscribe to tray data updates so the menu refreshes live
+        // (e.g. after about_to_show triggers a layout_updated signal)
+        let name = item_name.clone();
+        watch(cx, subscriber.subscribe(), move |this, data, cx| {
+            if let Some(item) = data.items.iter().find(|i| i.name == name)
+                && let Some(menu) = &item.menu
+            {
+                this.menu = menu.clone();
+                cx.notify();
+            }
+        });
+
         Self {
             menu,
             item_name,
@@ -170,35 +213,35 @@ impl TrayMenuPanel {
     }
 
     /// Handle clicking on a menu item.
-    fn activate_menu_item(&self, menu_id: i32, window: &mut Window) {
+    fn activate_menu_item(&self, menu_id: i32, window: &mut Window, cx: &mut Context<Self>) {
         let subscriber = self.subscriber.clone();
         let item_name = self.item_name.clone();
-
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to create runtime");
-
-            rt.block_on(async {
-                if let Err(e) = subscriber
-                    .dispatch(TrayCommand::MenuItemClicked { item_name, menu_id })
-                    .await
-                {
-                    tracing::error!("Failed to click menu item: {}", e);
-                }
-            });
-        });
+        cx.spawn(async move |_, _| {
+            let _ = subscriber
+                .dispatch(TrayCommand::MenuItemClicked { item_name, menu_id })
+                .await;
+        })
+        .detach();
 
         // Close the menu panel
         window.remove_window();
     }
 
-    /// Toggle submenu expansion state
+    /// Toggle submenu expansion state.
+    /// Calls about_to_show when expanding to trigger lazy menu population.
     fn toggle_submenu(&mut self, menu_id: i32, cx: &mut Context<Self>) {
         if let Some(pos) = self.expanded_submenus.iter().position(|&id| id == menu_id) {
             self.expanded_submenus.remove(pos);
         } else {
+            // Notify the app to populate the submenu before expanding
+            let subscriber = self.subscriber.clone();
+            let item_name = self.item_name.clone();
+            cx.spawn(async move |_, _| {
+                let _ = subscriber
+                    .dispatch(TrayCommand::AboutToShow { item_name, menu_id })
+                    .await;
+            })
+            .detach();
             self.expanded_submenus.push(menu_id);
         }
         cx.notify();
@@ -359,8 +402,8 @@ fn render_menu_item(
         })
         .when(!is_enabled, |el| el.cursor_default())
         .when(is_enabled && !has_submenu, |el| {
-            el.on_click(cx.listener(move |this, _, window, _cx| {
-                this.activate_menu_item(menu_id, window);
+            el.on_click(cx.listener(move |this, _, window, cx| {
+                this.activate_menu_item(menu_id, window, cx);
             }))
         })
         .when(has_submenu, |el| {
@@ -496,7 +539,7 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
             "pasystray" | "pavucontrol" => "󰕾",
             "udiskie" => "󰋊",
             "flameshot" => "󰹑",
-            "kdeconnect" | "kdeconnectd" => "󰄜",
+            "kdeconnect" | "kdeconnectd" | "kde connect indicator" => "󰄜",
             "tailscale" | "tailscale-systray" => "󰖂",
             "remmina" | "org.remmina.remmina" | "remmina-icon" => "󰢹",
             _ => "",
@@ -541,6 +584,8 @@ fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
         Some("󰕾")
     } else if hint.contains("battery") || hint.contains("power") {
         Some("󰁹")
+    } else if hint.contains("kdeconnect") || hint.contains("kde connect") {
+        Some("󰄜")
     } else if hint.contains("vpn") {
         Some("󰕥")
     } else if hint.contains("cloud") || hint.contains("dropbox") || hint.contains("sync") {
