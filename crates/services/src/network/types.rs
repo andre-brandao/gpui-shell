@@ -126,6 +126,7 @@ pub enum ActiveConnectionInfo {
         name: String,
         strength: u8,
         device: String,
+        object_path: OwnedObjectPath,
     },
     Vpn {
         name: String,

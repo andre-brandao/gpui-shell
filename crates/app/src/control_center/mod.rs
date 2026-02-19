@@ -15,17 +15,21 @@
 //! - `power` - Battery status and power profiles
 
 mod bluetooth;
+pub mod config;
 pub mod icons;
 mod power;
 mod quick_toggles;
 mod sliders;
 mod wifi;
 
+pub use config::{ControlCenterConfig, PowerActionsConfig};
+
 use gpui::{
-    App, Context, Entity, FocusHandle, Focusable, ScrollHandle, Window, div, prelude::*, px,
+    App, Context, Entity, FocusHandle, Focusable, MouseButton, ScrollHandle, Window, div,
+    prelude::*, px,
 };
-use services::{AudioCommand, BrightnessCommand, NetworkCommand};
-use ui::{ActiveTheme, Slider, SliderEvent, radius, spacing};
+use services::{AudioCommand, BrightnessCommand, NetworkCommand, UPowerCommand};
+use ui::{ActiveTheme, Slider, SliderEvent, font_size, icon_size, radius, spacing};
 
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
@@ -158,6 +162,11 @@ impl ControlCenter {
             cx.notify();
         });
 
+        // Privacy
+        watch(cx, AppState::privacy(cx).subscribe(), |_, _, cx| {
+            cx.notify();
+        });
+
         // UPower
         watch(cx, AppState::upower(cx).subscribe(), |_, _, cx| {
             cx.notify();
@@ -187,6 +196,16 @@ impl Render for ControlCenter {
         let theme = cx.theme();
         let expanded = self.expanded;
         let network_service = AppState::network(cx).clone();
+        let upower = AppState::upower(cx).get();
+        let brightness_state = AppState::brightness(cx).get();
+        let show_brightness = brightness_state.max != 0;
+        let bg_secondary = theme.bg.secondary;
+        let border_subtle = theme.border.subtle;
+        let interactive_default = theme.interactive.default;
+        let interactive_hover = theme.interactive.hover;
+        let text_primary = theme.text.primary;
+        let text_muted = theme.text.muted;
+        let accent_primary = theme.accent.primary;
 
         // Create entity-based callbacks for section toggling
         let entity = cx.entity().clone();
@@ -197,6 +216,52 @@ impl Render for ControlCenter {
                     this.toggle_section(section);
                     cx.notify();
                 });
+            }
+        };
+        let on_toggle_section_power = on_toggle_section.clone();
+
+        let battery = upower.battery.as_ref();
+        let battery_icon = battery.map(|b| b.icon()).unwrap_or(icons::BATTERY_FULL);
+        let battery_line = battery
+            .map(|b| format!("{}%", b.percentage))
+            .unwrap_or_else(|| "AC".to_string());
+        let battery_sub = battery
+            .map(|b| {
+                if let Some(time) = power::format_time_remaining(b) {
+                    if b.is_charging() {
+                        format!("{} to full", time)
+                    } else {
+                        format!("{} remaining", time)
+                    }
+                } else if b.is_charging() {
+                    "Charging".to_string()
+                } else {
+                    "On Battery".to_string()
+                }
+            })
+            .unwrap_or_else(|| "No battery".to_string());
+        let battery_color = if let Some(b) = battery {
+            if b.is_critical() {
+                theme.status.error
+            } else if b.is_charging() {
+                theme.status.success
+            } else if b.percentage <= 20 {
+                theme.status.warning
+            } else {
+                theme.text.primary
+            }
+        } else {
+            theme.text.muted
+        };
+
+        let on_cycle_power_profile = {
+            let services = AppState::upower(cx).clone();
+            move |cx: &mut App| {
+                let s = services.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.dispatch(UPowerCommand::CyclePowerProfile).await;
+                })
+                .detach();
             }
         };
 
@@ -258,6 +323,17 @@ impl Render for ControlCenter {
                         cx.notify();
                     });
                 }
+            }
+        };
+
+        let on_wifi_disconnect = {
+            let services = wifi_services.clone();
+            move |path: zbus::zvariant::OwnedObjectPath, cx: &mut App| {
+                let s = services.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.dispatch(NetworkCommand::Disconnect(path)).await;
+                })
+                .detach();
             }
         };
 
@@ -515,35 +591,162 @@ impl Render for ControlCenter {
                     });
                 }
             })
-            // Quick toggles row
+            .child(
+                div()
+                    .id("control-center-header")
+                    .flex()
+                    .items_center()
+                    .gap(px(spacing::SM))
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .gap(px(spacing::SM))
+                            .px(px(spacing::SM))
+                            .py(px(spacing::XS))
+                            .bg(bg_secondary)
+                            .border_1()
+                            .border_color(border_subtle)
+                            .rounded(px(radius::MD))
+                            .child(
+                                div()
+                                    .text_size(px(icon_size::LG))
+                                    .text_color(battery_color)
+                                    .child(battery_icon),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.))
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::SM))
+                                            .text_color(text_primary)
+                                            .child(battery_line),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(font_size::XS))
+                                            .text_color(text_muted)
+                                            .child(battery_sub),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("power-profile-cycle")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .w(px(36.))
+                            .h(px(36.))
+                            .bg(interactive_default)
+                            .border_1()
+                            .border_color(border_subtle)
+                            .rounded(px(radius::MD))
+                            .cursor_pointer()
+                            .hover(move |s| s.bg(interactive_hover))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                on_cycle_power_profile(cx);
+                            })
+                            .child(
+                                div()
+                                    .text_size(px(icon_size::SM))
+                                    .text_color(text_primary)
+                                    .child(upower.power_profile.icon()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("power-button")
+                            .w(px(36.))
+                            .h(px(36.))
+                            .rounded(px(18.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .border_1()
+                            .border_color(if expanded == ExpandedSection::Power {
+                                accent_primary
+                            } else {
+                                border_subtle
+                            })
+                            .bg(interactive_default)
+                            .cursor_pointer()
+                            .hover(move |s| s.bg(interactive_hover))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                on_toggle_section_power(ExpandedSection::Power, cx);
+                            })
+                            .child(
+                                div()
+                                    .text_size(px(icon_size::MD))
+                                    .text_color(text_primary)
+                                    .child(icons::POWER_BUTTON),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .id("control-center-volume")
+                    .p(px(spacing::SM))
+                    .bg(bg_secondary)
+                    .border_1()
+                    .border_color(border_subtle)
+                    .rounded(px(radius::MD))
+                    .child(sliders::render_volume_slider(&self.volume_slider, cx)),
+            )
+            .when(show_brightness, |el| {
+                el.child(
+                    div()
+                        .id("control-center-brightness")
+                        .p(px(spacing::SM))
+                        .bg(bg_secondary)
+                        .border_1()
+                        .border_color(border_subtle)
+                        .rounded(px(radius::MD))
+                        .child(sliders::render_brightness_slider(
+                            &self.brightness_slider,
+                            cx,
+                        )),
+                )
+            })
             .child(quick_toggles::render_quick_toggles(
                 expanded,
                 on_toggle_section,
                 cx,
             ))
-            // WiFi section (when expanded) - right after toggle
-            .when(expanded == ExpandedSection::WiFi, |el| {
-                el.child(wifi::render_wifi_section(
-                    &self.wifi_password,
-                    on_wifi_connect,
-                    on_cancel_password,
-                    cx,
-                ))
+            .when(expanded != ExpandedSection::None, |el| {
+                el.child(
+                    div()
+                        .id("control-center-dropdown")
+                        .w_full()
+                        .min_h(px(180.))
+                        .p(px(spacing::SM))
+                        .bg(bg_secondary)
+                        .border_1()
+                        .border_color(border_subtle)
+                        .rounded(px(radius::MD))
+                        .flex()
+                        .flex_col()
+                        .gap(px(spacing::SM))
+                        .when(expanded == ExpandedSection::WiFi, |el| {
+                            el.child(wifi::render_wifi_section(
+                                &self.wifi_password,
+                                on_wifi_connect,
+                                on_wifi_disconnect,
+                                on_cancel_password,
+                                cx,
+                            ))
+                        })
+                        .when(expanded == ExpandedSection::Bluetooth, |el| {
+                            el.child(bluetooth::render_bluetooth_section(cx))
+                        })
+                        .when(expanded == ExpandedSection::Power, |el| {
+                            el.child(power::render_power_section(cx))
+                        }),
+                )
             })
-            // Bluetooth section (when expanded) - right after toggle
-            .when(expanded == ExpandedSection::Bluetooth, |el| {
-                el.child(bluetooth::render_bluetooth_section(cx))
-            })
-            // Power section (when expanded) - right after toggle
-            .when(expanded == ExpandedSection::Power, |el| {
-                el.child(power::render_power_section(cx))
-            })
-            // Volume slider
-            .child(sliders::render_volume_slider(&self.volume_slider, cx))
-            // Brightness slider (if available)
-            .child(sliders::render_brightness_slider(
-                &self.brightness_slider,
-                cx,
-            ))
     }
 }

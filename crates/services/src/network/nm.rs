@@ -94,6 +94,7 @@ impl<'a> NetworkManager<'a> {
                                 name: String::from_utf8_lossy(&ap_proxy.ssid().await?).into_owned(),
                                 strength: ap_proxy.strength().await.unwrap_or_default(),
                                 device: device_proxy.inner().path().to_string(),
+                                object_path: connection.inner().path().to_owned().into(),
                             });
                         }
                     }

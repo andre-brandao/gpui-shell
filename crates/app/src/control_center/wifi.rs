@@ -8,6 +8,7 @@ use services::{AccessPoint, NetworkCommand};
 use ui::{
     ActiveTheme, InputBuffer, font_size, icon_size, radius, render_masked_input_line, spacing,
 };
+use zbus::zvariant::OwnedObjectPath;
 
 use crate::state::AppState;
 
@@ -53,20 +54,29 @@ impl WifiPasswordState {
 pub fn render_wifi_section(
     password_state: &WifiPasswordState,
     on_connect: impl Fn(String, Option<String>, &mut App) + Clone + 'static,
+    on_disconnect: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
     on_cancel_password: impl Fn(&mut App) + Clone + 'static,
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
     let network = AppState::network(cx).get();
 
-    // Get current connection name
-    let connected_name: Option<String> = network.active_connections.iter().find_map(|c| {
-        if let services::ActiveConnectionInfo::WiFi { name, .. } = c {
-            Some(name.clone())
+    // Get current connection name + object path
+    let active_wifi = network.active_connections.iter().find_map(|c| {
+        if let services::ActiveConnectionInfo::WiFi {
+            name,
+            object_path,
+            ..
+        } = c
+        {
+            Some((name.clone(), object_path.clone()))
         } else {
             None
         }
     });
+    let connected_name = active_wifi.as_ref().map(|(name, _)| name.clone());
+    let connected_path = active_wifi.map(|(_, path)| path);
+    let wifi_enabled = network.wifi_enabled;
 
     // Sort access points: connected first, then by signal strength
     let mut aps: Vec<AccessPoint> = network.wireless_access_points.clone();
@@ -84,19 +94,13 @@ pub fn render_wifi_section(
         .w_full()
         .flex()
         .flex_col()
-        .gap(px(spacing::XS))
-        .p(px(spacing::SM))
-        .bg(theme.bg.secondary)
-        .rounded(px(radius::MD))
-        .border_1()
-        .border_color(theme.border.subtle)
+        .gap(px(spacing::SM))
         .child(
             // Section header
             div()
                 .flex()
                 .items_center()
                 .gap(px(spacing::SM))
-                .pb(px(spacing::XS))
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
@@ -109,11 +113,29 @@ pub fn render_wifi_section(
                         .text_size(px(font_size::SM))
                         .text_color(theme.text.secondary)
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .child("Networks"),
+                        .child("WiFi"),
                 )
+                .when_some(connected_name.clone(), |el, name| {
+                    el.child(
+                        div()
+                            .text_size(px(font_size::XS))
+                            .text_color(theme.text.muted)
+                            .child(format!("- {}", name)),
+                    )
+                })
                 .child(render_refresh_button(cx)),
         )
-        .when(aps.is_empty(), |el| {
+        .when(!wifi_enabled, |el| {
+            el.child(
+                div()
+                    .py(px(spacing::MD))
+                    .text_size(px(font_size::SM))
+                    .text_color(theme.text.muted)
+                    .text_center()
+                    .child("WiFi is off"),
+            )
+        })
+        .when(wifi_enabled && aps.is_empty(), |el| {
             el.child(
                 div()
                     .py(px(spacing::MD))
@@ -123,14 +145,14 @@ pub fn render_wifi_section(
                     .child("No networks found"),
             )
         })
-        .when(!aps.is_empty(), |el| {
+        .when(wifi_enabled && !aps.is_empty(), |el| {
             el.child(
                 div()
                     .id("wifi-networks-list")
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .max_h(px(200.))
+                    .max_h(px(220.))
                     .overflow_y_scroll()
                     .children(aps.into_iter().enumerate().map(|(idx, ap)| {
                         let is_connected = connected_name.as_ref() == Some(&ap.ssid);
@@ -141,9 +163,11 @@ pub fn render_wifi_section(
                         let is_secured = !ap.public;
                         let is_known = ap.known;
                         let on_connect = on_connect.clone();
+                        let on_disconnect = on_disconnect.clone();
                         let on_cancel = on_cancel_password.clone();
                         let current_password = password_state.input.clone();
                         let is_connecting = password_state.connecting;
+                        let disconnect_path = connected_path.clone();
 
                         if is_entering_password {
                             let ssid_submit = ssid.clone();
@@ -169,6 +193,7 @@ pub fn render_wifi_section(
                                 is_secured,
                                 is_known,
                                 is_connected,
+                                disconnect_path.clone(),
                                 move |cx| {
                                     if is_connected {
                                         // Already connected, do nothing or disconnect
@@ -185,6 +210,9 @@ pub fn render_wifi_section(
                                         // For known networks, NM will use saved credentials
                                         on_connect(ssid, Some(String::new()), cx);
                                     }
+                                },
+                                move |path, cx| {
+                                    on_disconnect(path, cx);
                                 },
                                 cx,
                             )
@@ -204,7 +232,9 @@ fn render_network_item(
     secured: bool,
     known: bool,
     connected: bool,
+    disconnect_path: Option<OwnedObjectPath>,
     on_click: impl Fn(&mut App) + 'static,
+    on_disconnect: impl Fn(OwnedObjectPath, &mut App) + 'static,
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
@@ -258,6 +288,14 @@ fn render_network_item(
                 .overflow_hidden()
                 .child(ssid.to_string()),
         )
+        .when(known && !connected, |el| {
+            el.child(
+                div()
+                    .text_size(px(icon_size::SM))
+                    .text_color(status_success)
+                    .child(icons::CHECK),
+            )
+        })
         // Lock icon for secured networks (green if known/saved)
         .when(secured, |el| {
             el.child(
@@ -267,13 +305,41 @@ fn render_network_item(
                     .child(icons::LOCK),
             )
         })
-        // Connected checkmark
-        .when(connected, |el| {
+        .when(!connected, |el| {
             el.child(
                 div()
                     .text_size(px(icon_size::SM))
-                    .text_color(status_success)
-                    .child(icons::CHECK),
+                    .text_color(text_muted)
+                    .child(icons::CHEVRON_RIGHT),
+            )
+        })
+        .when(connected, move |el| {
+            let disconnect_path = disconnect_path.clone();
+            el.child(
+                div()
+                    .id(ElementId::Name(SharedString::from(format!(
+                        "wifi-disconnect-{}",
+                        index
+                    ))))
+                    .w(px(22.))
+                    .h(px(22.))
+                    .rounded(px(radius::SM))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(move |s| s.bg(interactive_hover))
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        if let Some(path) = disconnect_path.clone() {
+                            on_disconnect(path, cx);
+                        }
+                    })
+                    .child(
+                        div()
+                            .text_size(px(icon_size::SM))
+                            .text_color(status_success)
+                            .child(icons::CLOSE),
+                    ),
             )
         })
 }

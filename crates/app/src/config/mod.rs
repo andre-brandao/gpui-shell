@@ -9,6 +9,7 @@ use services::FileWatcher;
 use ui::Theme;
 
 pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
+pub use crate::control_center::ControlCenterConfig;
 pub use crate::launcher::config::LauncherConfig;
 pub use crate::notification::{NotificationConfig, NotificationPopupPosition};
 pub use crate::osd::{OsdConfig, OsdPosition};
@@ -21,6 +22,7 @@ pub struct Config {
     pub launcher: LauncherConfig,
     pub osd: OsdConfig,
     pub notification: NotificationConfig,
+    pub control_center: ControlCenterConfig,
 }
 
 impl Default for Config {
@@ -30,6 +32,7 @@ impl Default for Config {
             launcher: LauncherConfig::default(),
             osd: OsdConfig::default(),
             notification: NotificationConfig::default(),
+            control_center: ControlCenterConfig::default(),
         }
     }
 }

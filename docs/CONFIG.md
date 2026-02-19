@@ -34,6 +34,11 @@ margin_left = 0.0
 
 [osd]
 position = "right"
+
+[control_center.power_actions]
+sleep = "systemctl suspend"
+reboot = "systemctl reboot"
+poweroff = "systemctl poweroff"
 ```
 
 ## `theme.toml` format
@@ -71,6 +76,16 @@ Notes:
 
 - `position` (`"top" | "bottom" | "left" | "right"`): screen edge where the
   volume/brightness OSD appears.
+
+## `control_center`
+
+### `power_actions`
+
+- `sleep` (`string`): command to run for sleep/suspend.
+- `reboot` (`string`): command to run for reboot.
+- `poweroff` (`string`): command to run for power off.
+
+Commands run via `sh -c`. Set a command to an empty string to disable it.
 
 ## Widget names
 

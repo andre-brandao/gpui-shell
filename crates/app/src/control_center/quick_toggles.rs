@@ -1,12 +1,10 @@
 //! Quick toggle buttons for the Control Center.
 //!
-//! Provides compact toggle buttons for WiFi, Bluetooth, and Microphone.
+//! Provides compact modules for WiFi, Bluetooth, Microphone, and Camera status.
 
 use gpui::{App, MouseButton, div, prelude::*, px};
-use services::{
-    AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand, PowerProfile, UPowerCommand,
-};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use services::{AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand};
+use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::state::AppState;
 
@@ -31,132 +29,146 @@ pub fn render_quick_toggles(
     let network = AppState::network(cx).get();
     let bluetooth = AppState::bluetooth(cx).get();
     let audio = AppState::audio(cx).get();
-    let upower = AppState::upower(cx).get();
+    let privacy = AppState::privacy(cx).get();
 
     let wifi_enabled = network.wifi_enabled;
+    let wifi_connected = network.active_connections.iter().any(|c| {
+        matches!(c, services::ActiveConnectionInfo::WiFi { .. })
+    });
+    let wifi_name = network.active_connections.iter().find_map(|c| {
+        if let services::ActiveConnectionInfo::WiFi { name, .. } = c {
+            Some(name.clone())
+        } else {
+            None
+        }
+    });
+
     let bt_active = bluetooth.state == BluetoothState::Active;
+    let bt_connected = bluetooth.devices.iter().filter(|d| d.connected).count();
+
     let mic_muted = audio.source_muted;
-    let has_battery = upower.battery.is_some();
-    let battery_icon = upower
-        .battery
-        .as_ref()
-        .map(|b| b.icon())
-        .unwrap_or(icons::BATTERY_FULL);
-    let is_charging = upower
-        .battery
-        .as_ref()
-        .map(|b| b.is_charging())
-        .unwrap_or(false);
+    let cam_active = privacy.webcam_access();
+
+    let wifi_status = if !wifi_enabled {
+        "Off".to_string()
+    } else if let Some(name) = wifi_name.clone() {
+        name
+    } else if wifi_connected {
+        "Connected".to_string()
+    } else {
+        "On".to_string()
+    };
+
+    let bt_status = if !bt_active {
+        "Off".to_string()
+    } else if bt_connected > 0 {
+        format!("{} conn", bt_connected)
+    } else {
+        "On".to_string()
+    };
+
+    let mic_status = if mic_muted { "Muted" } else { "On" };
+    let cam_status = if cam_active { "In use" } else { "Idle" };
 
     let services_wifi = AppState::network(cx).clone();
     let services_bt = AppState::bluetooth(cx).clone();
     let services_mic = AppState::audio(cx).clone();
-    let services_power = AppState::upower(cx).clone();
 
     let on_toggle_wifi = on_toggle_section.clone();
     let on_toggle_bt = on_toggle_section.clone();
-    let on_toggle_power = on_toggle_section.clone();
 
     div()
         .flex()
-        .items_center()
+        .flex_col()
         .gap(px(spacing::SM))
         .w_full()
-        // WiFi toggle
-        .child(render_expandable_toggle(
-            "wifi-toggle",
-            if wifi_enabled {
-                icons::WIFI
-            } else {
-                icons::WIFI_OFF
-            },
-            wifi_enabled,
-            expanded == ExpandedSection::WiFi,
-            cx,
-            move |cx| {
-                let services = services_wifi.clone();
-                cx.spawn(async move |_| {
-                    let _ = services.dispatch(NetworkCommand::ToggleWifi).await;
-                })
-                .detach();
-            },
-            move |cx| {
-                on_toggle_wifi(ExpandedSection::WiFi, cx);
-            },
-        ))
-        // Bluetooth toggle
-        .child(render_expandable_toggle(
-            "bt-toggle",
-            if bt_active {
-                icons::BLUETOOTH
-            } else {
-                icons::BLUETOOTH_OFF
-            },
-            bt_active,
-            expanded == ExpandedSection::Bluetooth,
-            cx,
-            move |cx| {
-                let services = services_bt.clone();
-                cx.spawn(async move |_| {
-                    let _ = services.dispatch(BluetoothCommand::Toggle).await;
-                })
-                .detach();
-            },
-            move |cx| {
-                on_toggle_bt(ExpandedSection::Bluetooth, cx);
-            },
-        ))
-        // Microphone toggle (simple, no expand)
-        .child(render_simple_toggle(
-            "mic-toggle",
-            if mic_muted {
-                icons::MICROPHONE_MUTE
-            } else {
-                icons::MICROPHONE
-            },
-            !mic_muted,
-            cx,
-            move |_cx| {
-                services_mic.dispatch(AudioCommand::ToggleSourceMute);
-            },
-        ))
-        // Battery/Power toggle (only if battery present)
-        .when(has_battery, |el| {
-            el.child(render_expandable_toggle(
-                "power-toggle",
-                battery_icon,
-                is_charging,
-                expanded == ExpandedSection::Power,
-                cx,
-                {
-                    let services = services_power.clone();
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(spacing::SM))
+                .w_full()
+                .child(render_simple_module(
+                    "mic-toggle",
+                    if mic_muted {
+                        icons::MICROPHONE_MUTE
+                    } else {
+                        icons::MICROPHONE
+                    },
+                    "Mic",
+                    mic_status,
+                    !mic_muted,
+                    cx,
+                    move |_cx| {
+                        services_mic.dispatch(AudioCommand::ToggleSourceMute);
+                    },
+                ))
+                .child(render_status_module(
+                    "cam-status",
+                    icons::CAMERA,
+                    "Cam",
+                    cam_status,
+                    cam_active,
+                    cx,
+                )),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(spacing::SM))
+                .w_full()
+                .child(render_expandable_module(
+                    "wifi-toggle",
+                    if wifi_enabled { icons::WIFI } else { icons::WIFI_OFF },
+                    "WiFi",
+                    wifi_status,
+                    wifi_enabled,
+                    expanded == ExpandedSection::WiFi,
+                    cx,
                     move |cx| {
-                        // Cycle through power profiles on click
-                        let current = services.get().power_profile;
-                        let next = match current {
-                            PowerProfile::PowerSaver => PowerProfile::Balanced,
-                            PowerProfile::Balanced => PowerProfile::Performance,
-                            PowerProfile::Performance => PowerProfile::PowerSaver,
-                            PowerProfile::Unknown => PowerProfile::Balanced,
-                        };
-                        let s = services.clone();
+                        let services = services_wifi.clone();
                         cx.spawn(async move |_| {
-                            let _ = s.dispatch(UPowerCommand::SetPowerProfile(next)).await;
+                            let _ = services.dispatch(NetworkCommand::ToggleWifi).await;
                         })
                         .detach();
-                    }
-                },
-                move |cx| {
-                    on_toggle_power(ExpandedSection::Power, cx);
-                },
-            ))
-        })
+                    },
+                    move |cx| {
+                        on_toggle_wifi(ExpandedSection::WiFi, cx);
+                    },
+                ))
+                .child(render_expandable_module(
+                    "bt-toggle",
+                    if bt_active {
+                        icons::BLUETOOTH
+                    } else {
+                        icons::BLUETOOTH_OFF
+                    },
+                    "Bluetooth",
+                    bt_status,
+                    bt_active,
+                    expanded == ExpandedSection::Bluetooth,
+                    cx,
+                    move |cx| {
+                        let services = services_bt.clone();
+                        cx.spawn(async move |_| {
+                            let _ = services.dispatch(BluetoothCommand::Toggle).await;
+                        })
+                        .detach();
+                    },
+                    move |cx| {
+                        on_toggle_bt(ExpandedSection::Bluetooth, cx);
+                    },
+                )),
+        )
 }
 
-/// Render an expandable toggle button (left click = toggle, right click = expand)
-fn render_expandable_toggle(
+#[allow(clippy::too_many_arguments)]
+fn render_expandable_module(
     id: &'static str,
     icon: &'static str,
+    label: &'static str,
+    status: String,
     active: bool,
     expanded: bool,
     cx: &App,
@@ -165,77 +177,95 @@ fn render_expandable_toggle(
 ) -> impl IntoElement {
     let theme = cx.theme();
 
-    // Pre-compute colors for closures
-    let interactive_toggle_on = theme.interactive.toggle_on;
-    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
-    let interactive_default = theme.interactive.default;
+    let bg_secondary = theme.bg.secondary;
+    let border_subtle = theme.border.subtle;
     let interactive_hover = theme.interactive.hover;
-    let bg_primary = theme.bg.primary;
+    let accent_primary = theme.accent.primary;
     let text_primary = theme.text.primary;
+    let text_secondary = theme.text.secondary;
     let text_muted = theme.text.muted;
+
+    let border_color = if expanded {
+        accent_primary
+    } else {
+        border_subtle
+    };
+    let icon_color = if active {
+        accent_primary
+    } else {
+        text_muted
+    };
+    let status_color = if active {
+        text_secondary
+    } else {
+        text_muted
+    };
 
     div()
         .id(id)
         .flex()
         .items_center()
-        .gap(px(2.))
+        .gap(px(spacing::XS))
+        .flex_1()
         .rounded(px(radius::MD))
+        .border_1()
+        .border_color(border_color)
+        .bg(bg_secondary)
         .overflow_hidden()
         .child(
-            // Main toggle button
             div()
-                .id(format!("{}-main", id))
+                .flex_1()
                 .flex()
                 .items_center()
-                .justify_center()
-                .w(px(40.))
-                .h(px(36.))
+                .gap(px(spacing::SM))
+                .px(px(spacing::SM))
+                .py(px(spacing::XS))
                 .cursor_pointer()
-                .when(active, move |el| el.bg(interactive_toggle_on))
-                .when(!active, move |el| el.bg(interactive_default))
-                .hover(move |s| {
-                    s.bg(if active {
-                        interactive_toggle_on_hover
-                    } else {
-                        interactive_hover
-                    })
-                })
+                .hover(move |s| s.bg(interactive_hover))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_toggle(cx);
                 })
                 .child(
                     div()
-                        .text_size(px(icon_size::MD))
-                        .text_color(if active { bg_primary } else { text_primary })
+                        .text_size(px(icon_size::SM))
+                        .text_color(icon_color)
                         .child(icon),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(text_primary)
+                                .child(label),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(font_size::XS))
+                                .text_color(status_color)
+                                .child(status),
+                        ),
                 ),
         )
         .child(
-            // Expand button
             div()
-                .id(format!("{}-expand", id))
+                .w(px(26.))
+                .h(px(32.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .w(px(20.))
-                .h(px(36.))
                 .cursor_pointer()
-                .when(expanded, move |el| el.bg(interactive_toggle_on))
-                .when(!expanded, move |el| el.bg(interactive_default))
-                .hover(move |s| {
-                    s.bg(if expanded {
-                        interactive_toggle_on_hover
-                    } else {
-                        interactive_hover
-                    })
-                })
+                .hover(move |s| s.bg(interactive_hover))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_expand(cx);
                 })
                 .child(
                     div()
                         .text_size(px(icon_size::SM))
-                        .text_color(if expanded { bg_primary } else { text_muted })
+                        .text_color(text_muted)
                         .child(if expanded {
                             icons::CHEVRON_UP
                         } else {
@@ -245,49 +275,126 @@ fn render_expandable_toggle(
         )
 }
 
-/// Render a simple toggle button (no expand functionality)
-fn render_simple_toggle(
+#[allow(clippy::too_many_arguments)]
+fn render_simple_module(
     id: &'static str,
     icon: &'static str,
+    label: &'static str,
+    status: &'static str,
     active: bool,
     cx: &App,
     on_click: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
     let theme = cx.theme();
 
-    // Pre-compute colors for closures
-    let interactive_toggle_on = theme.interactive.toggle_on;
-    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
-    let interactive_default = theme.interactive.default;
+    let bg_secondary = theme.bg.secondary;
+    let border_subtle = theme.border.subtle;
     let interactive_hover = theme.interactive.hover;
-    let bg_primary = theme.bg.primary;
+    let accent_primary = theme.accent.primary;
     let text_primary = theme.text.primary;
+    let text_muted = theme.text.muted;
 
     div()
         .id(id)
         .flex()
         .items_center()
-        .justify_center()
-        .w(px(40.))
-        .h(px(36.))
+        .gap(px(spacing::SM))
+        .flex_1()
+        .px(px(spacing::SM))
+        .py(px(spacing::XS))
         .rounded(px(radius::MD))
+        .border_1()
+        .border_color(border_subtle)
+        .bg(bg_secondary)
         .cursor_pointer()
-        .when(active, move |el| el.bg(interactive_toggle_on))
-        .when(!active, move |el| el.bg(interactive_default))
-        .hover(move |s| {
-            s.bg(if active {
-                interactive_toggle_on_hover
-            } else {
-                interactive_hover
-            })
-        })
+        .hover(move |s| s.bg(interactive_hover))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             on_click(cx);
         })
         .child(
             div()
-                .text_size(px(icon_size::MD))
-                .text_color(if active { bg_primary } else { text_primary })
+                .text_size(px(icon_size::SM))
+                .text_color(if active {
+                    accent_primary
+                } else {
+                    text_muted
+                })
                 .child(icon),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(px(font_size::XS))
+                        .text_color(text_primary)
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size::XS))
+                        .text_color(text_muted)
+                        .child(status),
+                ),
+        )
+}
+
+fn render_status_module(
+    id: &'static str,
+    icon: &'static str,
+    label: &'static str,
+    status: &'static str,
+    active: bool,
+    cx: &App,
+) -> impl IntoElement {
+    let theme = cx.theme();
+
+    let bg_secondary = theme.bg.secondary;
+    let border_subtle = theme.border.subtle;
+    let text_primary = theme.text.primary;
+    let text_muted = theme.text.muted;
+    let status_warning = theme.status.warning;
+
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .gap(px(spacing::SM))
+        .flex_1()
+        .px(px(spacing::SM))
+        .py(px(spacing::XS))
+        .rounded(px(radius::MD))
+        .border_1()
+        .border_color(border_subtle)
+        .bg(bg_secondary)
+        .child(
+            div()
+                .text_size(px(icon_size::SM))
+                .text_color(if active {
+                    status_warning
+                } else {
+                    text_muted
+                })
+                .child(icon),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(px(font_size::XS))
+                        .text_color(text_primary)
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size::XS))
+                        .text_color(text_muted)
+                        .child(status),
+                ),
         )
 }

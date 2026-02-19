@@ -17,32 +17,36 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let bluetooth = AppState::bluetooth(cx).get();
     let services_clone = AppState::bluetooth(cx).clone();
+    let discovering = bluetooth.discovering;
 
     // Sort devices: connected first, then by name
     let mut devices: Vec<BluetoothDevice> = bluetooth.devices.clone();
-    devices.sort_by(|a, b| match (a.connected, b.connected) {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.cmp(&b.name),
+    devices.sort_by(|a, b| {
+        let rank = |d: &BluetoothDevice| {
+            if d.connected {
+                0
+            } else if d.paired {
+                1
+            } else {
+                2
+            }
+        };
+        rank(a)
+            .cmp(&rank(b))
+            .then_with(|| a.name.cmp(&b.name))
     });
 
     div()
         .w_full()
         .flex()
         .flex_col()
-        .gap(px(spacing::XS))
-        .p(px(spacing::SM))
-        .bg(theme.bg.secondary)
-        .rounded(px(radius::MD))
-        .border_1()
-        .border_color(theme.border.subtle)
+        .gap(px(spacing::SM))
         .child(
             // Section header
             div()
                 .flex()
                 .items_center()
                 .justify_between()
-                .pb(px(spacing::XS))
                 .child(
                     div()
                         .flex()
@@ -59,11 +63,19 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                                 .text_size(px(font_size::SM))
                                 .text_color(theme.text.secondary)
                                 .font_weight(gpui::FontWeight::MEDIUM)
-                                .child("Devices"),
+                                .child("Bluetooth"),
                         ),
                 )
-                .child(render_scan_button(cx)),
+                .child(render_scan_button(discovering, cx)),
         )
+        .when(discovering, |el| {
+            el.child(
+                div()
+                    .text_size(px(font_size::XS))
+                    .text_color(theme.text.muted)
+                    .child("Scanning..."),
+            )
+        })
         .when(devices.is_empty(), |el| {
             el.child(
                 div()
@@ -81,22 +93,48 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .max_h(px(200.))
+                    .max_h(px(220.))
                     .overflow_y_scroll()
                     .children(devices.into_iter().enumerate().map(|(idx, device)| {
-                        let services = services_clone.clone();
-                        render_device_item(idx, device, cx, move |path, connected, cx| {
-                            let s = services.clone();
-                            cx.spawn(async move |_| {
-                                if connected {
+                        let services_connect = services_clone.clone();
+                        let services_disconnect = services_clone.clone();
+                        let services_pair = services_clone.clone();
+                        let services_remove = services_clone.clone();
+
+                        render_device_item(
+                            idx,
+                            device,
+                            cx,
+                            move |path, cx| {
+                                let s = services_connect.clone();
+                                cx.spawn(async move |_| {
+                                    let _ = s.dispatch(BluetoothCommand::ConnectDevice(path)).await;
+                                })
+                                .detach();
+                            },
+                            move |path, cx| {
+                                let s = services_disconnect.clone();
+                                cx.spawn(async move |_| {
                                     let _ =
                                         s.dispatch(BluetoothCommand::DisconnectDevice(path)).await;
-                                } else {
-                                    let _ = s.dispatch(BluetoothCommand::ConnectDevice(path)).await;
-                                }
-                            })
-                            .detach();
-                        })
+                                })
+                                .detach();
+                            },
+                            move |path, cx| {
+                                let s = services_pair.clone();
+                                cx.spawn(async move |_| {
+                                    let _ = s.dispatch(BluetoothCommand::PairDevice(path)).await;
+                                })
+                                .detach();
+                            },
+                            move |path, cx| {
+                                let s = services_remove.clone();
+                                cx.spawn(async move |_| {
+                                    let _ = s.dispatch(BluetoothCommand::RemoveDevice(path)).await;
+                                })
+                                .detach();
+                            },
+                        )
                     })),
             )
         })
@@ -107,7 +145,10 @@ fn render_device_item(
     index: usize,
     device: BluetoothDevice,
     cx: &App,
-    on_click: impl Fn(OwnedObjectPath, bool, &mut App) + 'static,
+    on_connect: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_disconnect: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_pair: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_remove: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
 ) -> impl IntoElement {
     let theme = cx.theme();
     let name = device.name.clone();
@@ -115,6 +156,7 @@ fn render_device_item(
     let battery = device.battery;
     let path = device.path.clone();
     let device_icon = get_device_icon(&device);
+    let paired = device.paired;
 
     // Pre-compute colors for use in closures
     let accent_selection = theme.accent.selection;
@@ -123,6 +165,9 @@ fn render_device_item(
     let text_muted = theme.text.muted;
     let text_primary = theme.text.primary;
     let status_success = theme.status.success;
+
+    let on_connect_click = on_connect.clone();
+    let on_pair_click = on_pair.clone();
 
     div()
         .id(ElementId::Name(SharedString::from(format!(
@@ -139,8 +184,19 @@ fn render_device_item(
         .cursor_pointer()
         .when(connected, |el| el.bg(accent_selection))
         .when(!connected, |el| el.hover(move |s| s.bg(interactive_hover)))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            on_click(path.clone(), connected, cx);
+        .on_mouse_down(MouseButton::Left, {
+            let path = path.clone();
+            move |_, _, cx| {
+                if connected {
+                    return;
+                }
+
+                if paired {
+                    on_connect_click(path.clone(), cx);
+                } else {
+                    on_pair_click(path.clone(), cx);
+                }
+            }
         })
         // Device icon
         .child(
@@ -162,21 +218,126 @@ fn render_device_item(
                 .overflow_hidden()
                 .child(name),
         )
+        .when(paired && !connected, |el| {
+            el.child(
+                div()
+                    .text_size(px(icon_size::SM))
+                    .text_color(status_success)
+                    .child(icons::CHECK),
+            )
+        })
         // Battery level (if available)
         .when_some(battery, |el, level| {
             el.child(render_battery_indicator(level, cx))
         })
-        // Connection status
-        .child(
-            div()
-                .text_size(px(font_size::XS))
-                .text_color(if connected {
-                    status_success
-                } else {
-                    text_muted
-                })
-                .child(if connected { "Connected" } else { "Paired" }),
-        )
+        .child(render_device_actions(
+            index,
+            connected,
+            paired,
+            path,
+            interactive_hover,
+            text_muted,
+            status_success,
+            on_connect,
+            on_disconnect,
+            on_pair,
+            on_remove,
+            cx,
+        ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_device_actions(
+    index: usize,
+    connected: bool,
+    paired: bool,
+    path: OwnedObjectPath,
+    interactive_hover: gpui::Hsla,
+    text_muted: gpui::Hsla,
+    status_success: gpui::Hsla,
+    on_connect: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_disconnect: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_pair: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_remove: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    _cx: &App,
+) -> impl IntoElement {
+    let action_button = |id: String,
+                         icon: &'static str,
+                         color: gpui::Hsla,
+                         on_click: Box<dyn Fn(&mut App) + 'static>| {
+        div()
+            .id(ElementId::Name(SharedString::from(id)))
+            .w(px(22.))
+            .h(px(22.))
+            .rounded(px(radius::SM))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .hover(move |s| s.bg(interactive_hover))
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                on_click(cx);
+            })
+            .child(
+                div()
+                    .text_size(px(icon_size::SM))
+                    .text_color(color)
+                    .child(icon),
+            )
+    };
+
+    div()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .when(!paired, |el| {
+            let path = path.clone();
+            let on_pair = on_pair.clone();
+            el.child(action_button(
+                format!("bt-pair-{}", index),
+                "+",
+                text_muted,
+                Box::new(move |cx| {
+                    on_pair(path.clone(), cx);
+                }),
+            ))
+        })
+        .when(paired && !connected, |el| {
+            let path = path.clone();
+            let on_connect = on_connect.clone();
+            el.child(action_button(
+                format!("bt-connect-{}", index),
+                icons::CHEVRON_RIGHT,
+                text_muted,
+                Box::new(move |cx| {
+                    on_connect(path.clone(), cx);
+                }),
+            ))
+        })
+        .when(connected, |el| {
+            let path = path.clone();
+            let on_disconnect = on_disconnect.clone();
+            el.child(action_button(
+                format!("bt-disconnect-{}", index),
+                icons::CLOSE,
+                status_success,
+                Box::new(move |cx| {
+                    on_disconnect(path.clone(), cx);
+                }),
+            ))
+        })
+        .when(paired, |el| {
+            let path = path.clone();
+            let on_remove = on_remove.clone();
+            el.child(action_button(
+                format!("bt-remove-{}", index),
+                "x",
+                text_muted,
+                Box::new(move |cx| {
+                    on_remove(path.clone(), cx);
+                }),
+            ))
+        })
 }
 
 /// Render battery indicator for a device
@@ -243,13 +404,28 @@ fn get_device_icon(device: &BluetoothDevice) -> &'static str {
 }
 
 /// Render scan button for discovering devices
-fn render_scan_button(cx: &App) -> impl IntoElement {
+fn render_scan_button(discovering: bool, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let services = AppState::bluetooth(cx).clone();
 
     let interactive_default = theme.interactive.default;
     let interactive_hover = theme.interactive.hover;
+    let interactive_toggle_on = theme.interactive.toggle_on;
+    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
+    let bg_primary = theme.bg.primary;
     let text_muted = theme.text.muted;
+
+    let bg_color = if discovering {
+        interactive_toggle_on
+    } else {
+        interactive_default
+    };
+    let hover_color = if discovering {
+        interactive_toggle_on_hover
+    } else {
+        interactive_hover
+    };
+    let icon_color = if discovering { bg_primary } else { text_muted };
 
     div()
         .id("bt-scan")
@@ -260,19 +436,23 @@ fn render_scan_button(cx: &App) -> impl IntoElement {
         .h(px(24.))
         .rounded(px(radius::SM))
         .cursor_pointer()
-        .bg(interactive_default)
-        .hover(move |s| s.bg(interactive_hover))
+        .bg(bg_color)
+        .hover(move |s| s.bg(hover_color))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             let s = services.clone();
             cx.spawn(async move |_| {
-                let _ = s.dispatch(BluetoothCommand::StartDiscovery).await;
+                let _ = if discovering {
+                    s.dispatch(BluetoothCommand::StopDiscovery).await
+                } else {
+                    s.dispatch(BluetoothCommand::StartDiscovery).await
+                };
             })
             .detach();
         })
         .child(
             div()
                 .text_size(px(icon_size::SM))
-                .text_color(text_muted)
+                .text_color(icon_color)
                 .child(icons::REFRESH),
         )
 }

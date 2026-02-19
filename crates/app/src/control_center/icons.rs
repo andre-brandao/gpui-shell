@@ -38,6 +38,9 @@ pub const POWER_PROFILE: &str = "󰌪";
 pub const POWER_SAVER: &str = "󰌪";
 pub const POWER_BALANCED: &str = "󰛲";
 pub const POWER_PERFORMANCE: &str = "󱐋";
+pub const POWER_SLEEP: &str = "󰒲";
+pub const POWER_BUTTON: &str = "⏻";
+pub const CAMERA: &str = "󰄀";
 
 // UI
 pub const CHEVRON_DOWN: &str = "󰅀";
