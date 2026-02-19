@@ -105,7 +105,7 @@ impl ActiveWindow {
         }
     }
 
-    fn vertical_lines(&self) -> Vec<String> {
+    fn vertical_lines(&self, max_length: usize) -> Vec<String> {
         let source = self
             .state
             .active_window
@@ -122,41 +122,23 @@ impl ActiveWindow {
         if source.is_empty() {
             return Vec::new();
         }
-
-        let token = source
-            .split(|ch: char| !ch.is_alphanumeric())
-            .filter(|part| !part.is_empty())
-            .find(|part| {
-                let lower = part.to_lowercase();
-                !matches!(lower.as_str(), "org" | "com" | "io" | "app" | "www")
-            })
-            .unwrap_or(source);
-
-        let compact = token
-            .chars()
-            .filter(|ch| ch.is_alphanumeric())
-            .take(4)
-            .collect::<String>()
-            .to_uppercase();
-
-        let compact = if compact.is_empty() {
-            source
-                .chars()
-                .filter(|ch| !ch.is_whitespace())
-                .take(4)
-                .collect::<String>()
-                .to_uppercase()
+        let max_length = if max_length == 0 {
+            usize::MAX
         } else {
-            compact
+            max_length
         };
-
         let mut lines = Vec::new();
-        let first = compact.chars().take(2).collect::<String>();
-        let second = compact.chars().skip(2).take(2).collect::<String>();
+        let mut count = 0;
 
-        lines.push(first);
-        if !second.is_empty() {
-            lines.push(second);
+        for ch in source.chars() {
+            if count >= max_length {
+                break;
+            }
+            if ch == '\n' || ch == '\r' {
+                continue;
+            }
+            lines.push(ch.to_string());
+            count += 1;
         }
 
         lines
@@ -185,7 +167,7 @@ impl Render for ActiveWindow {
         } else {
             None
         };
-        let vertical_lines = self.vertical_lines();
+        let vertical_lines = self.vertical_lines(25);
         let interactive_default = theme.interactive.default;
         let border_subtle = theme.border.subtle;
         let text_primary = theme.text.primary;
@@ -197,9 +179,9 @@ impl Render for ActiveWindow {
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(style::CHIP_GAP))
-                .px(px(style::chip_padding_x(true)))
-                .py(px(style::CHIP_PADDING_Y))
+                .gap(px(0.1))
+                // .px(px(style::chip_padding_x(true)))
+                // .py(px(style::CHIP_PADDING_Y))
                 .rounded(px(radius::SM))
                 .children(
                     vertical_lines
