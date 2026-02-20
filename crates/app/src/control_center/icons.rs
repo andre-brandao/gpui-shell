@@ -52,6 +52,7 @@ pub const SETTINGS: &str = "󰒓";
 pub const REFRESH: &str = "󰑓";
 pub const LOCK: &str = "󰌾";
 pub const SIGNAL_STRENGTH: &str = "󰣺";
+pub const TRASH: &str = "󰆴";
 
 /// Get WiFi icon based on signal strength (0-100)
 pub fn wifi_signal_icon(strength: u8) -> &'static str {

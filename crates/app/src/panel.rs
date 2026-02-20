@@ -28,7 +28,7 @@ impl Default for PanelConfig {
             width: 320.0,
             height: 400.0,
             anchor: Anchor::TOP | Anchor::RIGHT,
-            margin: (0.0, 8.0, 0.0, 0.0),
+            margin: (5.0, 5.0, 5.0, 5.0),
             namespace: "panel".to_string(),
         }
     }
@@ -46,7 +46,7 @@ pub fn panel_placement(
             } else {
                 Anchor::TOP
             };
-            (Anchor::LEFT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            (Anchor::LEFT | vertical_edge, (5.0, 5.0, 5.0, 5.0))
         }
         BarPosition::Right => {
             let vertical_edge = if matches!(slot, WidgetSlot::End) {
@@ -54,7 +54,7 @@ pub fn panel_placement(
             } else {
                 Anchor::TOP
             };
-            (Anchor::RIGHT | vertical_edge, (0.0, 0.0, 0.0, 0.0))
+            (Anchor::RIGHT | vertical_edge, (5.0, 5.0, 5.0, 5.0))
         }
         BarPosition::Top => {
             let horizontal_edge = if matches!(slot, WidgetSlot::End) {
@@ -62,7 +62,7 @@ pub fn panel_placement(
             } else {
                 Anchor::LEFT
             };
-            (Anchor::TOP | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            (Anchor::TOP | horizontal_edge, (5.0, 5.0, 5.0, 5.0))
         }
         BarPosition::Bottom => {
             let horizontal_edge = if matches!(slot, WidgetSlot::End) {
@@ -70,7 +70,7 @@ pub fn panel_placement(
             } else {
                 Anchor::LEFT
             };
-            (Anchor::BOTTOM | horizontal_edge, (0.0, 0.0, 0.0, 0.0))
+            (Anchor::BOTTOM | horizontal_edge, (5.0, 5.0, 5.0, 5.0))
         }
     }
 }

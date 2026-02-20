@@ -10,7 +10,7 @@ use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 use crate::state::AppState;
 use zbus::zvariant::OwnedObjectPath;
 
-use super::icons;
+use super::{icons, tooltip::control_center_tooltip};
 
 /// Render the Bluetooth section (device list)
 pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
@@ -156,6 +156,7 @@ fn render_device_item(
     let battery = device.battery;
     let path = device.path.clone();
     let device_icon = get_device_icon(&device);
+    let device_tooltip = get_device_icon_tooltip(&device);
     let paired = device.paired;
 
     // Pre-compute colors for use in closures
@@ -201,13 +202,15 @@ fn render_device_item(
         // Device icon
         .child(
             div()
+                .id(format!("bt-device-icon-{}", index))
                 .text_size(px(icon_size::SM))
                 .text_color(if connected {
                     accent_primary
                 } else {
                     text_muted
                 })
-                .child(device_icon),
+                .child(device_icon)
+                .tooltip(control_center_tooltip(device_tooltip)),
         )
         // Device name
         .child(
@@ -221,14 +224,16 @@ fn render_device_item(
         .when(paired && !connected, |el| {
             el.child(
                 div()
+                    .id(format!("bt-paired-{}", index))
                     .text_size(px(icon_size::SM))
                     .text_color(status_success)
-                    .child(icons::CHECK),
+                    .child(icons::CHECK)
+                    .tooltip(control_center_tooltip("Paired")),
             )
         })
         // Battery level (if available)
         .when_some(battery, |el, level| {
-            el.child(render_battery_indicator(level, cx))
+            el.child(render_battery_indicator(index, level, cx))
         })
         .child(render_device_actions(
             index,
@@ -264,6 +269,7 @@ fn render_device_actions(
     let action_button = |id: String,
                          icon: &'static str,
                          color: gpui::Hsla,
+                         tooltip: &'static str,
                          on_click: Box<dyn Fn(&mut App) + 'static>| {
         div()
             .id(ElementId::Name(SharedString::from(id)))
@@ -284,6 +290,7 @@ fn render_device_actions(
                     .text_color(color)
                     .child(icon),
             )
+            .tooltip(control_center_tooltip(tooltip))
     };
 
     div()
@@ -297,6 +304,7 @@ fn render_device_actions(
                 format!("bt-pair-{}", index),
                 "+",
                 text_muted,
+                "Pair",
                 Box::new(move |cx| {
                     on_pair(path.clone(), cx);
                 }),
@@ -309,6 +317,7 @@ fn render_device_actions(
                 format!("bt-connect-{}", index),
                 icons::CHEVRON_RIGHT,
                 text_muted,
+                "Connect",
                 Box::new(move |cx| {
                     on_connect(path.clone(), cx);
                 }),
@@ -321,6 +330,7 @@ fn render_device_actions(
                 format!("bt-disconnect-{}", index),
                 icons::CLOSE,
                 status_success,
+                "Disconnect",
                 Box::new(move |cx| {
                     on_disconnect(path.clone(), cx);
                 }),
@@ -331,8 +341,9 @@ fn render_device_actions(
             let on_remove = on_remove.clone();
             el.child(action_button(
                 format!("bt-remove-{}", index),
-                "x",
+                icons::TRASH,
                 text_muted,
+                "Remove device",
                 Box::new(move |cx| {
                     on_remove(path.clone(), cx);
                 }),
@@ -341,7 +352,7 @@ fn render_device_actions(
 }
 
 /// Render battery indicator for a device
-fn render_battery_indicator(level: u8, cx: &App) -> impl IntoElement {
+fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let color = if level <= 20 {
         theme.status.error
@@ -354,9 +365,11 @@ fn render_battery_indicator(level: u8, cx: &App) -> impl IntoElement {
     let icon = icons::battery_icon(level, false);
 
     div()
+        .id(format!("bt-battery-{}", index))
         .flex()
         .items_center()
         .gap(px(2.))
+        .tooltip(control_center_tooltip(format!("Battery: {}%", level)))
         .child(
             div()
                 .text_size(px(icon_size::SM))
@@ -400,6 +413,35 @@ fn get_device_icon(device: &BluetoothDevice) -> &'static str {
         icons::BLUETOOTH_CONNECTED
     } else {
         icons::BLUETOOTH
+    }
+}
+
+/// Get tooltip label for device icon based on device type.
+fn get_device_icon_tooltip(device: &BluetoothDevice) -> &'static str {
+    let name_lower = device.name.to_lowercase();
+
+    if name_lower.contains("airpod")
+        || name_lower.contains("headphone")
+        || name_lower.contains("buds")
+    {
+        "Headphones"
+    } else if name_lower.contains("mouse") {
+        "Mouse"
+    } else if name_lower.contains("keyboard") {
+        "Keyboard"
+    } else if name_lower.contains("speaker") || name_lower.contains("soundbar") {
+        "Speaker"
+    } else if name_lower.contains("phone")
+        || name_lower.contains("iphone")
+        || name_lower.contains("android")
+    {
+        "Phone"
+    } else if name_lower.contains("watch") {
+        "Watch"
+    } else if name_lower.contains("controller") || name_lower.contains("gamepad") {
+        "Gamepad"
+    } else {
+        "Bluetooth device"
     }
 }
 

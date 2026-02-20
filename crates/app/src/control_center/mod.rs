@@ -15,6 +15,7 @@
 //! - `power` - Battery status and power profiles
 
 mod bluetooth;
+mod tooltip;
 pub mod config;
 pub mod icons;
 mod power;

@@ -12,7 +12,7 @@ use zbus::zvariant::OwnedObjectPath;
 
 use crate::state::AppState;
 
-use super::icons;
+use super::{icons, tooltip::control_center_tooltip};
 
 /// State for WiFi password input
 #[derive(Debug, Clone, Default)]
@@ -239,6 +239,11 @@ fn render_network_item(
 ) -> impl IntoElement {
     let theme = cx.theme();
     let signal_icon = icons::wifi_signal_icon(strength);
+    let lock_tooltip = if known {
+        "Secured (saved)"
+    } else {
+        "Secured (password required)"
+    };
 
     // Pre-compute colors for closures
     let accent_selection = theme.accent.selection;
@@ -271,13 +276,18 @@ fn render_network_item(
         // Signal strength icon
         .child(
             div()
+                .id(format!("wifi-signal-{}", index))
                 .text_size(px(icon_size::SM))
                 .text_color(if connected {
                     accent_primary
                 } else {
                     text_muted
                 })
-                .child(signal_icon),
+                .child(signal_icon)
+                .tooltip(control_center_tooltip(format!(
+                    "Signal strength: {}%",
+                    strength
+                ))),
         )
         // Network name
         .child(
@@ -291,26 +301,32 @@ fn render_network_item(
         .when(known && !connected, |el| {
             el.child(
                 div()
+                    .id(format!("wifi-known-{}", index))
                     .text_size(px(icon_size::SM))
                     .text_color(status_success)
-                    .child(icons::CHECK),
+                    .child(icons::CHECK)
+                    .tooltip(control_center_tooltip("Saved network")),
             )
         })
         // Lock icon for secured networks (green if known/saved)
-        .when(secured, |el| {
+        .when(secured, move |el| {
             el.child(
                 div()
+                    .id(format!("wifi-lock-{}", index))
                     .text_size(px(icon_size::SM))
                     .text_color(if known { status_success } else { text_muted })
-                    .child(icons::LOCK),
+                    .child(icons::LOCK)
+                    .tooltip(control_center_tooltip(lock_tooltip)),
             )
         })
         .when(!connected, |el| {
             el.child(
                 div()
+                    .id(format!("wifi-connect-{}", index))
                     .text_size(px(icon_size::SM))
                     .text_color(text_muted)
-                    .child(icons::CHEVRON_RIGHT),
+                    .child(icons::CHEVRON_RIGHT)
+                    .tooltip(control_center_tooltip("Connect")),
             )
         })
         .when(connected, move |el| {
@@ -329,6 +345,7 @@ fn render_network_item(
                     .justify_center()
                     .cursor_pointer()
                     .hover(move |s| s.bg(interactive_hover))
+                    .tooltip(control_center_tooltip("Disconnect"))
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         if let Some(path) = disconnect_path.clone() {
                             on_disconnect(path, cx);
