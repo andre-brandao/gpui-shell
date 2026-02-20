@@ -55,21 +55,18 @@ desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 - **Privacy mode** — temporarily disable screenshare/camera indicators
 - **Applications** — desktop file parsing and icon loading
 
-## Screenshots
+## Showcase
 
-![Desktop](./docs/images/desktop.png)
+![Bar](./docs/public/bar.png)
 
-![Themes](./docs/images/theme.png)
+![Showcase](./docs/public/showcase.gif)
 
-![Web](./docs/images/web.png)
+## Documentation
 
-## Installation
+Full documentation is available at **https://andre-brandao.github.io/gpui-shell/**
 
-See [`docs/INSTALL.md`](./docs/INSTALL.md) for platform-specific instructions.
-
-## Configuration
-
-See [`docs/CONFIG.md`](./docs/CONFIG.md) for all configuration options.
+- [Installation](https://andre-brandao.github.io/gpui-shell/guides/installation/)
+- [Configuration](https://andre-brandao.github.io/gpui-shell/reference/configuration/)
 
 ## Thanks
 
