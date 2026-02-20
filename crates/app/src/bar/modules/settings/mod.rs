@@ -10,7 +10,7 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{Context, MouseButton, Window, div, point, prelude::*, px, Size};
+use gpui::{Context, MouseButton, Window, div, prelude::*, px, Size};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
@@ -26,7 +26,7 @@ use crate::config::{ActiveConfig, Config};
 use crate::control_center::{
     ControlCenter, CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH,
 };
-use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
 
 /// Nerd Font icons for status display.
@@ -125,16 +125,8 @@ impl Settings {
             px(CONTROL_CENTER_PANEL_WIDTH),
             px(CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED),
         );
-        let display_bounds = window
-            .display(cx)
-            .map(|display| display.bounds())
-            .unwrap_or_else(|| window.bounds());
-        let click = point(
-            window.bounds().origin.x + event.position.x,
-            window.bounds().origin.y + event.position.y,
-        );
         let (anchor, margin) =
-            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
+            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
         let config = PanelConfig {
             width: CONTROL_CENTER_PANEL_WIDTH,
             height: CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,

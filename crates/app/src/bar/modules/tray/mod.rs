@@ -3,10 +3,9 @@
 mod config;
 pub use config::TrayConfig;
 
-use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, point, prelude::*,
-    px, Size,
+    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px, Size,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, font_size, radius, spacing};
@@ -58,16 +57,13 @@ impl Tray {
             let item_name = item.name.clone();
             let config = Config::global(cx);
             let panel_size = Size::new(px(250.0), px(400.0));
-            let display_bounds = window
-                .display(cx)
-                .map(|display| display.bounds())
-                .unwrap_or_else(|| window.bounds());
-            let click = point(
-                window.bounds().origin.x + event.position.x,
-                window.bounds().origin.y + event.position.y,
+            let (anchor, margin) = panel_placement_from_event(
+                config.bar.position,
+                event,
+                window,
+                cx,
+                panel_size,
             );
-            let (anchor, margin) =
-                panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
 
             let config = PanelConfig {
                 width: 250.0,

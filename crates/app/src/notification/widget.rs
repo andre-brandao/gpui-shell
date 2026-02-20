@@ -1,10 +1,10 @@
-use gpui::{App, Context, MouseButton, Render, Window, div, point, prelude::*, px, Size};
+use gpui::{App, Context, MouseButton, Render, Window, div, prelude::*, px, Size};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
 
 use super::dispatch_notification_command;
@@ -46,16 +46,8 @@ impl NotificationWidget {
             px(notification_config.center_width),
             px(notification_config.center_height),
         );
-        let display_bounds = window
-            .display(cx)
-            .map(|display| display.bounds())
-            .unwrap_or_else(|| window.bounds());
-        let click = point(
-            window.bounds().origin.x + event.position.x,
-            window.bounds().origin.y + event.position.y,
-        );
         let (anchor, margin) =
-            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
+            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
         let subscriber = self.subscriber.clone();
         dispatch_notification_command(subscriber.clone(), NotificationCommand::MarkAllRead);
 

@@ -3,14 +3,14 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{App, Context, MouseButton, Window, div, point, prelude::*, px, Size};
+use gpui::{App, Context, MouseButton, Window, div, prelude::*, px, Size};
 use services::{MprisData, PlaybackStatus};
 use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::AppState;
 use crate::state::watch;
 
@@ -51,16 +51,8 @@ impl Mpris {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
         let panel_size = Size::new(px(380.0), px(420.0));
-        let display_bounds = window
-            .display(cx)
-            .map(|display| display.bounds())
-            .unwrap_or_else(|| window.bounds());
-        let click = point(
-            window.bounds().origin.x + event.position.x,
-            window.bounds().origin.y + event.position.y,
-        );
         let (anchor, margin) =
-            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
+            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
         let config = PanelConfig {
             width: 380.0,
             height: 420.0,

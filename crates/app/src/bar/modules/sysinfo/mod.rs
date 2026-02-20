@@ -3,7 +3,7 @@
 //! Clicking the widget opens a detailed system information panel.
 
 use crate::panel::{toggle_panel, PanelConfig};
-use gpui::{div, point, prelude::*, px, App, Context, MouseButton, Size, Window};
+use gpui::{div, prelude::*, px, App, Context, MouseButton, Size, Window};
 use services::SysInfoData;
 use ui::{radius, ActiveTheme};
 
@@ -13,7 +13,7 @@ pub use config::SysInfoConfig;
 use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::panel_placement_from_click;
+use crate::panel::panel_placement_from_event;
 use crate::state::watch;
 use crate::state::AppState;
 
@@ -78,16 +78,8 @@ impl SysInfo {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
         let panel_size = Size::new(px(350.0), px(450.0));
-        let display_bounds = window
-            .display(cx)
-            .map(|display| display.bounds())
-            .unwrap_or_else(|| window.bounds());
-        let click = point(
-            window.bounds().origin.x + event.position.x,
-            window.bounds().origin.y + event.position.y,
-        );
         let (anchor, margin) =
-            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
+            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
         let config = PanelConfig {
             width: 350.0,
             height: 450.0,

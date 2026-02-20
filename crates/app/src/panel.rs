@@ -4,12 +4,12 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, Pixels, Point, Render, Size, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, layer_shell::*, prelude::*, px,
+    AnyWindowHandle, App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, layer_shell::*, point,
+    prelude::*, px,
 };
 use std::sync::Mutex;
 
-use crate::bar::modules::WidgetSlot;
 use crate::config::BarPosition;
 
 /// Panel configuration for positioning and sizing.
@@ -34,45 +34,26 @@ impl Default for PanelConfig {
     }
 }
 
-/// Resolve panel anchor/margin for a bar position and widget slot.
-pub fn panel_placement(
+/// Resolve panel anchor/margin from a click event.
+pub fn panel_placement_from_event(
     bar_position: BarPosition,
-    slot: WidgetSlot,
+    event: &MouseDownEvent,
+    window: &Window,
+    cx: &App,
+    panel_size: Size<Pixels>,
 ) -> (Anchor, (f32, f32, f32, f32)) {
-    match bar_position {
-        BarPosition::Left => {
-            let vertical_edge = if matches!(slot, WidgetSlot::End) {
-                Anchor::BOTTOM
-            } else {
-                Anchor::TOP
-            };
-            (Anchor::LEFT | vertical_edge, (5.0, 5.0, 5.0, 5.0))
-        }
-        BarPosition::Right => {
-            let vertical_edge = if matches!(slot, WidgetSlot::End) {
-                Anchor::BOTTOM
-            } else {
-                Anchor::TOP
-            };
-            (Anchor::RIGHT | vertical_edge, (5.0, 5.0, 5.0, 5.0))
-        }
-        BarPosition::Top => {
-            let horizontal_edge = if matches!(slot, WidgetSlot::End) {
-                Anchor::RIGHT
-            } else {
-                Anchor::LEFT
-            };
-            (Anchor::TOP | horizontal_edge, (5.0, 5.0, 5.0, 5.0))
-        }
-        BarPosition::Bottom => {
-            let horizontal_edge = if matches!(slot, WidgetSlot::End) {
-                Anchor::RIGHT
-            } else {
-                Anchor::LEFT
-            };
-            (Anchor::BOTTOM | horizontal_edge, (5.0, 5.0, 5.0, 5.0))
-        }
-    }
+    let (display_bounds, usable_bounds) = window
+        .display(cx)
+        .map(|display| (display.bounds(), display.visible_bounds()))
+        .unwrap_or_else(|| {
+            let bounds = window.bounds();
+            (bounds, bounds)
+        });
+    let click = point(
+        window.bounds().origin.x + event.position.x,
+        window.bounds().origin.y + event.position.y,
+    );
+    panel_placement_from_click(bar_position, click, panel_size, display_bounds, usable_bounds)
 }
 
 /// Resolve panel anchor/margin from a click position.
@@ -81,6 +62,7 @@ pub fn panel_placement_from_click(
     click: Point<Pixels>,
     panel_size: Size<Pixels>,
     display_bounds: Bounds<Pixels>,
+    usable_bounds: Bounds<Pixels>,
 ) -> (Anchor, (f32, f32, f32, f32)) {
     let anchor_horizontal = match bar_position {
         BarPosition::Left => Anchor::LEFT,
@@ -107,19 +89,30 @@ pub fn panel_placement_from_click(
     };
 
     let anchor = anchor_horizontal | anchor_vertical;
-    let margin = margin_from_click(anchor, click, panel_size, display_bounds);
+    let margin = margin_from_click(
+        bar_position,
+        anchor,
+        click,
+        panel_size,
+        display_bounds,
+        usable_bounds,
+    );
 
     (anchor, margin)
 }
 
 fn margin_from_click(
+    bar_position: BarPosition,
     anchor: Anchor,
     click: Point<Pixels>,
     panel_size: Size<Pixels>,
     display_bounds: Bounds<Pixels>,
+    usable_bounds: Bounds<Pixels>,
 ) -> (f32, f32, f32, f32) {
     let display_origin = display_bounds.origin;
     let display_size = display_bounds.size;
+    let usable_origin = usable_bounds.origin;
+    let usable_size = usable_bounds.size;
 
     let click_x: f32 = (click.x - display_origin.x).into();
     let click_y: f32 = (click.y - display_origin.y).into();
@@ -128,11 +121,47 @@ fn margin_from_click(
     let disp_w: f32 = display_size.width.into();
     let disp_h: f32 = display_size.height.into();
 
-    let max_x = (disp_w - panel_w).max(0.0);
-    let max_y = (disp_h - panel_h).max(0.0);
+    let avail_x = (disp_w - panel_w).max(0.0);
+    let avail_y = (disp_h - panel_h).max(0.0);
 
-    let origin_x = clamp_f32(click_x - (panel_w / 2.0), 0.0, max_x);
-    let origin_y = clamp_f32(click_y - (panel_h / 2.0), 0.0, max_y);
+    let inset_left: f32 = (usable_origin.x - display_origin.x).into();
+    let inset_top: f32 = (usable_origin.y - display_origin.y).into();
+    let inset_right: f32 =
+        (display_origin.x + display_size.width - (usable_origin.x + usable_size.width)).into();
+    let inset_bottom: f32 =
+        (display_origin.y + display_size.height - (usable_origin.y + usable_size.height)).into();
+
+    let mut min_x = inset_left;
+    let mut max_x = disp_w - inset_right - panel_w;
+    if max_x < min_x {
+        min_x = 0.0;
+        max_x = avail_x;
+    }
+
+    let mut min_y = inset_top;
+    let mut max_y = disp_h - inset_bottom - panel_h;
+    if max_y < min_y {
+        min_y = 0.0;
+        max_y = avail_y;
+    }
+
+    let mut origin_x = clamp_f32(click_x - (panel_w / 2.0), min_x, max_x);
+    let mut origin_y = clamp_f32(click_y - (panel_h / 2.0), min_y, max_y);
+
+    match bar_position {
+        BarPosition::Top => {
+            origin_y = min_y;
+        }
+        BarPosition::Bottom => {
+            origin_y = max_y;
+        }
+        BarPosition::Left => {
+            origin_x = min_x;
+        }
+        BarPosition::Right => {
+            origin_x = max_x;
+        }
+    }
 
     let mut top = 0.0;
     let mut right = 0.0;
