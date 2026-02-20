@@ -1,6 +1,9 @@
-# Installation (NixOS)
+---
+title: Installation
+description: How to install GPUi Shell on NixOS.
+---
 
-GPUi Shell is packaged as a Nix flake. Follow the steps below to add it to your NixOS configuration.
+GPUi Shell is packaged as a Nix flake.
 
 ## 1. Add the flake input
 
@@ -55,4 +58,18 @@ In your Hyprland config:
 ```ini
 exec-once = gpuishell
 bind = $mainMod, Return, exec, gpuishell
+```
+
+## 4. Configuration
+
+On first launch, a default config file is created at `~/.config/gpuishell/config.toml`. Edit it to customize the shell. See the [Configuration Reference](/reference/configuration/) for details.
+
+For example, to change bar widget positions:
+
+```toml
+[bar]
+position = "top"
+start = ["LauncherBtn", "Workspaces"]
+center = ["Clock"]
+end = ["Systray", "Battery", "Settings"]
 ```
