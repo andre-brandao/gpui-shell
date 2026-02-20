@@ -60,6 +60,8 @@ pub fn render_wifi_section(
 ) -> impl IntoElement {
     let theme = cx.theme();
     let network = AppState::network(cx).get();
+    let list_bg = theme.bg.primary;
+    let list_border = theme.border.subtle;
 
     // Get current connection name + object path
     let active_wifi = network.active_connections.iter().find_map(|c| {
@@ -154,6 +156,11 @@ pub fn render_wifi_section(
                     .gap(px(2.))
                     .max_h(px(240.))
                     .overflow_y_scroll()
+                    .bg(list_bg)
+                    .border_1()
+                    .border_color(list_border)
+                    .rounded(px(radius::SM))
+                    .py(px(spacing::XS))
                     .children(aps.into_iter().enumerate().map(|(idx, ap)| {
                         let is_connected = connected_name.as_ref() == Some(&ap.ssid);
                         let is_entering_password = password_state.is_entering_for(&ap.ssid);

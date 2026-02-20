@@ -18,6 +18,8 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
     let bluetooth = AppState::bluetooth(cx).get();
     let services_clone = AppState::bluetooth(cx).clone();
     let discovering = bluetooth.discovering;
+    let list_bg = theme.bg.primary;
+    let list_border = theme.border.subtle;
 
     // Sort devices: connected first, then by name
     let mut devices: Vec<BluetoothDevice> = bluetooth.devices.clone();
@@ -95,6 +97,11 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                     .gap(px(2.))
                     .max_h(px(240.))
                     .overflow_y_scroll()
+                    .bg(list_bg)
+                    .border_1()
+                    .border_color(list_border)
+                    .rounded(px(radius::SM))
+                    .py(px(spacing::XS))
                     .children(devices.into_iter().enumerate().map(|(idx, device)| {
                         let services_connect = services_clone.clone();
                         let services_disconnect = services_clone.clone();
