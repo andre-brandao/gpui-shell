@@ -1,11 +1,12 @@
-use std::sync::Mutex;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
 use gpui::{
-    AnyWindowHandle, App, Bounds, Context, Entity, MouseButton, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
-    prelude::*, px,
+    AnyWindowHandle, App, Bounds, Context, DisplayId, Entity, MouseButton, Point, Render, Size,
+    Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div,
+    layer_shell::*, prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationSubscriber};
 use ui::{ActiveTheme, font_size, radius, spacing};
@@ -17,7 +18,8 @@ use super::card::notification_card_body;
 use super::config::{NotificationConfig, NotificationPopupPosition};
 use super::dispatch_notification_command;
 
-static POPUP_STATE: Mutex<Option<PopupWindowState>> = Mutex::new(None);
+static POPUP_STATE: LazyLock<Mutex<HashMap<Option<DisplayId>, PopupWindowState>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 struct PopupWindowState {
     handle: AnyWindowHandle,
@@ -99,9 +101,10 @@ impl Render for NotificationPopupStack {
     }
 }
 
-fn popup_window_options(config: &NotificationConfig) -> WindowOptions {
+fn popup_window_options(config: &NotificationConfig, display_id: Option<DisplayId>) -> WindowOptions {
     let margin = popup_margin(config);
     WindowOptions {
+        display_id,
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: Point::new(px(0.), px(0.)),
@@ -155,9 +158,18 @@ fn popup_margin(config: &NotificationConfig) -> (f32, f32, f32, f32) {
     }
 }
 
-fn close_popup(cx: &mut App) {
+fn popup_targets(cx: &App) -> Vec<Option<DisplayId>> {
+    let displays = cx.displays();
+    if displays.is_empty() {
+        vec![None]
+    } else {
+        displays.into_iter().map(|display| Some(display.id())).collect()
+    }
+}
+
+fn close_popups(cx: &mut App) {
     let mut guard = POPUP_STATE.lock().unwrap();
-    if let Some(state) = guard.take() {
+    for (_, state) in guard.drain() {
         let _ = cx.update_window(state.handle, |_, window, _cx| {
             window.remove_window();
         });
@@ -168,36 +180,58 @@ fn sync_popup(subscriber: &NotificationSubscriber, cx: &mut App) {
     let config = cx.config().notification.clone();
     let notifications = subscriber.popup_notifications(config.popup_stack_limit);
     if notifications.is_empty() {
-        close_popup(cx);
+        close_popups(cx);
         return;
     }
 
+    let targets = popup_targets(cx);
     let mut guard = POPUP_STATE.lock().unwrap();
-    if let Some(existing) = guard.as_ref() {
-        let view = existing.view.clone();
-        let handle = existing.handle;
-        let updated = cx
-            .update_window(handle, |_, _window, cx| {
-                view.update(cx, |popup, cx| {
-                    popup.notifications = notifications.clone();
-                    cx.notify();
-                });
-            })
-            .is_ok();
-        if updated {
-            return;
-        }
-    }
 
-    let sub = subscriber.clone();
-    if let Ok(handle) = cx.open_window(popup_window_options(&config), move |_, cx| {
-        cx.new(|_| NotificationPopupStack::new(sub, notifications))
-    }) {
-        let view = handle.update(cx, |_, _, cx| cx.entity().clone()).unwrap();
-        *guard = Some(PopupWindowState {
-            handle: handle.into(),
-            view,
-        });
+    guard.retain(|display_id, state| {
+        if targets.contains(display_id) {
+            true
+        } else {
+            let _ = cx.update_window(state.handle, |_, window, _cx| {
+                window.remove_window();
+            });
+            false
+        }
+    });
+
+    for display_id in targets {
+        if let Some(existing) = guard.get(&display_id) {
+            let view = existing.view.clone();
+            let handle = existing.handle;
+            let updated = cx
+                .update_window(handle, |_, _window, cx| {
+                    view.update(cx, |popup, cx| {
+                        popup.notifications = notifications.clone();
+                        cx.notify();
+                    });
+                })
+                .is_ok();
+            if updated {
+                continue;
+            }
+        }
+
+        guard.remove(&display_id);
+        let sub = subscriber.clone();
+        let notifications = notifications.clone();
+        if let Ok(handle) =
+            cx.open_window(popup_window_options(&config, display_id), move |_, cx| {
+                cx.new(|_| NotificationPopupStack::new(sub, notifications))
+            })
+        {
+            let view = handle.update(cx, |_, _, cx| cx.entity().clone()).unwrap();
+            guard.insert(
+                display_id,
+                PopupWindowState {
+                    handle: handle.into(),
+                    view,
+                },
+            );
+        }
     }
 }
 
