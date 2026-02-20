@@ -1,10 +1,10 @@
-use gpui::{App, Context, MouseButton, Render, Window, div, prelude::*, px};
+use gpui::{App, Context, MouseButton, Render, Window, div, point, prelude::*, px, Size};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
 use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
 
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
 use crate::state::{AppState, watch};
 
 use super::dispatch_notification_command;
@@ -34,10 +34,28 @@ impl NotificationWidget {
         }
     }
 
-    fn toggle_center(&self, cx: &mut App) {
+    fn toggle_center(
+        &self,
+        event: &gpui::MouseDownEvent,
+        window: &Window,
+        cx: &mut App,
+    ) {
         let config = Config::global(cx);
         let notification_config = &config.notification;
-        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
+        let panel_size = Size::new(
+            px(notification_config.center_width),
+            px(notification_config.center_height),
+        );
+        let display_bounds = window
+            .display(cx)
+            .map(|display| display.bounds())
+            .unwrap_or_else(|| window.bounds());
+        let click = point(
+            window.bounds().origin.x + event.position.x,
+            window.bounds().origin.y + event.position.y,
+        );
+        let (anchor, margin) =
+            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
         let subscriber = self.subscriber.clone();
         dispatch_notification_command(subscriber.clone(), NotificationCommand::MarkAllRead);
 
@@ -84,7 +102,7 @@ impl Render for NotificationWidget {
             .active(move |el| el.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.toggle_center(cx)),
+                cx.listener(|this, event, window, cx| this.toggle_center(event, window, cx)),
             )
             .child(
                 div()

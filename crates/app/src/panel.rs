@@ -4,8 +4,8 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, Point, Render, Size, WindowBackgroundAppearance, WindowBounds,
-    WindowKind, WindowOptions, layer_shell::*, prelude::*, px,
+    AnyWindowHandle, App, Bounds, Pixels, Point, Render, Size, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, layer_shell::*, prelude::*, px,
 };
 use std::sync::Mutex;
 
@@ -72,6 +72,96 @@ pub fn panel_placement(
             };
             (Anchor::BOTTOM | horizontal_edge, (5.0, 5.0, 5.0, 5.0))
         }
+    }
+}
+
+/// Resolve panel anchor/margin from a click position.
+pub fn panel_placement_from_click(
+    bar_position: BarPosition,
+    click: Point<Pixels>,
+    panel_size: Size<Pixels>,
+    display_bounds: Bounds<Pixels>,
+) -> (Anchor, (f32, f32, f32, f32)) {
+    let anchor_horizontal = match bar_position {
+        BarPosition::Left => Anchor::LEFT,
+        BarPosition::Right => Anchor::RIGHT,
+        BarPosition::Top | BarPosition::Bottom => {
+            if click.x < display_bounds.center().x {
+                Anchor::LEFT
+            } else {
+                Anchor::RIGHT
+            }
+        }
+    };
+
+    let anchor_vertical = match bar_position {
+        BarPosition::Top => Anchor::TOP,
+        BarPosition::Bottom => Anchor::BOTTOM,
+        BarPosition::Left | BarPosition::Right => {
+            if click.y < display_bounds.center().y {
+                Anchor::TOP
+            } else {
+                Anchor::BOTTOM
+            }
+        }
+    };
+
+    let anchor = anchor_horizontal | anchor_vertical;
+    let margin = margin_from_click(anchor, click, panel_size, display_bounds);
+
+    (anchor, margin)
+}
+
+fn margin_from_click(
+    anchor: Anchor,
+    click: Point<Pixels>,
+    panel_size: Size<Pixels>,
+    display_bounds: Bounds<Pixels>,
+) -> (f32, f32, f32, f32) {
+    let display_origin = display_bounds.origin;
+    let display_size = display_bounds.size;
+
+    let click_x: f32 = (click.x - display_origin.x).into();
+    let click_y: f32 = (click.y - display_origin.y).into();
+    let panel_w: f32 = panel_size.width.into();
+    let panel_h: f32 = panel_size.height.into();
+    let disp_w: f32 = display_size.width.into();
+    let disp_h: f32 = display_size.height.into();
+
+    let max_x = (disp_w - panel_w).max(0.0);
+    let max_y = (disp_h - panel_h).max(0.0);
+
+    let origin_x = clamp_f32(click_x - (panel_w / 2.0), 0.0, max_x);
+    let origin_y = clamp_f32(click_y - (panel_h / 2.0), 0.0, max_y);
+
+    let mut top = 0.0;
+    let mut right = 0.0;
+    let mut bottom = 0.0;
+    let mut left = 0.0;
+
+    if anchor.contains(Anchor::TOP) {
+        top = origin_y;
+    }
+    if anchor.contains(Anchor::BOTTOM) {
+        bottom = disp_h - (origin_y + panel_h);
+    }
+    if anchor.contains(Anchor::LEFT) {
+        left = origin_x;
+    }
+    if anchor.contains(Anchor::RIGHT) {
+        right = disp_w - (origin_x + panel_w);
+    }
+
+    (top, right, bottom, left)
+}
+
+fn clamp_f32(value: f32, min: f32, max: f32) -> f32 {
+    if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
     }
 }
 

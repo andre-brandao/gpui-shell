@@ -3,14 +3,14 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{App, Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{App, Context, MouseButton, Window, div, point, prelude::*, px, Size};
 use services::{MprisData, PlaybackStatus};
 use ui::{ActiveTheme, radius};
 
 use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
 use crate::state::AppState;
 use crate::state::watch;
 
@@ -47,10 +47,20 @@ impl Mpris {
         }
     }
 
-    fn toggle_panel(&self, cx: &mut App) {
+    fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
-        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
+        let panel_size = Size::new(px(380.0), px(420.0));
+        let display_bounds = window
+            .display(cx)
+            .map(|display| display.bounds())
+            .unwrap_or_else(|| window.bounds());
+        let click = point(
+            window.bounds().origin.x + event.position.x,
+            window.bounds().origin.y + event.position.y,
+        );
+        let (anchor, margin) =
+            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
         let config = PanelConfig {
             width: 380.0,
             height: 420.0,
@@ -133,8 +143,8 @@ impl Render for Mpris {
             .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.toggle_panel(cx);
+                cx.listener(|this, event, window, cx| {
+                    this.toggle_panel(event, window, cx);
                 }),
             )
             .child(

@@ -10,7 +10,7 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{Context, MouseButton, Window, div, point, prelude::*, px, Size};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
@@ -26,7 +26,7 @@ use crate::config::{ActiveConfig, Config};
 use crate::control_center::{
     ControlCenter, CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH,
 };
-use crate::panel::{PanelConfig, panel_placement, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
 use crate::state::{AppState, watch};
 
 /// Nerd Font icons for status display.
@@ -114,9 +114,27 @@ impl Settings {
     }
 
     /// Toggle the control center panel.
-    fn toggle_panel(&self, cx: &mut gpui::App) {
+    fn toggle_panel(
+        &self,
+        event: &gpui::MouseDownEvent,
+        window: &Window,
+        cx: &mut gpui::App,
+    ) {
         let config = Config::global(cx);
-        let (anchor, margin) = panel_placement(config.bar.position, self.slot);
+        let panel_size = Size::new(
+            px(CONTROL_CENTER_PANEL_WIDTH),
+            px(CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED),
+        );
+        let display_bounds = window
+            .display(cx)
+            .map(|display| display.bounds())
+            .unwrap_or_else(|| window.bounds());
+        let click = point(
+            window.bounds().origin.x + event.position.x,
+            window.bounds().origin.y + event.position.y,
+        );
+        let (anchor, margin) =
+            panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
         let config = PanelConfig {
             width: CONTROL_CENTER_PANEL_WIDTH,
             height: CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
@@ -297,8 +315,8 @@ impl Render for Settings {
             .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.toggle_panel(cx);
+                cx.listener(|this, event, window, cx| {
+                    this.toggle_panel(event, window, cx);
                 }),
             )
             // Privacy icons (red, only shown when active)

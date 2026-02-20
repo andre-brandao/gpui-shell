@@ -3,9 +3,10 @@
 mod config;
 pub use config::TrayConfig;
 
-use crate::panel::{PanelConfig, toggle_panel};
+use crate::panel::{PanelConfig, panel_placement_from_click, toggle_panel};
 use gpui::{
-    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px,
+    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, point, prelude::*,
+    px, Size,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, font_size, radius, spacing};
@@ -13,7 +14,6 @@ use ui::{ActiveTheme, font_size, radius, spacing};
 use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::panel_placement;
 use crate::state::AppState;
 use crate::state::watch;
 
@@ -45,13 +45,29 @@ impl Tray {
 
     /// Handle left-clicking on a tray item.
     /// Opens menu panel if the item has a menu, otherwise calls Activate.
-    fn on_item_click(&self, item: &TrayItem, cx: &mut App) {
+    fn on_item_click(
+        &self,
+        item: &TrayItem,
+        event: &gpui::MouseDownEvent,
+        window: &Window,
+        cx: &mut App,
+    ) {
         if let Some(menu) = item.menu.clone() {
             let panel_id = format!("systray-{}", item.name);
             let subscriber = self.subscriber.clone();
             let item_name = item.name.clone();
             let config = Config::global(cx);
-            let (anchor, margin) = panel_placement(config.bar.position, self.slot);
+            let panel_size = Size::new(px(250.0), px(400.0));
+            let display_bounds = window
+                .display(cx)
+                .map(|display| display.bounds())
+                .unwrap_or_else(|| window.bounds());
+            let click = point(
+                window.bounds().origin.x + event.position.x,
+                window.bounds().origin.y + event.position.y,
+            );
+            let (anchor, margin) =
+                panel_placement_from_click(config.bar.position, click, panel_size, display_bounds);
 
             let config = PanelConfig {
                 width: 250.0,
@@ -136,8 +152,8 @@ impl Render for Tray {
                     .active(move |s| s.bg(interactive_active))
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |this, _event, _window, cx| {
-                            this.on_item_click(&item_for_left, cx);
+                        cx.listener(move |this, event, window, cx| {
+                            this.on_item_click(&item_for_left, event, window, cx);
                         }),
                     )
                     .on_mouse_down(
