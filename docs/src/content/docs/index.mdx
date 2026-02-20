@@ -1,0 +1,34 @@
+---
+title: GPUi Shell
+description: A Wayland desktop shell built with GPUI.
+template: splash
+hero:
+  tagline: A Wayland desktop shell and status bar built with GPUI (Zed's UI framework). Supports Hyprland and Niri compositors.
+  actions:
+    - text: Get Started
+      link: /guides/installation/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/andre-brandao/gpui-shell
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Features
+
+<CardGrid>
+	<Card title="Status Bar" icon="bars-sort">
+		Configurable bar with modules for workspaces, clock, system tray, media controls, and more.
+	</Card>
+	<Card title="Command Launcher" icon="rocket">
+		Prefix-based command launcher with pluggable views for apps, commands, and themes.
+	</Card>
+	<Card title="Control Center" icon="setting">
+		Popup panels for audio, brightness, network, bluetooth, power, and notifications.
+	</Card>
+	<Card title="On-Screen Display" icon="sun">
+		Volume and brightness indicators on key press.
+	</Card>
+</CardGrid>
