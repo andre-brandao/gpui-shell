@@ -163,6 +163,7 @@ impl Slider {
             )
             .absolute()
             .left(thumb_bar_size)
+            .top(px(-3.))
             .ml_neg_2()
             .size_3()
             .border_1()
