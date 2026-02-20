@@ -10,6 +10,12 @@ GPUi Shell aims to be a lightweight, modular desktop shell replacing components
 like waybar, swaync, rofi/walker, and wlogout. It integrates deeply with Linux
 desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 
+## Showcase
+
+![Bar](./docs/public/bar.png)
+
+![Showcase](./docs/public/showcase.gif)
+
 ## Features
 
 ### Bar & Widgets
@@ -55,11 +61,6 @@ desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 - **Privacy mode** — temporarily disable screenshare/camera indicators
 - **Applications** — desktop file parsing and icon loading
 
-## Showcase
-
-![Bar](./docs/public/bar.png)
-
-![Showcase](./docs/public/showcase.gif)
 
 ## Documentation
 

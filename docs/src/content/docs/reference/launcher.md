@@ -24,3 +24,34 @@ width = 700.0
 height = 500.0
 margin_top = 150.0
 ```
+
+## Keyboard Shortcuts
+
+The launcher supports vim-style navigation via Ctrl key combinations alongside standard keys.
+
+### Navigation
+
+| Key              | Ctrl Alternative       | Action          |
+| ---------------- | ---------------------- | --------------- |
+| `Up`             | `Ctrl+K` / `Ctrl+P`   | Move up         |
+| `Down`           | `Ctrl+J` / `Ctrl+N`   | Move down       |
+| `Page Up`        | `Ctrl+U`              | Page up         |
+| `Page Down`      | `Ctrl+D`              | Page down       |
+| `Enter`          |                        | Confirm / Run   |
+| `Escape`         |                        | Clear / Close   |
+
+### Editing
+
+| Key                | Ctrl Alternative       | Action              |
+| ------------------ | ---------------------- | ------------------- |
+| `Left`             | `Ctrl+H`              | Move cursor left    |
+| `Right`            | `Ctrl+L` / `Ctrl+F`   | Move cursor right   |
+| `Ctrl+Left`        | `Ctrl+B`              | Move word left      |
+| `Ctrl+Right`       | `Ctrl+W`              | Move word right     |
+| `Backspace`        |                        | Delete character    |
+| `Ctrl+Backspace`   |                        | Delete word back    |
+| `Ctrl+A`           |                        | Select all          |
+| `Shift+Left`       |                        | Select left         |
+| `Shift+Right`      |                        | Select right        |
+| `Ctrl+Shift+Left`  |                        | Select word left    |
+| `Ctrl+Shift+Right` |                        | Select word right   |
