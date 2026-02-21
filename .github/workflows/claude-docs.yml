@@ -94,8 +94,8 @@ jobs:
       - name: Commit documentation changes to PR
         if: steps.changed-files.outputs.changed == 'true'
         run: |
-          git config user.name "Claude Code Bot"
-          git config user.email "claude-code-bot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Check if there are changes to commit
           if [ -z "$(git status --porcelain docs/)" ]; then
