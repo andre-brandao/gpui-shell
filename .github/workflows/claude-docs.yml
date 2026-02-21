@@ -19,6 +19,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Get changed config files
         id: changed-files
@@ -113,7 +116,7 @@ jobs:
           git commit -m "$COMMIT_MSG"
 
           # Push to the current PR branch
-          if ! git push origin HEAD:${{ github.head_ref }}; then
+          if ! git push; then
             echo "Failed to push documentation updates"
             exit 1
           fi
