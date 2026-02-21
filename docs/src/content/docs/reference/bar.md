@@ -13,7 +13,7 @@ The `[bar]` section controls the status bar position, size, and widget layout.
 | `position` | `string`   | `"left"`                                           | Screen edge: `left`, `right`, `top`, or `bottom`.  |
 | `start`    | `string[]` | `["LauncherBtn", "Workspaces", "SysInfo"]`         | Widgets in the start section.                      |
 | `center`   | `string[]` | `["ActiveWindow"]`                                 | Widgets in the center section.                     |
-| `end`      | `string[]` | `["Clock", "Systray", "KeyboardLayout", "Settings"]` | Widgets in the end section.                     |
+| `end`      | `string[]` | `["Clock", "Mpris", "Notifications", "Systray", "KeyboardLayout", "Settings"]` | Widgets in the end section.                     |
 
 Vertical layout is used when `position` is `left` or `right`. Horizontal layout is used for `top` or `bottom`.
 
@@ -25,7 +25,7 @@ size = 40.0
 position = "top"
 start = ["LauncherBtn", "Workspaces"]
 center = ["Clock"]
-end = ["Systray", "Battery", "Settings"]
+end = ["Mpris", "Systray", "KeyboardLayout", "Settings"]
 ```
 
 ## Widget names
