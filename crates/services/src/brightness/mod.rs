@@ -4,12 +4,11 @@
 //! display backlight brightness. Uses udev for device discovery and change
 //! monitoring, and D-Bus (systemd-logind) for unprivileged brightness control.
 
-use std::os::unix::io::AsFd;
 use std::path::{Path, PathBuf};
-use std::thread;
 
 use anyhow::Result;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
+use tokio::io::unix::AsyncFd;
 use tracing::{debug, error, info, warn};
 use zbus::proxy;
 
@@ -212,9 +211,9 @@ fn read_brightness(device_path: &Path) -> Result<BrightnessData> {
     Ok(BrightnessData { current, max })
 }
 
-/// Start the udev listener thread for brightness changes.
+/// Start the udev listener task for brightness changes.
 fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
-    thread::spawn(move || {
+    tokio::task::spawn_blocking(move || {
         let socket = match udev::MonitorBuilder::new()
             .and_then(|b| b.match_subsystem("backlight"))
             .and_then(|b| b.listen())
@@ -226,30 +225,53 @@ fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
             }
         };
 
-        let mut current_value = data.lock_ref().current;
-        let mut fds = [nix::poll::PollFd::new(
-            socket.as_fd(),
-            nix::poll::PollFlags::POLLIN,
-        )];
-
-        loop {
-            // Block until the socket is readable (i.e. an event is pending)
-            if nix::poll::poll(&mut fds, nix::poll::PollTimeout::NONE).is_err() {
-                error!("poll() failed on udev monitor socket");
-                break;
+        // Wrap the socket in AsyncFd for tokio async I/O
+        let async_socket = match AsyncFd::new(socket) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to create async fd: {}", e);
+                return;
             }
+        };
 
-            // Drain all pending events
-            for event in socket.iter() {
-                if event.event_type() == udev::EventType::Change
-                    && let Ok(new_data) = read_brightness(&device_path)
-                    && new_data.current != current_value
-                {
-                    current_value = new_data.current;
-                    data.lock_mut().current = new_data.current;
-                    debug!("Brightness changed: {}", new_data.current);
+        let mut current_value = data.lock_ref().current;
+
+        // Use tokio's block_on to run async code in blocking context
+        let runtime = tokio::runtime::Handle::current();
+        runtime.block_on(async {
+            loop {
+                // Wait asynchronously until the socket is readable
+                let mut guard = match async_socket.readable().await {
+                    Ok(g) => g,
+                    Err(e) => {
+                        error!("Failed to wait for readable: {}", e);
+                        break;
+                    }
+                };
+
+                // Try to read events
+                match guard.try_io(|inner| {
+                    // Drain all pending events
+                    for event in inner.get_ref().iter() {
+                        if event.event_type() == udev::EventType::Change {
+                            if let Ok(new_data) = read_brightness(&device_path) {
+                                if new_data.current != current_value {
+                                    current_value = new_data.current;
+                                    data.lock_mut().current = new_data.current;
+                                    debug!("Brightness changed: {}", new_data.current);
+                                }
+                            }
+                        }
+                    }
+                    Ok::<(), std::io::Error>(())
+                }) {
+                    Ok(_) => {}
+                    Err(_would_block) => {
+                        // False alarm, socket not actually readable yet
+                        continue;
+                    }
                 }
             }
-        }
+        });
     });
 }

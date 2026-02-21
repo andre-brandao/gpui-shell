@@ -16,7 +16,6 @@ niri-ipc.workspace = true
 tokio.workspace = true
 inotify.workspace = true
 
-nix = { version = "0.29", features = ["user", "poll"] }
 pipewire = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
