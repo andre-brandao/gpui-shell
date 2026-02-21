@@ -3,11 +3,11 @@
 //! Converts a set of 16 hex color strings (the Base16 standard) into
 //! the application's `Theme` struct.
 
-use gpui::{Hsla, px};
+use gpui::{px, Hsla};
 
 use super::{
-    AccentColors, BgColors, BorderColors, Colorize, InteractiveColors, StatusColors, TextColors,
-    Theme,
+    AccentColors, BgColors, BorderColors, Colorize, FontSizes, InteractiveColors, StatusColors,
+    TextColors, Theme,
 };
 
 /// Parsed Base16 colors ready for Theme conversion.
@@ -104,6 +104,7 @@ impl Base16Colors {
             radius: px(6.0),
             radius_lg: px(8.0),
             transparent: Hsla::transparent_black(),
+            font_sizes: FontSizes::default(),
         }
     }
 }

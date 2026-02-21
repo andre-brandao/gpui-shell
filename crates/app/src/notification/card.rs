@@ -1,7 +1,7 @@
 use gpui::prelude::*;
-use gpui::{Context, MouseButton, div, img, px};
+use gpui::{div, img, px, Context, MouseButton};
 use services::{Notification, NotificationCommand, NotificationSubscriber};
-use ui::{ActiveTheme, font_size, radius, spacing};
+use ui::{radius, spacing, ActiveTheme};
 
 use super::dispatch_notification_command;
 
@@ -61,7 +61,7 @@ pub(super) fn notification_card_body<V>(
                         })
                         .unwrap_or_else(|| {
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.secondary)
                                 .child(icon_fallback(&app_name, &app_icon_name))
                                 .into_any_element()
@@ -83,13 +83,13 @@ pub(super) fn notification_card_body<V>(
                         .justify_between()
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.secondary)
                                 .child(app_name),
                         )
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.muted)
                                 .child(timestamp),
                         ),
@@ -97,7 +97,7 @@ pub(super) fn notification_card_body<V>(
                 .child(
                     div()
                         .whitespace_normal()
-                        .text_size(px(font_size::SM))
+                        .text_size(theme.font_sizes.sm)
                         .text_color(theme.text.primary)
                         .line_height(px(18.0))
                         .child(summary),
@@ -106,7 +106,7 @@ pub(super) fn notification_card_body<V>(
                     el.child(
                         div()
                             .whitespace_normal()
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(theme.text.muted)
                             .line_height(px(16.0))
                             .child(body),
@@ -129,7 +129,7 @@ pub(super) fn notification_card_body<V>(
                                     .bg(theme.bg.tertiary)
                                     .border_1()
                                     .border_color(theme.border.subtle)
-                                    .text_size(px(font_size::XS))
+                                    .text_size(theme.font_sizes.xs)
                                     .text_color(theme.text.secondary)
                                     .cursor_pointer()
                                     .hover(move |el| {

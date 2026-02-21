@@ -1,7 +1,7 @@
 use gpui::prelude::*;
-use gpui::{Context, MouseButton, Render, ScrollHandle, Window, div, px};
+use gpui::{div, px, Context, MouseButton, Render, ScrollHandle, Window};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, font_size, radius, spacing};
+use ui::{radius, spacing, ActiveTheme};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
@@ -61,7 +61,7 @@ impl Render for NotificationCenter {
                                 .top(px(8.0))
                                 .right(px(8.0))
                                 .cursor_pointer()
-                                .text_size(px(font_size::SM))
+                                .text_size(theme.font_sizes.sm)
                                 .text_color(theme.text.muted)
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -79,7 +79,7 @@ impl Render for NotificationCenter {
         } else {
             div()
                 .py(px(spacing::XL))
-                .text_size(px(font_size::SM))
+                .text_size(theme.font_sizes.sm)
                 .text_color(theme.text.muted)
                 .text_center()
                 .child("No notifications")
@@ -104,7 +104,7 @@ impl Render for NotificationCenter {
                     .justify_between()
                     .child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(theme.font_sizes.sm)
                             .text_color(theme.text.primary)
                             .child("Notifications"),
                     )
@@ -116,7 +116,7 @@ impl Render for NotificationCenter {
                             .child(
                                 div()
                                     .cursor_pointer()
-                                    .text_size(px(font_size::SM))
+                                    .text_size(theme.font_sizes.sm)
                                     .text_color(if dnd_enabled {
                                         theme.accent.primary
                                     } else {
@@ -136,7 +136,7 @@ impl Render for NotificationCenter {
                             .child(
                                 div()
                                     .cursor_pointer()
-                                    .text_size(px(font_size::SM))
+                                    .text_size(theme.font_sizes.sm)
                                     .text_color(theme.text.secondary)
                                     .on_mouse_down(
                                         MouseButton::Left,

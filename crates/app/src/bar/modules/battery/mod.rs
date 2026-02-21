@@ -101,7 +101,7 @@ impl Render for Battery {
             String::new()
         };
         let icon_size = style::icon(is_vertical);
-        let text_size = style::label(is_vertical);
+        let text_size = style::label_size(theme, is_vertical);
 
         // Get the text color based on battery state
         let text_color = match &self.data.battery {
@@ -161,7 +161,7 @@ impl Render for Battery {
                 .when(!text.is_empty(), |this| {
                     this.child(
                         div()
-                            .text_size(px(text_size))
+                            .text_size(text_size)
                             .text_color(text_color)
                             .child(text),
                     )
@@ -188,7 +188,7 @@ impl Render for Battery {
                 .when(!text.is_empty(), |this| {
                     this.child(
                         div()
-                            .text_size(px(text_size))
+                            .text_size(text_size)
                             .text_color(text_color)
                             .child(text),
                     )

@@ -3,21 +3,17 @@
 //! Displays power actions when expanded.
 
 use crate::config::ActiveConfig;
-use gpui::{App, Hsla, MouseButton, div, prelude::*, px};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use gpui::{div, prelude::*, px, App, Hsla, MouseButton};
+use ui::{icon_size, radius, spacing, ActiveTheme};
 
 use super::{config::PowerActionsConfig, icons};
 
 /// Render the power section (expanded view with actions)
 pub fn render_power_section(cx: &App) -> impl IntoElement {
-    div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .child(render_power_actions(
-            &cx.config().control_center.power_actions,
-            cx,
-        ))
+    div().w_full().flex().flex_col().child(render_power_actions(
+        &cx.config().control_center.power_actions,
+        cx,
+    ))
 }
 
 /// Render power action buttons
@@ -94,7 +90,7 @@ fn render_action_button(
         )
         .child(
             div()
-                .text_size(px(font_size::XS))
+                .text_size(theme.font_sizes.xs)
                 .text_color(fg_color)
                 .child(label),
         )

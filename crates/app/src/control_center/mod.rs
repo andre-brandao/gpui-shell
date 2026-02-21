@@ -31,7 +31,7 @@ use gpui::{
 };
 use services::{AudioCommand, BrightnessCommand, NetworkCommand, UPowerCommand};
 use std::rc::Rc;
-use ui::{ActiveTheme, Slider, SliderEvent, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, Slider, SliderEvent, icon_size, radius, spacing};
 
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
@@ -679,13 +679,13 @@ impl Render for ControlCenter {
                                                 .gap(px(2.))
                                                 .child(
                                                     div()
-                                                        .text_size(px(font_size::SM))
+                                                        .text_size(theme.font_sizes.sm)
                                                         .text_color(text_primary)
                                                         .child(battery_line),
                                                 )
                                                 .child(
                                                     div()
-                                                        .text_size(px(font_size::XS))
+                                                        .text_size(theme.font_sizes.xs)
                                                         .text_color(text_muted)
                                                         .child(battery_sub),
                                                 ),

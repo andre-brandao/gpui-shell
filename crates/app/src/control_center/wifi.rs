@@ -6,7 +6,7 @@
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
 use ui::{
-    ActiveTheme, InputBuffer, font_size, icon_size, radius, render_masked_input_line, spacing,
+    ActiveTheme, InputBuffer, icon_size, radius, render_masked_input_line, spacing,
 };
 use zbus::zvariant::OwnedObjectPath;
 
@@ -112,7 +112,7 @@ pub fn render_wifi_section(
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(font_size::SM))
+                        .text_size(theme.font_sizes.sm)
                         .text_color(theme.text.secondary)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child("WiFi"),
@@ -120,7 +120,7 @@ pub fn render_wifi_section(
                 .when_some(connected_name.clone(), |el, name| {
                     el.child(
                         div()
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(theme.text.muted)
                             .child(format!("- {}", name)),
                     )
@@ -131,7 +131,7 @@ pub fn render_wifi_section(
             el.child(
                 div()
                     .py(px(spacing::MD))
-                    .text_size(px(font_size::SM))
+                    .text_size(theme.font_sizes.sm)
                     .text_color(theme.text.muted)
                     .text_center()
                     .child("WiFi is off"),
@@ -141,7 +141,7 @@ pub fn render_wifi_section(
             el.child(
                 div()
                     .py(px(spacing::MD))
-                    .text_size(px(font_size::SM))
+                    .text_size(theme.font_sizes.sm)
                     .text_color(theme.text.muted)
                     .text_center()
                     .child("No networks found"),
@@ -300,7 +300,7 @@ fn render_network_item(
         .child(
             div()
                 .flex_1()
-                .text_size(px(font_size::SM))
+                .text_size(theme.font_sizes.sm)
                 .text_color(text_primary)
                 .overflow_hidden()
                 .child(ssid.to_string()),
@@ -421,7 +421,7 @@ fn render_password_input(
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(font_size::SM))
+                        .text_size(theme.font_sizes.sm)
                         .text_color(text_primary)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(ssid.to_string()),
@@ -456,7 +456,7 @@ fn render_password_input(
                         .border_color(accent_primary)
                         .child(
                             div()
-                                .text_size(px(font_size::SM))
+                                .text_size(theme.font_sizes.sm)
                                 .text_color(text_primary)
                                 .child(password_line),
                         ),
@@ -478,7 +478,7 @@ fn render_password_input(
                         })
                         .child(
                             div()
-                                .text_size(px(font_size::SM))
+                                .text_size(theme.font_sizes.sm)
                                 .text_color(bg_primary)
                                 .child(if connecting {
                                     "Connecting..."
@@ -491,7 +491,7 @@ fn render_password_input(
         // Keyboard hints
         .child(
             div()
-                .text_size(px(font_size::XS))
+                .text_size(theme.font_sizes.xs)
                 .text_color(text_muted)
                 .child("Press Enter to connect, Escape to cancel"),
         )
@@ -499,7 +499,7 @@ fn render_password_input(
         .when_some(error, |el, err| {
             el.child(
                 div()
-                    .text_size(px(font_size::XS))
+                    .text_size(theme.font_sizes.xs)
                     .text_color(status_error)
                     .child(err.to_string()),
             )

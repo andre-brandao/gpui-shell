@@ -6,7 +6,7 @@ use super::icons;
 use crate::state::watch;
 use gpui::{div, prelude::*, px, App, Context, FontWeight, Hsla, ScrollHandle, Window};
 use services::{SysInfoData, SysInfoSubscriber};
-use ui::{font_size, icon_size, radius, spacing, ActiveTheme};
+use ui::{icon_size, radius, spacing, ActiveTheme};
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanel {
@@ -56,13 +56,13 @@ impl SysInfoPanel {
             .child(
                 div()
                     .flex_1()
-                    .text_size(px(font_size::BASE))
+                    .text_size(theme.font_sizes.base)
                     .text_color(theme.text.primary)
                     .child(label.to_string()),
             )
             .child(
                 div()
-                    .text_size(px(font_size::BASE))
+                    .text_size(theme.font_sizes.base)
                     .text_color(text_color)
                     .font_weight(FontWeight::MEDIUM)
                     .child(value.to_string()),
@@ -124,7 +124,7 @@ impl SysInfoPanel {
                             )
                             .child(
                                 div()
-                                    .text_size(px(font_size::BASE))
+                                    .text_size(theme.font_sizes.base)
                                     .text_color(theme.text.primary)
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(title.to_string()),
@@ -132,7 +132,7 @@ impl SysInfoPanel {
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::MD))
+                            .text_size(theme.font_sizes.md)
                             .font_weight(FontWeight::BOLD)
                             .text_color(color)
                             .child(format!("{}%", usage)),
@@ -141,7 +141,7 @@ impl SysInfoPanel {
             .child(Self::render_progress_bar(usage, cx))
             .child(
                 div()
-                    .text_size(px(font_size::SM))
+                    .text_size(theme.font_sizes.sm)
                     .text_color(theme.text.secondary)
                     .child(details.to_string()),
             )
@@ -231,7 +231,7 @@ impl Render for SysInfoPanel {
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::LG))
+                            .text_size(theme.font_sizes.lg)
                             .text_color(theme.text.primary)
                             .font_weight(FontWeight::BOLD)
                             .child("System Information"),
@@ -296,7 +296,7 @@ impl Render for SysInfoPanel {
                             )
                             .child(
                                 div()
-                                    .text_size(px(font_size::BASE))
+                                    .text_size(theme.font_sizes.base)
                                     .text_color(theme.text.primary)
                                     .font_weight(FontWeight::MEDIUM)
                                     .child("Network"),
@@ -348,7 +348,7 @@ impl Render for SysInfoPanel {
                                 )
                                 .child(
                                     div()
-                                        .text_size(px(font_size::BASE))
+                                        .text_size(theme.font_sizes.base)
                                         .text_color(text_primary)
                                         .font_weight(FontWeight::MEDIUM)
                                         .child("Disks"),
@@ -380,13 +380,13 @@ impl Render for SysInfoPanel {
                                         .child(
                                             div()
                                                 .flex_1()
-                                                .text_size(px(font_size::BASE))
+                                                .text_size(theme.font_sizes.base)
                                                 .text_color(text_primary)
                                                 .child(disk.mount_point.clone()),
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(font_size::BASE))
+                                                .text_size(theme.font_sizes.base)
                                                 .text_color(disk_color)
                                                 .font_weight(FontWeight::MEDIUM)
                                                 .child(format!("{}%", disk.usage_percent)),
@@ -411,7 +411,7 @@ impl Render for SysInfoPanel {
                                 .child(
                                     div()
                                         .pl(px(32.))
-                                        .text_size(px(font_size::SM))
+                                        .text_size(theme.font_sizes.sm)
                                         .text_color(text_secondary)
                                         .child(details),
                                 )

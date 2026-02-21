@@ -3,7 +3,7 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{App, Context, MouseButton, Window, div, prelude::*, px, Size};
+use gpui::{App, Context, MouseButton, Size, Window, div, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
 use ui::{ActiveTheme, radius};
 
@@ -151,7 +151,7 @@ impl Render for Mpris {
                         .flex_1()
                         .overflow_hidden()
                         .text_ellipsis()
-                        .text_size(px(style::label(is_vertical)))
+                        .text_size(style::label_size(theme, is_vertical))
                         .text_color(text_secondary)
                         .child(label),
                 )

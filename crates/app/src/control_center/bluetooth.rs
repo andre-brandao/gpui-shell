@@ -5,7 +5,7 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{BluetoothCommand, BluetoothDevice};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 use crate::state::AppState;
 use zbus::zvariant::OwnedObjectPath;
@@ -62,7 +62,7 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                         )
                         .child(
                             div()
-                                .text_size(px(font_size::SM))
+                                .text_size(theme.font_sizes.sm)
                                 .text_color(theme.text.secondary)
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .child("Bluetooth"),
@@ -73,7 +73,7 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
         .when(discovering, |el| {
             el.child(
                 div()
-                    .text_size(px(font_size::XS))
+                    .text_size(theme.font_sizes.xs)
                     .text_color(theme.text.muted)
                     .child("Scanning..."),
             )
@@ -82,7 +82,7 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
             el.child(
                 div()
                     .py(px(spacing::MD))
-                    .text_size(px(font_size::SM))
+                    .text_size(theme.font_sizes.sm)
                     .text_color(theme.text.muted)
                     .text_center()
                     .child("No paired devices"),
@@ -223,7 +223,7 @@ fn render_device_item(
         .child(
             div()
                 .flex_1()
-                .text_size(px(font_size::SM))
+                .text_size(theme.font_sizes.sm)
                 .text_color(text_primary)
                 .overflow_hidden()
                 .child(name),
@@ -385,7 +385,7 @@ fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoEleme
         )
         .child(
             div()
-                .text_size(px(font_size::XS))
+                .text_size(theme.font_sizes.xs)
                 .text_color(color)
                 .child(format!("{}%", level)),
         )

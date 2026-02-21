@@ -187,7 +187,7 @@ impl Render for Workspaces {
                             .when(!label.is_empty(), |this| {
                                 this.child(
                                     div()
-                                        .text_size(px(style::label(is_vertical)))
+                                        .text_size(style::label_size(theme, is_vertical))
                                         .text_color(if is_active {
                                             bg_primary
                                         } else if has_windows {

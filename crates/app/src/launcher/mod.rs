@@ -17,7 +17,7 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use modules::{HelpView, all_views};
-use ui::{ActiveTheme, InputBuffer, font_size, icon_size, radius, render_input_line, spacing};
+use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_input_line, spacing};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 
 use crate::config::Config;
@@ -511,7 +511,7 @@ impl Render for Launcher {
                     .child(
                         div()
                             .flex_1()
-                            .text_size(px(font_size::MD))
+                            .text_size(theme.font_sizes.md)
                             .text_color(text_primary)
                             .child(render_input_line(&self.input, &placeholder, cx)),
                     )
@@ -522,7 +522,7 @@ impl Render for Launcher {
                             .py(px(3.))
                             .rounded(px(radius::SM))
                             .bg(interactive_default)
-                            .text_size(px(font_size::SM))
+                            .text_size(theme.font_sizes.sm)
                             .text_color(text_secondary)
                             .child(view_name),
                     ),
@@ -570,7 +570,7 @@ impl Render for Launcher {
                             .flex()
                             .items_center()
                             .gap(px(spacing::SM))
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(text_disabled)
                             .child(
                                 div()

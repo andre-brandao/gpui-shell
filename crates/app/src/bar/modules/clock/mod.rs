@@ -67,7 +67,7 @@ impl Render for Clock {
                 .rounded(px(radius::SM))
                 .children(lines.into_iter().enumerate().map(|(idx, line)| {
                     div()
-                        .text_size(px(style::label(true)))
+                        .text_size(style::label_size(theme, true))
                         .text_color(if idx == 0 {
                             theme.text.secondary
                         } else {
@@ -84,7 +84,7 @@ impl Render for Clock {
                 .px(px(style::chip_padding_x(false)))
                 .py(px(style::CHIP_PADDING_Y))
                 .rounded(px(radius::SM))
-                .text_size(px(style::label(false)))
+                .text_size(style::label_size(theme, false))
                 .text_color(theme.text.primary)
                 .child(self.formatted_time_horizontal(&config.format_horizontal))
         }

@@ -2,7 +2,7 @@
 
 use gpui::{App, Entity, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BrightnessCommand};
-use ui::{ActiveTheme, Slider, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, Slider, icon_size, radius, spacing};
 
 use crate::state::AppState;
 
@@ -173,7 +173,7 @@ fn render_percentage_label(percent: u8, cx: &App) -> impl IntoElement {
 
     div()
         .w(px(32.))
-        .text_size(px(font_size::XS))
+        .text_size(theme.font_sizes.xs)
         .text_color(theme.text.muted)
         .text_right()
         .child(format!("{}%", percent))
@@ -233,7 +233,7 @@ fn render_adjustment_button(
         })
         .child(
             div()
-                .text_size(px(font_size::XS))
+                .text_size(theme.font_sizes.xs)
                 .text_color(text_muted)
                 .child(label),
         )

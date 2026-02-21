@@ -19,7 +19,7 @@
 //! }
 //! ```
 
-use gpui::{App, Global, Hsla, Pixels, px, rgba};
+use gpui::{px, rgba, App, Global, Hsla, Pixels};
 
 mod base16;
 mod colorize;
@@ -27,11 +27,55 @@ mod schemes;
 
 pub use base16::Base16Colors;
 pub use colorize::Colorize;
-pub use schemes::{ThemeScheme, builtin_schemes};
+pub use schemes::{builtin_schemes, ThemeScheme};
 
 // =============================================================================
 // Theme Struct and Trait
 // =============================================================================
+
+/// Font size configuration.
+///
+/// All sizes are calculated from a base size for consistent scaling.
+#[derive(Clone, Debug)]
+pub struct FontSizes {
+    /// Base font size - all other sizes calculated from this
+    pub base: Pixels,
+    /// Extra small font size (~10px if base=13)
+    pub xs: Pixels,
+    /// Small font size (~11px if base=13)
+    pub sm: Pixels,
+    /// Medium font size (~14px if base=13)
+    pub md: Pixels,
+    /// Large font size (~16px if base=13)
+    pub lg: Pixels,
+    /// Extra large font size (~18px if base=13)
+    pub xl: Pixels,
+}
+
+impl FontSizes {
+    /// Create font sizes from a base size.
+    pub fn new(base: f32) -> Self {
+        Self {
+            base: px(base),
+            xs: px(base * 0.77), // ~10px if base=13
+            sm: px(base * 0.85), // ~11px if base=13
+            md: px(base * 1.08), // ~14px if base=13
+            lg: px(base * 1.23), // ~16px if base=13
+            xl: px(base * 1.38), // ~18px if base=13
+        }
+    }
+
+    /// Get the base font size value in pixels.
+    pub fn base_value(&self) -> f32 {
+        self.base.into()
+    }
+}
+
+impl Default for FontSizes {
+    fn default() -> Self {
+        Self::new(13.0) // Current BASE size
+    }
+}
 
 /// The global theme configuration.
 ///
@@ -58,6 +102,8 @@ pub struct Theme {
     pub radius_lg: Pixels,
     /// Fully transparent color
     pub transparent: Hsla,
+    /// Font sizes
+    pub font_sizes: FontSizes,
 }
 
 impl Global for Theme {}
@@ -74,6 +120,7 @@ impl Default for Theme {
             radius: px(6.0),
             radius_lg: px(8.0),
             transparent: Hsla::transparent_black(),
+            font_sizes: FontSizes::default(),
         }
     }
 }
@@ -312,16 +359,6 @@ pub mod radius {
     pub const MD: f32 = 6.0;
     pub const LG: f32 = 8.0;
     pub const XL: f32 = 12.0;
-}
-
-/// Font sizes (in pixels)
-pub mod font_size {
-    pub const XS: f32 = 10.0;
-    pub const SM: f32 = 11.0;
-    pub const BASE: f32 = 13.0;
-    pub const MD: f32 = 14.0;
-    pub const LG: f32 = 16.0;
-    pub const XL: f32 = 18.0;
 }
 
 /// Icon sizes (in pixels)

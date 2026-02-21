@@ -8,7 +8,7 @@ use gpui::{
     App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px, Size,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
-use ui::{ActiveTheme, font_size, radius, spacing};
+use ui::{ActiveTheme, radius, spacing};
 
 use super::style;
 use crate::bar::modules::WidgetSlot;
@@ -366,6 +366,8 @@ fn render_menu_item(
     accent_primary: gpui::Hsla,
     cx: &mut Context<TrayMenuPanel>,
 ) -> impl IntoElement {
+    let theme = cx.theme();
+
     // Checkbox/radio indicator
     let toggle_indicator = props.toggle_type.as_ref().map(|toggle_type| {
         let is_checked = props.toggle_state == Some(1);
@@ -427,7 +429,7 @@ fn render_menu_item(
         .when_some(toggle_indicator, |el, (icon, is_checked)| {
             el.child(
                 div()
-                    .text_size(px(font_size::SM))
+                    .text_size(theme.font_sizes.sm)
                     .text_color(if is_checked {
                         accent_primary
                     } else {
@@ -440,7 +442,7 @@ fn render_menu_item(
         .child(
             div()
                 .flex_1()
-                .text_size(px(font_size::SM))
+                .text_size(theme.font_sizes.sm)
                 .text_color(text_color)
                 .overflow_hidden()
                 .text_ellipsis()
@@ -450,7 +452,7 @@ fn render_menu_item(
         .when(has_submenu, |el| {
             el.child(
                 div()
-                    .text_size(px(font_size::XS))
+                    .text_size(theme.font_sizes.xs)
                     .text_color(text_muted)
                     .child(if is_expanded { "󰅀" } else { "󰅂" }),
             )

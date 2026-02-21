@@ -39,8 +39,8 @@ poweroff = "systemctl poweroff"
 
 See the individual reference pages for details on each section:
 
-- [Bar](/reference/bar/)
-- [Launcher](/reference/launcher/)
-- [OSD](/reference/osd/)
-- [Control Center](/reference/control-center/)
-- [Theme](/reference/theme/)
+- [Bar](/gpui-shell/reference/bar/)
+- [Launcher](/gpui-shell/reference/launcher/)
+- [OSD](/gpui-shell/reference/osd/)
+- [Control Center](/gpui-shell/reference/control-center/)
+- [Theme](/gpui-shell/reference/theme/)

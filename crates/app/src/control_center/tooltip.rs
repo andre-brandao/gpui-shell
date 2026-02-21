@@ -1,6 +1,6 @@
-use gpui::{AnyView, App, Render, SharedString, Window, div, prelude::*, px};
+use gpui::{div, prelude::*, px, AnyView, App, Render, SharedString, Window};
 
-use ui::{ActiveTheme, font_size, radius, spacing};
+use ui::{radius, spacing, ActiveTheme};
 
 pub fn control_center_tooltip(
     text: impl Into<SharedString>,
@@ -26,7 +26,7 @@ impl Render for ControlCenterTooltip {
             .bg(theme.bg.elevated)
             .rounded(px(radius::SM))
             .shadow_md()
-            .text_size(px(font_size::XS))
+            .text_size(theme.font_sizes.xs)
             .text_color(theme.text.primary)
             .child(self.text.clone())
     }

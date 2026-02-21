@@ -7,7 +7,7 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     point, prelude::*, px,
 };
-use ui::{ActiveTheme, font_size, spacing};
+use ui::{ActiveTheme, spacing};
 
 use super::config::BarPosition;
 use super::modules::{Widget, WidgetSlot};
@@ -99,7 +99,7 @@ impl Render for Bar {
         let root = div()
             .size_full()
             .flex()
-            .text_size(px(font_size::SM))
+            .text_size(theme.font_sizes.sm)
             .font_weight(FontWeight::MEDIUM)
             .text_color(theme.text.primary)
             .bg(theme.bg.primary)

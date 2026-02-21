@@ -1,11 +1,11 @@
-use gpui::{App, Context, MouseButton, Render, Window, div, prelude::*, px, Size};
+use gpui::{div, prelude::*, px, App, Context, MouseButton, Render, Size, Window};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{icon_size, radius, spacing, ActiveTheme};
 
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
-use crate::state::{AppState, watch};
+use crate::panel::{panel_placement_from_event, toggle_panel, PanelConfig};
+use crate::state::{watch, AppState};
 
 use super::dispatch_notification_command;
 use super::pannel::NotificationCenter;
@@ -34,12 +34,7 @@ impl NotificationWidget {
         }
     }
 
-    fn toggle_center(
-        &self,
-        event: &gpui::MouseDownEvent,
-        window: &Window,
-        cx: &mut App,
-    ) {
+    fn toggle_center(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
         let config = Config::global(cx);
         let notification_config = &config.notification;
         let panel_size = Size::new(
@@ -117,7 +112,7 @@ impl Render for NotificationWidget {
             .when(unread > 0, |el| {
                 el.child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(badge_color)
                         .child(unread.to_string()),
                 )
