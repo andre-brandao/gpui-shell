@@ -161,7 +161,7 @@ impl StoredTheme {
     }
 }
 
-fn theme_path() -> anyhow::Result<PathBuf> {
+pub fn theme_path() -> anyhow::Result<PathBuf> {
     if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
         return Ok(PathBuf::from(xdg).join("gpuishell").join("theme.toml"));
     }

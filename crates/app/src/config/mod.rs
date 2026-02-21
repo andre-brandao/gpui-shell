@@ -23,6 +23,10 @@ pub struct Config {
     pub osd: OsdConfig,
     pub notification: NotificationConfig,
     pub control_center: ControlCenterConfig,
+    /// Watch config.toml for changes and hot-reload (requires restart to change).
+    pub watch_config: bool,
+    /// Watch theme.toml for changes and hot-reload (requires restart to change).
+    pub watch_theme: bool,
 }
 
 impl Default for Config {
@@ -33,6 +37,8 @@ impl Default for Config {
             osd: OsdConfig::default(),
             notification: NotificationConfig::default(),
             control_center: ControlCenterConfig::default(),
+            watch_config: true,
+            watch_theme: true,
         }
     }
 }
@@ -96,6 +102,14 @@ impl Config {
         }
     }
 
+    /// Reload theme from disk and replace the global theme.
+    fn reload_theme(cx: &mut App) {
+        match theme_persistence::load_theme() {
+            Ok(theme) => Theme::set(theme, cx),
+            Err(err) => tracing::warn!("Failed to reload theme from disk: {}", err),
+        }
+    }
+
     /// Persist the current config to disk.
     pub fn save(cx: &App) -> anyhow::Result<()> {
         persistence::save(cx.global::<Config>())
@@ -117,26 +131,57 @@ impl Config {
     }
 
     fn start_hot_reload(cx: &mut App) {
-        let path = match persistence::config_path() {
-            Ok(path) => path,
-            Err(err) => {
-                tracing::warn!("Failed to determine config path for hot reload: {}", err);
-                return;
-            }
-        };
+        let config = cx.global::<Config>();
+        let watch_config = config.watch_config;
+        let watch_theme = config.watch_theme;
 
-        let mut rx = FileWatcher::watch(path);
+        // Start config file watcher
+        if watch_config {
+            let config_path = match persistence::config_path() {
+                Ok(path) => path,
+                Err(err) => {
+                    tracing::warn!("Failed to determine config path for hot reload: {}", err);
+                    return;
+                }
+            };
 
-        cx.spawn(async move |cx| {
-            while rx.recv().await.is_some() {
-                cx.update(|cx| {
-                    tracing::info!("Config file changed, reloading");
-                    Config::reload(cx);
-                    cx.refresh_windows();
-                });
-            }
-        })
-        .detach();
+            let mut rx = FileWatcher::watch(config_path);
+
+            cx.spawn(async move |cx| {
+                while rx.recv().await.is_some() {
+                    cx.update(|cx| {
+                        tracing::info!("Config file changed, reloading");
+                        Config::reload(cx);
+                        cx.refresh_windows();
+                    });
+                }
+            })
+            .detach();
+        }
+
+        // Start theme file watcher
+        if watch_theme {
+            let theme_path = match theme_persistence::theme_path() {
+                Ok(path) => path,
+                Err(err) => {
+                    tracing::warn!("Failed to determine theme path for hot reload: {}", err);
+                    return;
+                }
+            };
+
+            let mut rx = FileWatcher::watch(theme_path);
+
+            cx.spawn(async move |cx| {
+                while rx.recv().await.is_some() {
+                    cx.update(|cx| {
+                        tracing::info!("Theme file changed, reloading");
+                        Self::reload_theme(cx);
+                        cx.refresh_windows();
+                    });
+                }
+            })
+            .detach();
+        }
     }
 }
 
