@@ -121,8 +121,11 @@ jobs:
 
           git commit -m "$COMMIT_MSG"
 
+          # Configure git to use the token for authentication
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
           # Push to the current PR branch
-          if ! git push; then
+          if ! git push origin HEAD:${{ github.event.pull_request.head.ref }}; then
             echo "Failed to push documentation updates"
             exit 1
           fi
