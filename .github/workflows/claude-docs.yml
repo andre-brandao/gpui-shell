@@ -132,7 +132,13 @@ jobs:
 
           echo "Successfully pushed documentation updates to PR #${{ github.event.pull_request.number }}"
 
-          # Add a comment to the PR
+          # Generate diff for the comment
+          DIFF_OUTPUT=$(git diff HEAD~1 HEAD -- docs/ | head -n 500)
+
+          # Escape for JSON
+          DIFF_ESCAPED=$(echo "$DIFF_OUTPUT" | jq -Rs .)
+
+          # Add a comment to the PR with diff
           gh pr comment ${{ github.event.pull_request.number }} --body "## 🤖 Documentation Updated
 
           I've automatically updated the documentation based on the config.rs changes in this PR.
@@ -143,6 +149,15 @@ jobs:
           ### What was updated:
           - Documentation in \`docs/src/content/docs/\` has been synchronized with the code changes
           - Field names, types, defaults, and descriptions have been updated
+
+          <details>
+          <summary>📄 View Documentation Changes</summary>
+
+          \`\`\`diff
+          $DIFF_OUTPUT
+          \`\`\`
+
+          </details>
 
           Please review the documentation changes in the latest commit.
 
