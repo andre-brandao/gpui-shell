@@ -6,7 +6,6 @@ on:
   #   types: [opened, synchronize, ready_for_review, reopened]
   #   paths:
   #     - "crates/**/*.rs"
-  workflow_dispatch:
 
 jobs:
   claude-review:
