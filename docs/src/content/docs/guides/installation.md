@@ -62,7 +62,7 @@ bind = $mainMod, Return, exec, gpuishell
 
 ## 4. Configuration
 
-On first launch, a default config file is created at `~/.config/gpuishell/config.toml`. Edit it to customize the shell. See the [Configuration Reference](/reference/configuration/) for details.
+On first launch, a default config file is created at `~/.config/gpuishell/config.toml`. Edit it to customize the shell. See the [Configuration Reference](/gpui-shell/reference/configuration/) for details.
 
 For example, to change bar widget positions:
 
