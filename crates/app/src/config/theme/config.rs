@@ -1,7 +1,4 @@
-use std::fs;
-use std::path::PathBuf;
-
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use ui::{
     AccentColors, BgColors, BorderColors, FontSizes, InteractiveColors, StatusColors, TextColors,
@@ -9,7 +6,7 @@ use ui::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredTheme {
+pub(crate) struct StoredTheme {
     bg: BgSection,
     text: TextSection,
     border: BorderSection,
@@ -68,7 +65,7 @@ struct InteractiveSection {
 }
 
 impl StoredTheme {
-    fn from_theme(theme: &Theme) -> Self {
+    pub(crate) fn from_theme(theme: &Theme) -> Self {
         Self {
             bg: BgSection {
                 primary: hsla_to_hex(theme.bg.primary),
@@ -110,118 +107,48 @@ impl StoredTheme {
         }
     }
 
-    fn to_theme(&self) -> anyhow::Result<Theme> {
-        let mut theme = Theme::default();
-
-        theme.bg = BgColors {
-            primary: hex_to_hsla(&self.bg.primary)?,
-            secondary: hex_to_hsla(&self.bg.secondary)?,
-            tertiary: hex_to_hsla(&self.bg.tertiary)?,
-            elevated: hex_to_hsla(&self.bg.elevated)?,
-        };
-
-        theme.text = TextColors {
-            primary: hex_to_hsla(&self.text.primary)?,
-            secondary: hex_to_hsla(&self.text.secondary)?,
-            muted: hex_to_hsla(&self.text.muted)?,
-            disabled: hex_to_hsla(&self.text.disabled)?,
-            placeholder: hex_to_hsla(&self.text.placeholder)?,
-        };
-
-        theme.border = BorderColors {
-            default: hex_to_hsla(&self.border.default)?,
-            subtle: hex_to_hsla(&self.border.subtle)?,
-            focused: hex_to_hsla(&self.border.focused)?,
-        };
-
-        theme.accent = AccentColors {
-            primary: hex_to_hsla(&self.accent.primary)?,
-            selection: hex_to_hsla(&self.accent.selection)?,
-            hover: hex_to_hsla(&self.accent.hover)?,
-        };
-
-        theme.status = StatusColors {
-            success: hex_to_hsla(&self.status.success)?,
-            warning: hex_to_hsla(&self.status.warning)?,
-            error: hex_to_hsla(&self.status.error)?,
-            info: hex_to_hsla(&self.status.info)?,
-        };
-
-        theme.interactive = InteractiveColors {
-            default: hex_to_hsla(&self.interactive.default)?,
-            hover: hex_to_hsla(&self.interactive.hover)?,
-            active: hex_to_hsla(&self.interactive.active)?,
-            toggle_on: hex_to_hsla(&self.interactive.toggle_on)?,
-            toggle_on_hover: hex_to_hsla(&self.interactive.toggle_on_hover)?,
-        };
-
-        theme.font_sizes = FontSizes::new(self.font_size_base);
-
-        Ok(theme)
+    pub(crate) fn to_theme(&self) -> anyhow::Result<Theme> {
+        Ok(Theme {
+            bg: BgColors {
+                primary: hex_to_hsla(&self.bg.primary)?,
+                secondary: hex_to_hsla(&self.bg.secondary)?,
+                tertiary: hex_to_hsla(&self.bg.tertiary)?,
+                elevated: hex_to_hsla(&self.bg.elevated)?,
+            },
+            text: TextColors {
+                primary: hex_to_hsla(&self.text.primary)?,
+                secondary: hex_to_hsla(&self.text.secondary)?,
+                muted: hex_to_hsla(&self.text.muted)?,
+                disabled: hex_to_hsla(&self.text.disabled)?,
+                placeholder: hex_to_hsla(&self.text.placeholder)?,
+            },
+            border: BorderColors {
+                default: hex_to_hsla(&self.border.default)?,
+                subtle: hex_to_hsla(&self.border.subtle)?,
+                focused: hex_to_hsla(&self.border.focused)?,
+            },
+            accent: AccentColors {
+                primary: hex_to_hsla(&self.accent.primary)?,
+                selection: hex_to_hsla(&self.accent.selection)?,
+                hover: hex_to_hsla(&self.accent.hover)?,
+            },
+            status: StatusColors {
+                success: hex_to_hsla(&self.status.success)?,
+                warning: hex_to_hsla(&self.status.warning)?,
+                error: hex_to_hsla(&self.status.error)?,
+                info: hex_to_hsla(&self.status.info)?,
+            },
+            interactive: InteractiveColors {
+                default: hex_to_hsla(&self.interactive.default)?,
+                hover: hex_to_hsla(&self.interactive.hover)?,
+                active: hex_to_hsla(&self.interactive.active)?,
+                toggle_on: hex_to_hsla(&self.interactive.toggle_on)?,
+                toggle_on_hover: hex_to_hsla(&self.interactive.toggle_on_hover)?,
+            },
+            font_sizes: FontSizes::new(self.font_size_base),
+            ..Theme::default()
+        })
     }
-}
-
-pub fn theme_path() -> anyhow::Result<PathBuf> {
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Ok(PathBuf::from(xdg).join("gpuishell").join("theme.toml"));
-    }
-
-    if let Some(home) = std::env::var_os("HOME") {
-        return Ok(PathBuf::from(home)
-            .join(".config")
-            .join("gpuishell")
-            .join("theme.toml"));
-    }
-
-    Err(anyhow!(
-        "Unable to determine theme path (XDG_CONFIG_HOME/HOME not set)"
-    ))
-}
-
-pub fn load_theme() -> anyhow::Result<Theme> {
-    match try_load_theme() {
-        Ok(theme) => Ok(theme),
-        Err(e) => {
-            tracing::warn!("Failed to load theme config: {e}, writing default");
-            let default_theme = Theme::default();
-            // Attempt to write default config to fix broken state
-            if let Err(write_err) = save_theme(&default_theme) {
-                tracing::error!("Failed to write default theme: {write_err}");
-            }
-            Ok(default_theme)
-        }
-    }
-}
-
-fn try_load_theme() -> anyhow::Result<Theme> {
-    let path = theme_path()?;
-    if !path.exists() {
-        return Ok(Theme::default());
-    }
-
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read theme file: {}", path.display()))?;
-    let parsed = toml::from_str::<StoredTheme>(&raw)
-        .with_context(|| format!("Failed to parse theme file: {}", path.display()))?;
-    parsed.to_theme()
-}
-
-pub fn save_theme(theme: &Theme) -> anyhow::Result<()> {
-    let path = theme_path()?;
-    let parent = path.parent().ok_or_else(|| {
-        anyhow!(
-            "Invalid theme path has no parent directory: {}",
-            path.display()
-        )
-    })?;
-    fs::create_dir_all(parent)
-        .with_context(|| format!("Failed to create theme directory: {}", parent.display()))?;
-
-    let encoded = toml::to_string_pretty(&StoredTheme::from_theme(theme))
-        .context("Failed to encode theme")?;
-    fs::write(&path, encoded)
-        .with_context(|| format!("Failed to write theme file: {}", path.display()))?;
-    Ok(())
 }
 
 fn hsla_to_hex(color: gpui::Hsla) -> String {
