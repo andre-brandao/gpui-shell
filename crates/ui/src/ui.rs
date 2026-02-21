@@ -45,6 +45,8 @@ pub use theme::{
     BgColors,
     BorderColors,
     Colorize,
+    // Font sizing
+    FontSizes,
     InteractiveColors,
     StatusColors,
     TextColors,

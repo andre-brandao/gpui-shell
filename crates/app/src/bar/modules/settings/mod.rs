@@ -10,7 +10,7 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{Context, MouseButton, Window, div, prelude::*, px, Size};
+use gpui::{Context, MouseButton, Size, Window, div, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
@@ -24,7 +24,7 @@ use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::{
-    ControlCenter, CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH,
+    CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH, ControlCenter,
 };
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
@@ -114,12 +114,7 @@ impl Settings {
     }
 
     /// Toggle the control center panel.
-    fn toggle_panel(
-        &self,
-        event: &gpui::MouseDownEvent,
-        window: &Window,
-        cx: &mut gpui::App,
-    ) {
+    fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut gpui::App) {
         let config = Config::global(cx);
         let panel_size = Size::new(
             px(CONTROL_CENTER_PANEL_WIDTH),
@@ -266,7 +261,7 @@ impl Render for Settings {
         let battery_icon = self.battery_icon();
         let battery_text = self.battery_text(is_vertical);
         let icon_size = style::icon(is_vertical);
-        let text_size = style::label(is_vertical);
+        let text_size = style::label_size(theme, is_vertical);
 
         // Get the battery icon color
         let battery_color = match &self.upower.battery {
@@ -382,7 +377,7 @@ impl Render for Settings {
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
                             div()
-                                .text_size(px(text_size))
+                                .text_size(text_size)
                                 .text_color(battery_color)
                                 .child(battery_text),
                         )

@@ -1,6 +1,8 @@
 //! Shared sizing and spacing helpers for bar widgets.
+//!
+//! Font sizes should be accessed from `theme.font_sizes` (xs/sm for vertical, sm/md for horizontal).
 
-use ui::{font_size, icon_size, spacing};
+use ui::{icon_size, spacing};
 
 /// Common gap used inside compact bar widgets.
 pub const CHIP_GAP: f32 = spacing::XS;
@@ -41,13 +43,15 @@ pub fn icon(is_vertical: bool) -> f32 {
     }
 }
 
-/// Label text size tuned for bar density.
+/// Get the appropriate label font size from theme based on bar orientation.
+///
+/// Use `label_size(theme, is_vertical)` instead of the old `style::label()`.
 #[inline(always)]
-pub fn label(is_vertical: bool) -> f32 {
+pub fn label_size(theme: &ui::Theme, is_vertical: bool) -> gpui::Pixels {
     if is_vertical {
-        font_size::XS
+        theme.font_sizes.xs
     } else {
-        font_size::SM
+        theme.font_sizes.sm
     }
 }
 

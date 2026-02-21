@@ -33,6 +33,50 @@ pub use schemes::{ThemeScheme, builtin_schemes};
 // Theme Struct and Trait
 // =============================================================================
 
+/// Font size configuration.
+///
+/// All sizes are calculated from a base size for consistent scaling.
+#[derive(Clone, Debug)]
+pub struct FontSizes {
+    /// Base font size - all other sizes calculated from this
+    pub base: Pixels,
+    /// Extra small font size (~10px if base=13)
+    pub xs: Pixels,
+    /// Small font size (~11px if base=13)
+    pub sm: Pixels,
+    /// Medium font size (~14px if base=13)
+    pub md: Pixels,
+    /// Large font size (~16px if base=13)
+    pub lg: Pixels,
+    /// Extra large font size (~18px if base=13)
+    pub xl: Pixels,
+}
+
+impl FontSizes {
+    /// Create font sizes from a base size.
+    pub fn new(base: f32) -> Self {
+        Self {
+            base: px(base),
+            xs: px(base * 0.77), // ~10px if base=13
+            sm: px(base * 0.85), // ~11px if base=13
+            md: px(base * 1.08), // ~14px if base=13
+            lg: px(base * 1.23), // ~16px if base=13
+            xl: px(base * 1.38), // ~18px if base=13
+        }
+    }
+
+    /// Get the base font size value in pixels.
+    pub fn base_value(&self) -> f32 {
+        self.base.into()
+    }
+}
+
+impl Default for FontSizes {
+    fn default() -> Self {
+        Self::new(13.0) // Current BASE size
+    }
+}
+
 /// The global theme configuration.
 ///
 /// This struct holds all theme values and is stored as a GPUI global.
@@ -58,6 +102,8 @@ pub struct Theme {
     pub radius_lg: Pixels,
     /// Fully transparent color
     pub transparent: Hsla,
+    /// Font sizes
+    pub font_sizes: FontSizes,
 }
 
 impl Global for Theme {}
@@ -74,6 +120,7 @@ impl Default for Theme {
             radius: px(6.0),
             radius_lg: px(8.0),
             transparent: Hsla::transparent_black(),
+            font_sizes: FontSizes::default(),
         }
     }
 }

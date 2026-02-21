@@ -2,10 +2,10 @@
 //!
 //! Clicking the widget opens a detailed system information panel.
 
-use crate::panel::{toggle_panel, PanelConfig};
-use gpui::{div, prelude::*, px, App, Context, MouseButton, Size, Window};
+use crate::panel::{PanelConfig, toggle_panel};
+use gpui::{App, Context, MouseButton, Size, Window, div, prelude::*, px};
 use services::SysInfoData;
-use ui::{radius, ActiveTheme};
+use ui::{ActiveTheme, radius};
 
 mod config;
 pub use config::SysInfoConfig;
@@ -14,8 +14,8 @@ use super::style;
 use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement_from_event;
-use crate::state::watch;
 use crate::state::AppState;
+use crate::state::watch;
 
 mod panel;
 pub use panel::SysInfoPanel;
@@ -134,7 +134,7 @@ impl Render for SysInfo {
         let interactive_hover = theme.interactive.hover;
         let interactive_active = theme.interactive.active;
         let icon_size = style::icon(is_vertical);
-        let text_size = style::label(is_vertical);
+        let text_size = style::label_size(theme, is_vertical);
 
         div()
             .id("sysinfo-widget")
@@ -165,7 +165,7 @@ impl Render for SysInfo {
                         .items_center()
                         .gap(px(style::CHIP_GAP))
                         .child(div().text_size(px(icon_size)).text_color(color).child(icon))
-                        .child(div().text_size(px(text_size)).text_color(color).child(text))
+                        .child(div().text_size(text_size).text_color(color).child(text))
                         .into_any_element()
                 };
 

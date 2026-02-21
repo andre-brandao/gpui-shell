@@ -189,7 +189,7 @@ impl Render for ActiveWindow {
                         .enumerate()
                         .map(move |(idx, line)| {
                             div()
-                                .text_size(px(style::label(true)))
+                                .text_size(style::label_size(theme, true))
                                 .text_color(if idx == 0 {
                                     text_primary
                                 } else {
@@ -212,7 +212,7 @@ impl Render for ActiveWindow {
                 .bg(interactive_default)
                 .border_1()
                 .border_color(border_subtle)
-                .text_size(px(style::label(false)))
+                .text_size(style::label_size(theme, false))
                 .text_color(theme.text.primary)
                 .overflow_hidden()
                 .when_some(icon, |el, icon| {

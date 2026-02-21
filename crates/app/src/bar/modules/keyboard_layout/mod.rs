@@ -158,7 +158,7 @@ impl Render for KeyboardLayout {
         let text_secondary = theme.text.secondary;
         let text_primary = theme.text.primary;
         let icon_size = style::icon(is_vertical);
-        let text_size = style::label(is_vertical);
+        let text_size = style::label_size(theme, is_vertical);
 
         div()
             .id("keyboard-layout")
@@ -188,7 +188,7 @@ impl Render for KeyboardLayout {
             )
             .child(
                 div()
-                    .text_size(px(text_size))
+                    .text_size(text_size)
                     .text_color(text_primary)
                     .child(short_name),
             )

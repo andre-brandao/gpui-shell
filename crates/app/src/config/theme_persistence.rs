@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use anyhow::{Context, anyhow};
 use serde::{Deserialize, Serialize};
 use ui::{
-    AccentColors, BgColors, BorderColors, InteractiveColors, StatusColors, TextColors, Theme,
+    AccentColors, BgColors, BorderColors, FontSizes, InteractiveColors, StatusColors, TextColors,
+    Theme,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +16,7 @@ struct StoredTheme {
     accent: AccentSection,
     status: StatusSection,
     interactive: InteractiveSection,
+    font_size_base: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,6 +106,7 @@ impl StoredTheme {
                 toggle_on: hsla_to_hex(theme.interactive.toggle_on),
                 toggle_on_hover: hsla_to_hex(theme.interactive.toggle_on_hover),
             },
+            font_size_base: theme.font_sizes.base_value(),
         }
     }
 
@@ -152,6 +155,8 @@ impl StoredTheme {
             toggle_on_hover: hex_to_hsla(&self.interactive.toggle_on_hover)?,
         };
 
+        theme.font_sizes = FontSizes::new(self.font_size_base);
+
         Ok(theme)
     }
 }
@@ -174,6 +179,21 @@ fn theme_path() -> anyhow::Result<PathBuf> {
 }
 
 pub fn load_theme() -> anyhow::Result<Theme> {
+    match try_load_theme() {
+        Ok(theme) => Ok(theme),
+        Err(e) => {
+            tracing::warn!("Failed to load theme config: {e}, writing default");
+            let default_theme = Theme::default();
+            // Attempt to write default config to fix broken state
+            if let Err(write_err) = save_theme(&default_theme) {
+                tracing::error!("Failed to write default theme: {write_err}");
+            }
+            Ok(default_theme)
+        }
+    }
+}
+
+fn try_load_theme() -> anyhow::Result<Theme> {
     let path = theme_path()?;
     if !path.exists() {
         return Ok(Theme::default());
