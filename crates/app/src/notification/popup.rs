@@ -9,7 +9,7 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationSubscriber};
-use ui::{ActiveTheme, font_size, radius, spacing};
+use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::ActiveConfig;
 use crate::state::AppState;
@@ -83,7 +83,7 @@ impl Render for NotificationPopupStack {
                                     .top(px(8.0))
                                     .right(px(8.0))
                                     .cursor_pointer()
-                                    .text_size(px(font_size::SM))
+                                    .text_size(theme.font_sizes.sm)
                                     .text_color(theme.text.muted)
                                     .on_mouse_down(
                                         MouseButton::Left,

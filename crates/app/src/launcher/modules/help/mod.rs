@@ -4,7 +4,7 @@ pub mod config;
 
 use gpui::{div, prelude::*, px, AnyElement, App};
 use ui::{
-    font_size, icon_size, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem,
+    icon_size, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem,
     ListItemSpacing,
 };
 
@@ -102,7 +102,7 @@ impl HelpView {
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(theme.font_sizes.sm)
                             .text_color(cpu_color)
                             .child(format!("{}%", cpu_usage)),
                     ),
@@ -120,7 +120,7 @@ impl HelpView {
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(theme.font_sizes.sm)
                             .text_color(memory_color)
                             .child(format!("{}%", memory_usage)),
                     ),
@@ -138,7 +138,7 @@ impl HelpView {
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::SM))
+                            .text_size(theme.font_sizes.sm)
                             .text_color(text_muted)
                             .child(temp_text),
                     ),
@@ -157,7 +157,7 @@ impl HelpView {
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
                             div()
-                                .text_size(px(font_size::SM))
+                                .text_size(theme.font_sizes.sm)
                                 .text_color(text_muted)
                                 .child(battery_text.clone()),
                         )
@@ -257,7 +257,7 @@ impl LauncherView for HelpView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(font_size::LG))
+                    .text_size(theme.font_sizes.lg)
                     .child(entry.icon.clone()),
             )
             .child(

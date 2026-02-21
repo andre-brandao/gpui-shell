@@ -55,7 +55,6 @@ pub use theme::{
     ThemeScheme,
     builtin_schemes,
     // Design constants (non-color)
-    font_size,
     icon_size,
     radius,
     spacing,

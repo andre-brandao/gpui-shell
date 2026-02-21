@@ -12,8 +12,8 @@
 //!   return a single element for their entire body. When this returns `Some`,
 //!   the launcher skips the item loop.
 
-use gpui::{AnyElement, App, div, prelude::*, px};
-use ui::{ActiveTheme, font_size, radius, spacing};
+use gpui::{div, prelude::*, px, AnyElement, App};
+use ui::{radius, spacing, ActiveTheme};
 
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]
@@ -146,7 +146,7 @@ pub fn render_footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App)
         .flex()
         .items_center()
         .gap(px(spacing::LG))
-        .text_size(px(font_size::SM))
+        .text_size(theme.font_sizes.sm)
         .text_color(text_muted)
         .children(actions.into_iter().map(|(action, key)| {
             div()
@@ -160,7 +160,7 @@ pub fn render_footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App)
                         .py(px(2.))
                         .rounded(px(radius::SM - 1.0))
                         .bg(interactive_default)
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .child(key),
                 )
         }))

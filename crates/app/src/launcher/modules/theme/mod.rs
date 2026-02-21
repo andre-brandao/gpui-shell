@@ -4,15 +4,13 @@ pub mod config;
 
 use std::sync::Mutex;
 
-use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
-use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
-use ui::{
-    ActiveTheme, Base16Colors, Theme, ThemeScheme, builtin_schemes, font_size, radius, spacing,
-};
+use gpui::{div, prelude::*, px, AnyElement, App, FontWeight};
+use services::{load_stylix_scheme, ThemeProvider, ThemeRepository, THEME_PROVIDERS};
+use ui::{builtin_schemes, radius, spacing, ActiveTheme, Base16Colors, Theme, ThemeScheme};
 
 use self::config::ThemesConfig;
 use crate::config::Config;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
 
 const MAX_VISIBLE_THEMES: usize = 50;
 const THEME_ICON: &str = "󰏘";
@@ -227,7 +225,7 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                 .gap(px(spacing::SM))
                 .child(
                     div()
-                        .text_size(px(font_size::LG))
+                        .text_size(theme.font_sizes.lg)
                         .text_color(accent_primary)
                         .child(THEME_ICON),
                 )
@@ -238,14 +236,14 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                         .gap(px(1.))
                         .child(
                             div()
-                                .text_size(px(font_size::MD))
+                                .text_size(theme.font_sizes.md)
                                 .text_color(text_primary)
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(scheme.name),
                         )
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(text_disabled)
                                 .child(scheme.description),
                         ),
@@ -264,7 +262,7 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                             .py(px(2.))
                             .rounded(px(radius::SM))
                             .bg(accent_primary)
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(bg_primary)
                             .font_weight(FontWeight::BOLD)
                             .child("Active"),
@@ -322,7 +320,7 @@ fn render_provider_card(
         .gap(px(spacing::SM))
         .child(
             div()
-                .text_size(px(font_size::LG))
+                .text_size(theme.font_sizes.lg)
                 .text_color(accent_primary)
                 .child(icon),
         )
@@ -333,14 +331,14 @@ fn render_provider_card(
                 .gap(px(1.))
                 .child(
                     div()
-                        .text_size(px(font_size::SM))
+                        .text_size(theme.font_sizes.sm)
                         .text_color(text_primary)
                         .font_weight(FontWeight::MEDIUM)
                         .child(action),
                 )
                 .child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(text_disabled)
                         .child(provider.repo),
                 ),
@@ -398,14 +396,14 @@ fn render_theme_card(
                 .gap(px(1.))
                 .child(
                     div()
-                        .text_size(px(font_size::SM))
+                        .text_size(theme.font_sizes.sm)
                         .text_color(text_primary)
                         .font_weight(FontWeight::MEDIUM)
                         .child(name),
                 )
                 .child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(text_disabled)
                         .child(description),
                 ),
@@ -423,7 +421,7 @@ fn render_theme_card(
                             .py(px(2.))
                             .rounded(px(radius::SM))
                             .bg(accent_primary)
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(bg_primary)
                             .font_weight(FontWeight::BOLD)
                             .child("Active"),

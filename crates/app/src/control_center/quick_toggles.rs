@@ -4,7 +4,7 @@
 
 use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 use crate::state::AppState;
 
@@ -238,13 +238,13 @@ fn render_expandable_module(
                         .gap(px(2.))
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(text_primary)
                                 .child(label),
                         )
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(status_color)
                                 .child(status),
                         ),
@@ -328,13 +328,13 @@ fn render_simple_module(
                 .gap(px(2.))
                 .child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(text_primary)
                         .child(label),
                 )
                 .child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(text_muted)
                         .child(status),
                 ),
@@ -386,13 +386,13 @@ fn render_status_module(
                 .gap(px(2.))
                 .child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(text_primary)
                         .child(label),
                 )
                 .child(
                     div()
-                        .text_size(px(font_size::XS))
+                        .text_size(theme.font_sizes.xs)
                         .text_color(text_muted)
                         .child(status),
                 ),

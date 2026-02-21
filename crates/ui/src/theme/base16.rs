@@ -3,7 +3,7 @@
 //! Converts a set of 16 hex color strings (the Base16 standard) into
 //! the application's `Theme` struct.
 
-use gpui::{Hsla, px};
+use gpui::{px, Hsla};
 
 use super::{
     AccentColors, BgColors, BorderColors, Colorize, FontSizes, InteractiveColors, StatusColors,

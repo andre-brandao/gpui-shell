@@ -3,7 +3,7 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, font_size, radius, spacing};
+use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, radius, spacing};
 
 use self::config::{WebConfig, WebProviderConfig};
 use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
@@ -181,7 +181,7 @@ impl LauncherView for WebSearchView {
                                 .p(px(spacing::SM))
                                 .bg(rgba(0x00000066))
                                 .rounded(px(radius::SM))
-                                .text_size(px(font_size::BASE))
+                                .text_size(theme.font_sizes.base)
                                 .child(if has_query {
                                     Label::new(format!("\"{}\"", search_query))
                                         .color(Color::Default)

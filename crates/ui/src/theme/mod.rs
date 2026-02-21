@@ -19,7 +19,7 @@
 //! }
 //! ```
 
-use gpui::{App, Global, Hsla, Pixels, px, rgba};
+use gpui::{px, rgba, App, Global, Hsla, Pixels};
 
 mod base16;
 mod colorize;
@@ -27,7 +27,7 @@ mod schemes;
 
 pub use base16::Base16Colors;
 pub use colorize::Colorize;
-pub use schemes::{ThemeScheme, builtin_schemes};
+pub use schemes::{builtin_schemes, ThemeScheme};
 
 // =============================================================================
 // Theme Struct and Trait
@@ -359,16 +359,6 @@ pub mod radius {
     pub const MD: f32 = 6.0;
     pub const LG: f32 = 8.0;
     pub const XL: f32 = 12.0;
-}
-
-/// Font sizes (in pixels)
-pub mod font_size {
-    pub const XS: f32 = 10.0;
-    pub const SM: f32 = 11.0;
-    pub const BASE: f32 = 13.0;
-    pub const MD: f32 = 14.0;
-    pub const LG: f32 = 16.0;
-    pub const XL: f32 = 18.0;
 }
 
 /// Icon sizes (in pixels)

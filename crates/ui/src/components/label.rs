@@ -1,6 +1,6 @@
-use gpui::{App, Hsla, IntoElement, RenderOnce, SharedString, Window, div, prelude::*, px};
+use gpui::{div, prelude::*, App, Hsla, IntoElement, Pixels, RenderOnce, SharedString, Window};
 
-use crate::{ActiveTheme, font_size};
+use crate::{ActiveTheme, Theme};
 
 /// Semantic color for text elements.
 ///
@@ -47,12 +47,12 @@ pub enum LabelSize {
 }
 
 impl LabelSize {
-    pub fn rems(self) -> f32 {
+    pub fn pixels(self, theme: &Theme) -> Pixels {
         match self {
-            LabelSize::XSmall => font_size::XS,
-            LabelSize::Small => font_size::SM,
-            LabelSize::Default => font_size::BASE,
-            LabelSize::Large => font_size::LG,
+            LabelSize::XSmall => theme.font_sizes.xs,
+            LabelSize::Small => theme.font_sizes.sm,
+            LabelSize::Default => theme.font_sizes.base,
+            LabelSize::Large => theme.font_sizes.lg,
         }
     }
 }
@@ -95,8 +95,10 @@ impl LabelCommon for Label {
 
 impl RenderOnce for Label {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = cx.theme();
+
         div()
-            .text_size(px(self.size.rems()))
+            .text_size(self.size.pixels(theme))
             .text_color(self.color.hsla(cx))
             .child(self.label)
     }

@@ -2,7 +2,7 @@
 
 use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
-use ui::{ActiveTheme, font_size, icon_size, radius, spacing};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
@@ -267,7 +267,7 @@ impl MprisPanel {
                                     .overflow_hidden()
                                     .child(
                                         div()
-                                            .text_size(px(font_size::SM))
+                                            .text_size(theme.font_sizes.sm)
                                             .text_color(theme.text.primary)
                                             .font_weight(FontWeight::MEDIUM)
                                             .overflow_hidden()
@@ -276,7 +276,7 @@ impl MprisPanel {
                                     )
                                     .child(
                                         div()
-                                            .text_size(px(font_size::XS))
+                                            .text_size(theme.font_sizes.xs)
                                             .text_color(theme.text.secondary)
                                             .overflow_hidden()
                                             .text_ellipsis()
@@ -286,7 +286,7 @@ impl MprisPanel {
                     )
                     .child(
                         div()
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(status_color)
                             .child(format!("{}  {}", Self::status_text(player.state), volume)),
                     ),
@@ -300,13 +300,13 @@ impl MprisPanel {
                         .gap(px(spacing::XS))
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.muted)
                                 .child(icons::DURATION),
                         )
                         .child(
                             div()
-                                .text_size(px(font_size::XS))
+                                .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.muted)
                                 .child(duration),
                         ),
@@ -321,7 +321,7 @@ impl MprisPanel {
                     .gap(px(spacing::XS))
                     .child(
                         div()
-                            .text_size(px(font_size::XS))
+                            .text_size(theme.font_sizes.xs)
                             .text_color(theme.text.muted)
                             .child(service_short),
                     )
@@ -445,7 +445,7 @@ impl Render for MprisPanel {
                             )
                             .child(
                                 div()
-                                    .text_size(px(font_size::LG))
+                                    .text_size(theme.font_sizes.lg)
                                     .text_color(theme.text.primary)
                                     .font_weight(FontWeight::BOLD)
                                     .child("Media Players"),
@@ -458,7 +458,7 @@ impl Render for MprisPanel {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .text_size(px(font_size::SM))
+                                .text_size(theme.font_sizes.sm)
                                 .text_color(theme.text.muted)
                                 .child("No MPRIS players detected"),
                         )

@@ -3,7 +3,7 @@
 pub mod config;
 
 use gpui::{div, prelude::*, px, rgba, AnyElement, App};
-use ui::{font_size, radius, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize};
+use ui::{radius, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize};
 
 use self::config::ShellConfig;
 use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
@@ -161,7 +161,7 @@ impl LauncherView for ShellView {
                                 .bg(rgba(0x00000066))
                                 .rounded(px(radius::SM))
                                 .font_family("monospace")
-                                .text_size(px(font_size::BASE))
+                                .text_size(theme.font_sizes.base)
                                 .child(if has_command {
                                     Label::new(query.to_string()).color(Color::Default)
                                 } else {
