@@ -1,10 +1,10 @@
 name: Claude Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - "crates/**/*.rs"
+  # pull_request:
+  #   types: [opened, synchronize, ready_for_review, reopened]
+  #   paths:
+  #     - "crates/**/*.rs"
 
 jobs:
   claude-review:
