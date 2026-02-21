@@ -54,7 +54,13 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: --model claude-haiku-4-5-20251001
+          claude_args: |
+            --model claude-haiku-4-5-20251001
+            --allowed-tools 'Edit(docs/**/*.md)'
+            --allowed-tools 'Edit(docs/**/*.mdx)'
+            --allowed-tools 'Read(**/*)'
+            --allowed-tools 'Grep(**/*)'
+            --allowed-tools 'Glob(**/*)'
           prompt: |
             # Task: Update Documentation for Configuration Changes
 
