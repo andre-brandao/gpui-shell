@@ -1,0 +1,46 @@
+# Automatically label PRs based on changed files
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
+
+services:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/services/**/*'
+
+ui:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/ui/**/*'
+
+app:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/app/**/*'
+
+bar:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/app/src/bar/**/*'
+
+launcher:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/app/src/launcher/**/*'
+
+control-center:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/app/src/control_center/**/*'
+
+osd:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/app/src/osd/**/*'
+
+notifications:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/app/src/notification/**/*'
+
+nix:
+  - changed-files:
+    - any-glob-to-any-file: '**/*.nix'
+    - any-glob-to-any-file: 'flake.lock'
+
+assets:
+  - changed-files:
+    - any-glob-to-any-file: 'crates/assets/**/*'
