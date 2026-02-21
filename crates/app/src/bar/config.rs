@@ -45,6 +45,7 @@ pub struct BarConfig {
     pub modules: ModulesConfig,
 }
 
+
 /// Bar module configurations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
