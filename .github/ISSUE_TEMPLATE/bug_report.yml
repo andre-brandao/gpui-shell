@@ -1,0 +1,105 @@
+name: Bug Report
+description: Report a bug or issue
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us debug the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what went wrong
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Open gpuishell
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Tell us what should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Tell us what actually happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Please paste any relevant logs (run with `RUST_LOG=debug gpuishell`)
+      render: shell
+      placeholder: Paste logs here
+
+
+  - type: dropdown
+    id: compositor
+    attributes:
+      label: Compositor
+      description: Which Wayland compositor are you using?
+      options:
+        - Hyprland
+        - Niri
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: compositor-version
+    attributes:
+      label: Compositor Version
+      description: What version of your compositor?
+      placeholder: "e.g., Hyprland v0.45.0"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you using?
+      options:
+        - NixOS
+        - Arch Linux
+        - Fedora
+        - Ubuntu
+        - Other Linux
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Please paste your relevant configuration (if applicable)
+      render: toml
+      placeholder: Paste your config.toml here
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here
+      placeholder: Any other information that might be helpful

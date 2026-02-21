@@ -9,8 +9,7 @@ use std::borrow::Cow;
 ///
 /// ```
 /// use gpui::*;
-/// use gpui_component_assets::Assets;
-///
+/// use assets::Assets;
 /// let app = Application::new().with_assets(Assets);
 /// ```
 #[derive(RustEmbed)]
