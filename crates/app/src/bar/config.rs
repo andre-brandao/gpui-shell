@@ -78,6 +78,7 @@ impl Default for ModulesConfig {
     }
 }
 
+
 impl Default for BarConfig {
     fn default() -> Self {
         Self {
