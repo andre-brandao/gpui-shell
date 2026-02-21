@@ -41,7 +41,7 @@ pub struct BarConfig {
     pub center: Vec<String>,
     /// End section widgets (right for horizontal, bottom for vertical).
     pub end: Vec<String>,
-
+    /// Bar modules
     pub modules: ModulesConfig,
 }
 
