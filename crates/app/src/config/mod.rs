@@ -1,7 +1,7 @@
 //! Application configuration stored as a GPUI global.
 
 mod persistence;
-mod theme_persistence;
+mod theme;
 
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,7 @@ impl Config {
             }
         };
 
-        let theme = match theme_persistence::load_theme() {
+        let theme = match theme::persistence::load_theme() {
             Ok(theme) => theme,
             Err(err) => {
                 tracing::warn!("Failed to load theme, using defaults: {}", err);
@@ -104,7 +104,7 @@ impl Config {
 
     /// Reload theme from disk and replace the global theme.
     fn reload_theme(cx: &mut App) {
-        match theme_persistence::load_theme() {
+        match theme::persistence::load_theme() {
             Ok(theme) => Theme::set(theme, cx),
             Err(err) => tracing::warn!("Failed to reload theme from disk: {}", err),
         }
@@ -122,12 +122,12 @@ impl Config {
 
     /// Persist current global theme colors to `theme.toml`.
     pub fn save_theme(cx: &App) -> anyhow::Result<()> {
-        theme_persistence::save_theme(Theme::global(cx))
+        theme::persistence::save_theme(Theme::global(cx))
     }
 
     /// Persist a provided theme colors to `theme.toml`.
     pub fn save_theme_value(theme: &Theme) -> anyhow::Result<()> {
-        theme_persistence::save_theme(theme)
+        theme::persistence::save_theme(theme)
     }
 
     fn start_hot_reload(cx: &mut App) {
@@ -161,7 +161,7 @@ impl Config {
 
         // Start theme file watcher
         if watch_theme {
-            let theme_path = match theme_persistence::theme_path() {
+            let theme_path = match theme::persistence::theme_path() {
                 Ok(path) => path,
                 Err(err) => {
                     tracing::warn!("Failed to determine theme path for hot reload: {}", err);
