@@ -16,9 +16,14 @@ jobs:
       matrix:
         arch:
           - x86_64-linux
-          - aarch64-linux
+          # - aarch64-linux
     steps:
     - uses: actions/checkout@v5
+    - name: Set up QEMU
+      if: matrix.arch == 'aarch64-linux'
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
     - uses: cachix/install-nix-action@v31
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
