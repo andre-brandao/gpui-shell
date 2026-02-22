@@ -44,10 +44,10 @@ impl WallpaperView {
         Self {
             prefix: config.prefix.clone(),
             directory,
-            matugen_type: config.matugen_type.clone(),
-            matugen_source_color_index: config.matugen_source_color_index,
-            matugen_enabled: Arc::new(AtomicBool::new(config.matugen_enabled)),
-            matugen_dark_mode: Arc::new(AtomicBool::new(config.matugen_mode == "dark")),
+            matugen_type: "scheme-tonal-spot".into(),
+            matugen_source_color_index: 0,
+            matugen_enabled: Arc::new(AtomicBool::new(true)),
+            matugen_dark_mode: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -190,6 +190,9 @@ impl LauncherView for WallpaperView {
         let theme = cx.theme();
         let text_primary = theme.text.primary;
         let text_muted = theme.text.muted;
+        let accent_primary = theme.accent.primary;
+        let bg_secondary = theme.bg.secondary;
+        let border = theme.border.default;
 
         let enabled = self.matugen_enabled.load(Ordering::Relaxed);
         let dark_mode = self.matugen_dark_mode.load(Ordering::Relaxed);
@@ -201,31 +204,61 @@ impl LauncherView for WallpaperView {
             div()
                 .flex()
                 .flex_col()
-                .gap(px(spacing::SM))
-                // Main toggle row
+                .bg(bg_secondary)
+                .border_b_1()
+                .border_color(border)
+                // Main toggle section
                 .child(
                     div()
                         .flex()
                         .items_center()
                         .justify_between()
-                        .px(px(spacing::MD))
-                        .py(px(spacing::SM))
+                        .px(px(spacing::LG))
+                        .py(px(spacing::MD))
                         .child(
                             div()
                                 .flex()
-                                .flex_col()
-                                .gap(px(2.))
+                                .items_center()
+                                .gap(px(spacing::MD))
+                                // Icon indicator
                                 .child(
                                     div()
-                                        .text_color(text_primary)
-                                        .text_sm()
-                                        .child("Material You Theming"),
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .w(px(32.))
+                                        .h(px(32.))
+                                        .rounded(px(6.))
+                                        .bg(if enabled {
+                                            accent_primary
+                                        } else {
+                                            theme.interactive.default
+                                        })
+                                        .text_color(if enabled {
+                                            theme.bg.primary
+                                        } else {
+                                            text_muted
+                                        })
+                                        .text_base()
+                                        .child("󱥚"),
                                 )
                                 .child(
                                     div()
-                                        .text_color(text_muted)
-                                        .text_xs()
-                                        .child("Auto-generate themes from wallpaper"),
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(2.))
+                                        .child(
+                                            div()
+                                                .text_color(text_primary)
+                                                .text_sm()
+                                                .child("Material You Theming"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(text_muted)
+                                                .text_xs()
+                                                .child("Auto-generate theme colors from wallpaper"),
+                                        ),
                                 ),
                         )
                         .child(
@@ -237,29 +270,55 @@ impl LauncherView for WallpaperView {
                                 }),
                         ),
                 )
-                // Dark/Light mode toggle (only shown when matugen is enabled)
+                // Dark/Light mode selector (animated collapse)
                 .when(enabled, |this| {
                     this.child(
                         div()
                             .flex()
                             .items_center()
                             .justify_between()
-                            .px(px(spacing::MD))
-                            .py(px(spacing::SM))
-                            .child(div().flex().items_center().gap(px(spacing::SM)).child(
-                                div().text_color(text_muted).text_sm().child(if dark_mode {
-                                    "Dark Mode"
-                                } else {
-                                    "Light Mode"
-                                }),
-                            ))
+                            .px(px(spacing::LG))
+                            .pb(px(spacing::MD))
+                            .pt(px(spacing::XS))
                             .child(
-                                Switch::new("matugen-dark-mode-toggle")
-                                    .checked(dark_mode)
-                                    .size(SwitchSize::Small)
-                                    .on_click(move |checked, _, _cx| {
-                                        matugen_dark_mode_atomic.store(*checked, Ordering::Relaxed);
-                                    }),
+                                div().flex().items_center().gap(px(spacing::SM)).child(
+                                    div().text_color(text_muted).text_xs().child("Theme Mode"),
+                                ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(spacing::SM))
+                                    .child(
+                                        div()
+                                            .text_color(if dark_mode {
+                                                text_muted
+                                            } else {
+                                                accent_primary
+                                            })
+                                            .text_xs()
+                                            .child("󰖨"),
+                                    )
+                                    .child(
+                                        Switch::new("matugen-dark-mode-toggle")
+                                            .checked(dark_mode)
+                                            .size(SwitchSize::Small)
+                                            .on_click(move |checked, _, _cx| {
+                                                matugen_dark_mode_atomic
+                                                    .store(*checked, Ordering::Relaxed);
+                                            }),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_color(if dark_mode {
+                                                accent_primary
+                                            } else {
+                                                text_muted
+                                            })
+                                            .text_xs()
+                                            .child("󰖔"),
+                                    ),
                             ),
                     )
                 })
