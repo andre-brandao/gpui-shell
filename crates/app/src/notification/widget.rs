@@ -1,24 +1,22 @@
-use gpui::{div, prelude::*, px, App, Context, MouseButton, Render, Size, Window};
+use gpui::{App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{icon_size, radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
-use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{panel_placement_from_event, toggle_panel, PanelConfig};
-use crate::state::{watch, AppState};
+use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
+use crate::state::{AppState, watch};
 
 use super::dispatch_notification_command;
 use super::pannel::NotificationCenter;
 
 /// Notification widget for the bar.
 pub struct NotificationWidget {
-    slot: WidgetSlot,
     subscriber: NotificationSubscriber,
     data: NotificationData,
 }
 
 impl NotificationWidget {
-    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let subscriber = AppState::notification(cx).clone();
         let data = subscriber.get();
 
@@ -27,11 +25,7 @@ impl NotificationWidget {
             cx.notify();
         });
 
-        Self {
-            slot,
-            subscriber,
-            data,
-        }
+        Self { subscriber, data }
     }
 
     fn toggle_center(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {

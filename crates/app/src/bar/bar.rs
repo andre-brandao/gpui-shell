@@ -10,7 +10,7 @@ use gpui::{
 use ui::{ActiveTheme, spacing};
 
 use super::config::BarPosition;
-use super::modules::{Widget, WidgetSlot};
+use super::modules::Widget;
 use crate::config::{ActiveConfig, Config};
 
 /// The main bar view.
@@ -35,9 +35,9 @@ impl Bar {
         let position = config.position;
         Self {
             position,
-            start_widgets: Widget::create_many(&config.start, WidgetSlot::Start, cx),
-            center_widgets: Widget::create_many(&config.center, WidgetSlot::Center, cx),
-            end_widgets: Widget::create_many(&config.end, WidgetSlot::End, cx),
+            start_widgets: Widget::create_many(&config.start, cx),
+            center_widgets: Widget::create_many(&config.center, cx),
+            end_widgets: Widget::create_many(&config.end, cx),
         }
     }
 

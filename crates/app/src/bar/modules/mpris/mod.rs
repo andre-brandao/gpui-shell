@@ -8,7 +8,6 @@ use services::{MprisData, PlaybackStatus};
 use ui::{ActiveTheme, radius};
 
 use super::style;
-use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::AppState;
@@ -25,13 +24,12 @@ mod icons {
 
 /// Bar widget for media status and controls.
 pub struct Mpris {
-    slot: WidgetSlot,
     subscriber: services::MprisSubscriber,
     data: MprisData,
 }
 
 impl Mpris {
-    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let subscriber = AppState::mpris(cx).clone();
         let data = subscriber.get();
 
@@ -40,11 +38,7 @@ impl Mpris {
             cx.notify();
         });
 
-        Self {
-            slot,
-            subscriber,
-            data,
-        }
+        Self { subscriber, data }
     }
 
     fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
