@@ -2,7 +2,7 @@
 
 pub mod config;
 
-use gpui::{div, img, prelude::*, px, AnyElement, App};
+use gpui::{AnyElement, App, div, img, prelude::*, px};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
 
 use self::config::AppsConfig;

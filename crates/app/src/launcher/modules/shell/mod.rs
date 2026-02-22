@@ -2,11 +2,11 @@
 
 pub mod config;
 
-use gpui::{div, prelude::*, px, rgba, AnyElement, App};
-use ui::{radius, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize};
+use gpui::{AnyElement, App, div, prelude::*, px, rgba};
+use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, radius, spacing};
 
 use self::config::ShellConfig;
-use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
+use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
 
 /// Shell view - executes shell commands in a terminal.
 pub struct ShellView {
@@ -41,11 +41,7 @@ impl LauncherView for ShellView {
     }
 
     fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        if vx.query.trim().is_empty() {
-            0
-        } else {
-            1
-        }
+        if vx.query.trim().is_empty() { 0 } else { 1 }
     }
 
     fn render_item(

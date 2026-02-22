@@ -101,7 +101,10 @@ impl Render for NotificationPopupStack {
     }
 }
 
-fn popup_window_options(config: &NotificationConfig, display_id: Option<DisplayId>) -> WindowOptions {
+fn popup_window_options(
+    config: &NotificationConfig,
+    display_id: Option<DisplayId>,
+) -> WindowOptions {
     let margin = popup_margin(config);
     WindowOptions {
         display_id,
@@ -163,7 +166,10 @@ fn popup_targets(cx: &App) -> Vec<Option<DisplayId>> {
     if displays.is_empty() {
         vec![None]
     } else {
-        displays.into_iter().map(|display| Some(display.id())).collect()
+        displays
+            .into_iter()
+            .map(|display| Some(display.id()))
+            .collect()
     }
 }
 
@@ -218,8 +224,8 @@ fn sync_popup(subscriber: &NotificationSubscriber, cx: &mut App) {
         guard.remove(&display_id);
         let sub = subscriber.clone();
         let notifications = notifications.clone();
-        if let Ok(handle) =
-            cx.open_window(popup_window_options(&config, display_id), move |_, cx| {
+        if let Ok(handle) = cx
+            .open_window(popup_window_options(&config, display_id), move |_, cx| {
                 cx.new(|_| NotificationPopupStack::new(sub, notifications))
             })
         {

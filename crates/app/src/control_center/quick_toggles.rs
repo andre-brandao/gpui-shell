@@ -32,9 +32,10 @@ pub fn render_quick_toggles(
     let privacy = AppState::privacy(cx).get();
 
     let wifi_enabled = network.wifi_enabled;
-    let wifi_connected = network.active_connections.iter().any(|c| {
-        matches!(c, services::ActiveConnectionInfo::WiFi { .. })
-    });
+    let wifi_connected = network
+        .active_connections
+        .iter()
+        .any(|c| matches!(c, services::ActiveConnectionInfo::WiFi { .. }));
     let wifi_name = network.active_connections.iter().find_map(|c| {
         if let services::ActiveConnectionInfo::WiFi { name, .. } = c {
             Some(name.clone())
@@ -120,7 +121,11 @@ pub fn render_quick_toggles(
                 .w_full()
                 .child(render_expandable_module(
                     "wifi-toggle",
-                    if wifi_enabled { icons::WIFI } else { icons::WIFI_OFF },
+                    if wifi_enabled {
+                        icons::WIFI
+                    } else {
+                        icons::WIFI_OFF
+                    },
                     "WiFi",
                     wifi_status,
                     wifi_enabled,
@@ -190,16 +195,8 @@ fn render_expandable_module(
     } else {
         border_subtle
     };
-    let icon_color = if active {
-        accent_primary
-    } else {
-        text_muted
-    };
-    let status_color = if active {
-        text_secondary
-    } else {
-        text_muted
-    };
+    let icon_color = if active { accent_primary } else { text_muted };
+    let status_color = if active { text_secondary } else { text_muted };
 
     div()
         .id(id)
@@ -314,11 +311,7 @@ fn render_simple_module(
         .child(
             div()
                 .text_size(px(icon_size::SM))
-                .text_color(if active {
-                    accent_primary
-                } else {
-                    text_muted
-                })
+                .text_color(if active { accent_primary } else { text_muted })
                 .child(icon),
         )
         .child(
@@ -372,11 +365,7 @@ fn render_status_module(
         .child(
             div()
                 .text_size(px(icon_size::SM))
-                .text_color(if active {
-                    status_warning
-                } else {
-                    text_muted
-                })
+                .text_color(if active { status_warning } else { text_muted })
                 .child(icon),
         )
         .child(

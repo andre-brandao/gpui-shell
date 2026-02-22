@@ -572,13 +572,7 @@ impl Render for Launcher {
                             .gap(px(spacing::SM))
                             .text_size(theme.font_sizes.xs)
                             .text_color(text_disabled)
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(4.))
-                                    .child(prefix_hints),
-                            ),
+                            .child(div().flex().items_center().gap(px(4.)).child(prefix_hints)),
                     )
                     // Right side - action hints from view
                     .child(footer_bar),

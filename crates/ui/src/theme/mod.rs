@@ -19,7 +19,7 @@
 //! }
 //! ```
 
-use gpui::{px, rgba, App, Global, Hsla, Pixels};
+use gpui::{App, Global, Hsla, Pixels, px, rgba};
 
 mod base16;
 mod colorize;
@@ -27,7 +27,7 @@ mod schemes;
 
 pub use base16::Base16Colors;
 pub use colorize::Colorize;
-pub use schemes::{builtin_schemes, ThemeScheme};
+pub use schemes::{ThemeScheme, builtin_schemes};
 
 // =============================================================================
 // Theme Struct and Trait

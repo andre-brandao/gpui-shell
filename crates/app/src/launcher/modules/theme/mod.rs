@@ -4,13 +4,13 @@ pub mod config;
 
 use std::sync::Mutex;
 
-use gpui::{div, prelude::*, px, AnyElement, App, FontWeight};
-use services::{load_stylix_scheme, ThemeProvider, ThemeRepository, THEME_PROVIDERS};
-use ui::{builtin_schemes, radius, spacing, ActiveTheme, Base16Colors, Theme, ThemeScheme};
+use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
+use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
+use ui::{ActiveTheme, Base16Colors, Theme, ThemeScheme, builtin_schemes, radius, spacing};
 
 use self::config::ThemesConfig;
 use crate::config::Config;
-use crate::launcher::view::{render_footer_hints, LauncherView, ViewContext};
+use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
 
 const MAX_VISIBLE_THEMES: usize = 50;
 const THEME_ICON: &str = "󰏘";

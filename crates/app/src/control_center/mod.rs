@@ -15,12 +15,12 @@
 //! - `power` - Battery status and power profiles
 
 mod bluetooth;
-mod tooltip;
 pub mod config;
 pub mod icons;
 mod power;
 mod quick_toggles;
 mod sliders;
+mod tooltip;
 mod wifi;
 
 pub use config::{ControlCenterConfig, PowerActionsConfig};
@@ -814,7 +814,9 @@ impl Render for ControlCenter {
                 width: AvailableSpace::Definite(px(desired_width)),
                 height: AvailableSpace::MaxContent,
             };
-            measure_root.layout_as_root(available_space, window, cx).height
+            measure_root
+                .layout_as_root(available_space, window, cx)
+                .height
         };
 
         let mut desired_height = content_height;

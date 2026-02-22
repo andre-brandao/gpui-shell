@@ -3,7 +3,10 @@
 //! Converts a set of 16 hex color strings (the Base16 standard) into
 //! the application's `Theme` struct.
 
-use gpui::{px, Hsla};
+use std::path::Path;
+use std::process::Command;
+
+use gpui::{Hsla, px};
 
 use super::{
     AccentColors, BgColors, BorderColors, Colorize, FontSizes, InteractiveColors, StatusColors,
@@ -106,5 +109,95 @@ impl Base16Colors {
             transparent: Hsla::transparent_black(),
             font_sizes: FontSizes::default(),
         }
+    }
+
+    /// Generate a Base16 theme from a wallpaper using matugen.
+    ///
+    /// Runs matugen CLI to extract colors from the image and parse the result.
+    ///
+    /// # Arguments
+    /// - `wallpaper_path`: Path to the wallpaper image
+    /// - `mode`: "dark" or "light"
+    /// - `scheme_type`: e.g. "scheme-tonal-spot", "scheme-vibrant", etc.
+    /// - `source_color_index`: 0-4, where 0 is most dominant color
+    ///
+    /// # Returns
+    /// - `Ok(Theme)` on success
+    /// - `Err` if matugen fails or output cannot be parsed
+    pub fn generate_from_wallpaper(
+        wallpaper_path: impl AsRef<Path>,
+        mode: &str,
+        scheme_type: &str,
+        source_color_index: usize,
+    ) -> anyhow::Result<Theme> {
+        let path = wallpaper_path.as_ref();
+
+        // Run matugen to generate base16 colors
+        let output = Command::new("matugen")
+            .args([
+                "image",
+                &path.to_string_lossy(),
+                "--mode",
+                mode,
+                "--type",
+                scheme_type,
+                "--base16-backend",
+                "wal",
+                "--source-color-index",
+                &source_color_index.to_string(),
+                "--json",
+                "hex",
+            ])
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to run matugen: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("Matugen failed: {}", stderr));
+        }
+
+        // Parse the JSON output
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let json: serde_json::Value = serde_json::from_str(&json_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse matugen output: {}", e))?;
+
+        // Extract base16 colors from the JSON
+        // Matugen outputs colors in structure: base16.baseXX.{dark,light}.color
+        let base16 = json
+            .get("base16")
+            .ok_or_else(|| anyhow::anyhow!("Missing base16 colors in matugen output"))?;
+
+        // Helper to extract color for the given mode
+        let get_color = |base_key: &str| -> &str {
+            base16
+                .get(base_key)
+                .and_then(|b| b.get(mode))
+                .and_then(|m| m.get("color"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("#000000")
+        };
+
+        // Parse the 16 base colors
+        let base_colors: [&str; 16] = [
+            get_color("base00"),
+            get_color("base01"),
+            get_color("base02"),
+            get_color("base03"),
+            get_color("base04"),
+            get_color("base05"),
+            get_color("base06"),
+            get_color("base07"),
+            get_color("base08"),
+            get_color("base09"),
+            get_color("base0a"),
+            get_color("base0b"),
+            get_color("base0c"),
+            get_color("base0d"),
+            get_color("base0e"),
+            get_color("base0f"),
+        ];
+
+        let base16 = Self::from_hex(&base_colors)?;
+        Ok(base16.to_theme())
     }
 }

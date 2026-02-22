@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, App, Hsla, IntoElement, Pixels, RenderOnce, SharedString, Window};
+use gpui::{App, Hsla, IntoElement, Pixels, RenderOnce, SharedString, Window, div, prelude::*};
 
 use crate::{ActiveTheme, Theme};
 
