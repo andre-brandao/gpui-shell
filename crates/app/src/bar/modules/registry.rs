@@ -12,14 +12,6 @@ use super::{
     Workspaces,
 };
 
-/// Slot of a widget within the bar layout.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WidgetSlot {
-    Start,
-    Center,
-    End,
-}
-
 /// Wrapper enum for all possible widget types.
 ///
 /// Each variant holds an Entity handle to a specific widget type.
@@ -62,23 +54,21 @@ impl Widget {
     /// Create a widget by name.
     ///
     /// Returns `None` if the widget name is unknown.
-    pub fn create<V: 'static>(name: &str, slot: WidgetSlot, cx: &mut Context<V>) -> Option<Widget> {
+    pub fn create<V: 'static>(name: &str, cx: &mut Context<V>) -> Option<Widget> {
         match name {
             "ActiveWindow" | "WindowTitle" => Some(Widget::ActiveWindow(cx.new(ActiveWindow::new))),
             "Clock" => Some(Widget::Clock(cx.new(Clock::new))),
             "Battery" => Some(Widget::Battery(cx.new(Battery::new))),
             "Workspaces" => Some(Widget::Workspaces(cx.new(Workspaces::new))),
             "KeyboardLayout" => Some(Widget::KeyboardLayout(cx.new(KeyboardLayout::new))),
-            "Systray" | "Tray" => Some(Widget::Tray(cx.new(|cx| Tray::new(slot, cx)))),
-            "SysInfo" => Some(Widget::SysInfo(cx.new(|cx| SysInfo::new(slot, cx)))),
+            "Systray" | "Tray" => Some(Widget::Tray(cx.new(Tray::new))),
+            "SysInfo" => Some(Widget::SysInfo(cx.new(SysInfo::new))),
             "LauncherBtn" | "Launcher" => Some(Widget::LauncherBtn(cx.new(LauncherBtn::new))),
-            "Mpris" | "Media" | "Player" => Some(Widget::Mpris(cx.new(|cx| Mpris::new(slot, cx)))),
-            "Notification" | "Notifications" => Some(Widget::Notification(
-                cx.new(|cx| NotificationWidget::new(slot, cx)),
-            )),
-            "Settings" | "Info" | "ControlCenter" => {
-                Some(Widget::Settings(cx.new(|cx| Settings::new(slot, cx))))
+            "Mpris" | "Media" | "Player" => Some(Widget::Mpris(cx.new(Mpris::new))),
+            "Notification" | "Notifications" => {
+                Some(Widget::Notification(cx.new(NotificationWidget::new)))
             }
+            "Settings" | "Info" | "ControlCenter" => Some(Widget::Settings(cx.new(Settings::new))),
             _ => {
                 tracing::warn!("Unknown widget: {}", name);
                 None
@@ -87,14 +77,10 @@ impl Widget {
     }
 
     /// Create multiple widgets from a config list.
-    pub fn create_many<V: 'static>(
-        widgets: &[String],
-        slot: WidgetSlot,
-        cx: &mut Context<V>,
-    ) -> Vec<Widget> {
+    pub fn create_many<V: 'static>(widgets: &[String], cx: &mut Context<V>) -> Vec<Widget> {
         widgets
             .iter()
-            .filter_map(|widget| Widget::create(widget, slot, cx))
+            .filter_map(|widget| Widget::create(widget, cx))
             .collect()
     }
 }

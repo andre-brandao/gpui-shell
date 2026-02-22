@@ -11,7 +11,6 @@ mod config;
 pub use config::SysInfoConfig;
 
 use super::style;
-use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::panel::panel_placement_from_event;
 use crate::state::AppState;
@@ -50,14 +49,13 @@ pub mod icons {
 
 /// SysInfo widget showing CPU and memory usage in the bar.
 pub struct SysInfo {
-    slot: WidgetSlot,
     subscriber: services::SysInfoSubscriber,
     data: SysInfoData,
 }
 
 impl SysInfo {
     /// Create a new SysInfo widget.
-    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let subscriber = AppState::sysinfo(cx).clone();
         let initial_data = subscriber.get();
 
@@ -68,7 +66,6 @@ impl SysInfo {
         });
 
         SysInfo {
-            slot,
             subscriber,
             data: initial_data,
         }

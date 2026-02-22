@@ -5,27 +5,25 @@ pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    App, Context, ElementId, MouseButton, Render, SharedString, Window, div, prelude::*, px, Size,
+    App, Context, ElementId, MouseButton, Render, SharedString, Size, Window, div, prelude::*, px,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, radius, spacing};
 
 use super::style;
-use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::state::AppState;
 use crate::state::watch;
 
 /// System tray widget that displays tray icons.
 pub struct Tray {
-    slot: WidgetSlot,
     subscriber: services::TraySubscriber,
     data: TrayData,
 }
 
 impl Tray {
     /// Create a new system tray widget.
-    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let subscriber = AppState::tray(cx).clone();
         let data = subscriber.get();
 
@@ -35,11 +33,7 @@ impl Tray {
             cx.notify();
         });
 
-        Self {
-            slot,
-            subscriber,
-            data,
-        }
+        Self { subscriber, data }
     }
 
     /// Handle left-clicking on a tray item.
@@ -57,13 +51,8 @@ impl Tray {
             let item_name = item.name.clone();
             let config = Config::global(cx);
             let panel_size = Size::new(px(250.0), px(400.0));
-            let (anchor, margin) = panel_placement_from_event(
-                config.bar.position,
-                event,
-                window,
-                cx,
-                panel_size,
-            );
+            let (anchor, margin) =
+                panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
 
             let config = PanelConfig {
                 width: 250.0,

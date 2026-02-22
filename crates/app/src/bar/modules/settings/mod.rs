@@ -21,7 +21,6 @@ mod config;
 pub use config::SettingsConfig;
 
 use super::style;
-use crate::bar::modules::WidgetSlot;
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::{
     CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH, ControlCenter,
@@ -56,7 +55,6 @@ mod icons {
 
 /// Settings widget for the bar that shows system status icons.
 pub struct Settings {
-    slot: WidgetSlot,
     audio: AudioData,
     bluetooth: BluetoothData,
     network: NetworkData,
@@ -66,7 +64,7 @@ pub struct Settings {
 
 impl Settings {
     /// Create a new settings widget.
-    pub fn new(slot: WidgetSlot, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let audio = AppState::audio(cx).get();
         let bluetooth = AppState::bluetooth(cx).get();
         let network = AppState::network(cx).get();
@@ -104,7 +102,6 @@ impl Settings {
         });
 
         Settings {
-            slot,
             audio,
             bluetooth,
             network,
