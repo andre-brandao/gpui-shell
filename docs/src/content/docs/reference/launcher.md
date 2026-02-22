@@ -39,10 +39,6 @@ Browse and apply wallpapers from a directory. Optionally generates a color schem
 | ------------------------- | -------- | ---------------------- | --------------------------------------------- |
 | `prefix`                  | `string` | `";wp"`               | Command prefix to invoke the wallpaper module. |
 | `directory`               | `string` | `"~/Pictures/Wallpapers"` | Directory containing wallpaper images.        |
-| `matugen_enabled`         | `bool`   | `true`                | Auto-generate theme from wallpaper colors.   |
-| `matugen_mode`            | `string` | `"dark"`              | Theme generation mode: `"dark"` or `"light"`. |
-| `matugen_type`            | `string` | `"scheme-tonal-spot"` | Matugen scheme type for color generation.    |
-| `matugen_source_color_index` | `integer` | `0`              | Source color index for theme generation.     |
 
 #### Example
 
@@ -50,10 +46,6 @@ Browse and apply wallpapers from a directory. Optionally generates a color schem
 [launcher.modules.wallpaper]
 prefix = ";wp"
 directory = "~/Pictures/Wallpapers"
-matugen_enabled = true
-matugen_mode = "dark"
-matugen_type = "scheme-tonal-spot"
-matugen_source_color_index = 0
 ```
 
 ## Keyboard Shortcuts
