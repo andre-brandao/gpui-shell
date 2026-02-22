@@ -8,6 +8,11 @@
     };
 
     crane.url = "github:ipetkov/crane";
+
+    matugen = {
+      url = "github:/InioX/Matugen";
+    };
+
   };
 
   outputs =
@@ -16,7 +21,8 @@
       crane,
       nixpkgs,
       rust-overlay,
-    }:
+      ...
+    }@inputs:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -24,7 +30,21 @@
       ];
 
       forAllSystems =
-        f: nixpkgs.lib.genAttrs supportedSystems (system: f nixpkgs.legacyPackages.${system});
+        f:
+        nixpkgs.lib.genAttrs supportedSystems (
+          system:
+          let
+            pkgs = import nixpkgs {
+              inherit system;
+              overlays = [
+                (final: prev: {
+                  matugen = inputs.matugen.packages.${system}.default;
+                })
+              ];
+            };
+          in
+          f pkgs
+        );
 
       mkBuild =
         pkgs:

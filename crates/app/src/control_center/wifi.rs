@@ -5,9 +5,7 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
-use ui::{
-    ActiveTheme, InputBuffer, icon_size, radius, render_masked_input_line, spacing,
-};
+use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_masked_input_line, spacing};
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::state::AppState;
@@ -66,9 +64,7 @@ pub fn render_wifi_section(
     // Get current connection name + object path
     let active_wifi = network.active_connections.iter().find_map(|c| {
         if let services::ActiveConnectionInfo::WiFi {
-            name,
-            object_path,
-            ..
+            name, object_path, ..
         } = c
         {
             Some((name.clone(), object_path.clone()))

@@ -4,9 +4,9 @@
 
 use super::icons;
 use crate::state::watch;
-use gpui::{div, prelude::*, px, App, Context, FontWeight, Hsla, ScrollHandle, Window};
+use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
-use ui::{icon_size, radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanel {

@@ -10,3 +10,4 @@ path = "src/ui.rs"
 [dependencies]
 gpui.workspace = true
 anyhow.workspace = true
+serde_json.workspace = true

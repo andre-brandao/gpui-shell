@@ -3,8 +3,8 @@
 //! Displays power actions when expanded.
 
 use crate::config::ActiveConfig;
-use gpui::{div, prelude::*, px, App, Hsla, MouseButton};
-use ui::{icon_size, radius, spacing, ActiveTheme};
+use gpui::{App, Hsla, MouseButton, div, prelude::*, px};
+use ui::{ActiveTheme, icon_size, radius, spacing};
 
 use super::{config::PowerActionsConfig, icons};
 

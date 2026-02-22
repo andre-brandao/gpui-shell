@@ -1,7 +1,7 @@
 use gpui::prelude::*;
-use gpui::{div, img, px, Context, MouseButton};
+use gpui::{Context, MouseButton, div, img, px};
 use services::{Notification, NotificationCommand, NotificationSubscriber};
-use ui::{radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, radius, spacing};
 
 use super::dispatch_notification_command;
 

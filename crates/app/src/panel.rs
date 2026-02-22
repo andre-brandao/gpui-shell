@@ -53,7 +53,13 @@ pub fn panel_placement_from_event(
         window.bounds().origin.x + event.position.x,
         window.bounds().origin.y + event.position.y,
     );
-    panel_placement_from_click(bar_position, click, panel_size, display_bounds, usable_bounds)
+    panel_placement_from_click(
+        bar_position,
+        click,
+        panel_size,
+        display_bounds,
+        usable_bounds,
+    )
 }
 
 /// Resolve panel anchor/margin from a click position.

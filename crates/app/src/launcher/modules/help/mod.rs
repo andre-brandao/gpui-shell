@@ -2,10 +2,10 @@
 
 pub mod config;
 
-use gpui::{div, prelude::*, px, AnyElement, App};
+use gpui::{AnyElement, App, div, prelude::*, px};
 use ui::{
-    icon_size, spacing, ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem,
-    ListItemSpacing,
+    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, icon_size,
+    spacing,
 };
 
 use self::config::HelpConfig;

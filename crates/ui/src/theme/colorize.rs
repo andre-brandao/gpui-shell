@@ -3,7 +3,7 @@
 //! This module provides the `Colorize` trait which extends `Hsla` with
 //! common color manipulation operations.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use gpui::Hsla;
 
 /// Trait for color manipulation operations.

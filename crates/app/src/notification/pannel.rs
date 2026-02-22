@@ -1,7 +1,7 @@
 use gpui::prelude::*;
-use gpui::{div, px, Context, MouseButton, Render, ScrollHandle, Window};
+use gpui::{Context, MouseButton, Render, ScrollHandle, Window, div, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;

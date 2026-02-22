@@ -33,9 +33,7 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                 2
             }
         };
-        rank(a)
-            .cmp(&rank(b))
-            .then_with(|| a.name.cmp(&b.name))
+        rank(a).cmp(&rank(b)).then_with(|| a.name.cmp(&b.name))
     });
 
     div()

@@ -15,6 +15,7 @@
   openssl,
   pkg-config,
   rustToolchain,
+  matugen,
   vulkan-loader,
   wayland,
   xorg,
@@ -34,6 +35,7 @@ mkShell rec {
     nixfmt-rfc-style
 
     rustToolchain
+    matugen
   ];
 
   nativeBuildInputs = [

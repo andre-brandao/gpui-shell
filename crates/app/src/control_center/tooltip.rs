@@ -1,6 +1,6 @@
-use gpui::{div, prelude::*, px, AnyView, App, Render, SharedString, Window};
+use gpui::{AnyView, App, Render, SharedString, Window, div, prelude::*, px};
 
-use ui::{radius, spacing, ActiveTheme};
+use ui::{ActiveTheme, radius, spacing};
 
 pub fn control_center_tooltip(
     text: impl Into<SharedString>,

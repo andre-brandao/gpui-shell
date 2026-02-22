@@ -6,6 +6,7 @@
   rustToolchain,
 
   makeWrapper,
+  matugen,
 
   freetype,
   fontconfig,
@@ -63,6 +64,7 @@ let
         pkg-config
         rustPlatform.bindgenHook
         makeWrapper
+        matugen
       ];
 
       buildInputs = [
