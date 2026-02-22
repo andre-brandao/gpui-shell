@@ -25,6 +25,37 @@ height = 500.0
 margin_top = 150.0
 ```
 
+## Launcher Modules
+
+The launcher supports pluggable modules accessed via command prefixes. Each module can be configured in the `[launcher.modules.<module_name>]` section.
+
+### Wallpaper Module
+
+Browse and apply wallpapers from a directory. Optionally generates a color scheme from the wallpaper using Matugen.
+
+**Invoke with:** `;wp`
+
+| Option                    | Type     | Default                | Description                                   |
+| ------------------------- | -------- | ---------------------- | --------------------------------------------- |
+| `prefix`                  | `string` | `";wp"`               | Command prefix to invoke the wallpaper module. |
+| `directory`               | `string` | `"~/Pictures/Wallpapers"` | Directory containing wallpaper images.        |
+| `matugen_enabled`         | `bool`   | `true`                | Auto-generate theme from wallpaper colors.   |
+| `matugen_mode`            | `string` | `"dark"`              | Theme generation mode: `"dark"` or `"light"`. |
+| `matugen_type`            | `string` | `"scheme-tonal-spot"` | Matugen scheme type for color generation.    |
+| `matugen_source_color_index` | `integer` | `0`              | Source color index for theme generation.     |
+
+#### Example
+
+```toml
+[launcher.modules.wallpaper]
+prefix = ";wp"
+directory = "~/Pictures/Wallpapers"
+matugen_enabled = true
+matugen_mode = "dark"
+matugen_type = "scheme-tonal-spot"
+matugen_source_color_index = 0
+```
+
 ## Keyboard Shortcuts
 
 The launcher supports vim-style navigation via Ctrl key combinations alongside standard keys.
