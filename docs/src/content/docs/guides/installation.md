@@ -5,7 +5,23 @@ description: How to install GPUi Shell on NixOS.
 
 GPUi Shell is packaged as a Nix flake.
 
-## 1. Add the flake input
+## Try it out
+
+You can try GPUi Shell without installing it:
+
+```bash
+nix run github:andre-brandao/gpui-shell
+```
+
+To run with arguments (e.g., open launcher with pre-filled text):
+
+```bash
+nix run github:andre-brandao/gpui-shell -- --input "search term"
+```
+
+## Permanent Installation
+
+### 1. Add the flake input
 
 In your `flake.nix`:
 
@@ -21,7 +37,7 @@ In your `flake.nix`:
 }
 ```
 
-## 2. Install the package
+### 2. Install the package
 
 Add it to your Home Manager packages or `environment.systemPackages`:
 
@@ -37,7 +53,7 @@ environment.systemPackages = [
 ];
 ```
 
-## 3. Compositor configuration
+### 3. Compositor configuration
 
 ### Niri
 
@@ -60,7 +76,7 @@ exec-once = gpuishell
 bind = $mainMod, Return, exec, gpuishell
 ```
 
-## 4. Configuration
+### 4. Configuration
 
 On first launch, a default config file is created at `~/.config/gpuishell/config.toml`. Edit it to customize the shell. See the [Configuration Reference](/gpui-shell/reference/configuration/) for details.
 

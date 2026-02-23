@@ -76,5 +76,12 @@
       devShells = forAllSystems (pkgs: {
         default = mkDevShell pkgs;
       });
+
+      apps = forAllSystems (pkgs: {
+        default = {
+          type = "app";
+          program = "${pkgs.lib.getExe self.packages.${pkgs.system}.default}";
+        };
+      });
     };
 }

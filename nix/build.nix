@@ -30,6 +30,7 @@
   profile ? "release",
 }:
 let
+  pname = "gpuishell";
   mkIncludeFilter =
     root': path: type:
     let
@@ -50,7 +51,7 @@ let
       mgsCargoLock = builtins.fromTOML (builtins.readFile ../crates/app/Cargo.toml);
     in
     rec {
-      pname = "gpuishell";
+      inherit pname;
       version = mgsCargoLock.package.version;
       src = builtins.path {
         path = ../.;
@@ -129,5 +130,9 @@ in
 craneLib.buildPackage (
   lib.recursiveUpdate commonArgs {
     inherit cargoArtifacts;
+
+    meta = {
+      mainProgram = pname;
+    };
   }
 )
