@@ -4,6 +4,10 @@ A Wayland desktop shell built with GPUI (Zed's UI framework) in Rust. Provides a
 system bar, command launcher, and control center for Hyprland and Niri
 compositors.
 
+> [!WARNING]
+> **Early Development Notice**
+> This project is in early development and contains a significant amount of AI-generated code. It started as an experiment to test the latest AI models' capabilities and went much further than expected in a surprisingly short time. I'm actively working on fixing bugs and optimizing the codebase, but as I'm still learning Rust, there may be rough edges. Contributions and feedback are welcome!
+
 ## Scope
 
 GPUi Shell aims to be a lightweight, modular desktop shell replacing components

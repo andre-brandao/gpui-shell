@@ -36,11 +36,7 @@
           let
             pkgs = import nixpkgs {
               inherit system;
-              overlays = [
-                (final: prev: {
-                  matugen = inputs.matugen.packages.${system}.default;
-                })
-              ];
+              overlays = self.overlays.default;
             };
           in
           f pkgs
@@ -69,7 +65,7 @@
     {
 
       packages = forAllSystems (pkgs: rec {
-        default = mkBuild pkgs;
+        default = pkgs.gpuishell;
         debug = default.override { profile = "dev"; };
       });
 
@@ -80,8 +76,13 @@
       apps = forAllSystems (pkgs: {
         default = {
           type = "app";
-          program = "${pkgs.lib.getExe self.packages.${pkgs.system}.default}";
+          program = "${pkgs.lib.getExe pkgs.gpuishell}";
         };
       });
+
+      overlays.default = final: prev: {
+        gpuishell = mkBuild final;
+        matugen = inputs.matugen.packages.${final.system}.default;
+      };
     };
 }
