@@ -9,6 +9,10 @@ on:
 env:
   BINARY_NAME: gpuishell
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,11 +28,14 @@ jobs:
       uses: docker/setup-qemu-action@v3
       with:
         platforms: arm64
-    - uses: cachix/install-nix-action@v31
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-        extra_nix_config: |
-          extra-platforms = aarch64-linux
+    # - uses: cachix/install-nix-action@v31
+    #   with:
+    #     github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    #     extra_nix_config: |
+    #       extra-platforms = aarch64-linux
+    - uses: DeterminateSystems/nix-installer-action@main
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+
     - run: nix build .#packages.${{ matrix.arch }}.default
     - run: |
         mkdir -p dist
