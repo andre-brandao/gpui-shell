@@ -62,6 +62,14 @@ desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 - **Applications** — desktop file parsing and icon loading
 
 
+## Quick Start
+
+Try GPUi Shell without installing:
+
+```bash
+nix run github:andre-brandao/gpui-shell
+```
+
 ## Documentation
 
 Full documentation is available at **https://andre-brandao.github.io/gpui-shell/**
