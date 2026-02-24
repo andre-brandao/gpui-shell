@@ -1,6 +1,7 @@
 //! Notification service implementing org.freedesktop.Notifications.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -30,8 +31,8 @@ pub struct Notification {
     pub id: u32,
     pub app_name: String,
     pub app_icon: String,
-    pub app_icon_path: Option<String>,
-    pub image_path: Option<String>,
+    pub app_icon_path: Option<PathBuf>,
+    pub image_path: Option<PathBuf>,
     pub summary: String,
     pub body: String,
     pub urgency: u8,
@@ -285,26 +286,26 @@ impl NotificationServer {
             .get("urgency")
             .and_then(|v| u8::try_from(v.clone()).ok())
             .unwrap_or(1);
-        let image_path = hint_string(&hints, &["image-path", "image_path"]);
+        let image_path =
+            hint_string(&hints, &["image-path", "image_path"]).map(|p| normalize_path(&p));
         let app_icon_path = if is_image_source(app_icon) {
-            Some(app_icon.to_string())
+            Some(normalize_path(app_icon))
         } else {
             hint_string(&hints, &["app_icon", "icon-path", "icon_path"])
                 .filter(|value| is_image_source(value))
+                .map(|p| normalize_path(&p))
         };
         // Fallback: resolve named icon via XDG icon theme lookup
         let app_icon_path = app_icon_path.or_else(|| {
             if !app_icon.is_empty() {
-                lookup_icon(app_icon).map(|p| p.to_string_lossy().into_owned())
+                lookup_icon(app_icon)
             } else {
                 None
             }
         });
         // Fallback: try desktop-entry hint for icon lookup
         let app_icon_path = app_icon_path.or_else(|| {
-            hint_string(&hints, &["desktop-entry"])
-                .and_then(|entry| lookup_icon(&entry))
-                .map(|p| p.to_string_lossy().into_owned())
+            hint_string(&hints, &["desktop-entry"]).and_then(|entry| lookup_icon(&entry))
         });
         let timeout_ms = if expire_timeout < 0 {
             DEFAULT_TIMEOUT_MS
@@ -464,6 +465,35 @@ fn is_image_source(value: &str) -> bool {
         || value.starts_with("file://")
         || value.starts_with("http://")
         || value.starts_with("https://")
+}
+
+/// Normalize a file path from D-Bus hints, handling file:// URIs and URL encoding.
+fn normalize_path(value: &str) -> PathBuf {
+    let path = value.strip_prefix("file://").unwrap_or(value);
+
+    // Simple URL decode for common cases (%20 -> space, etc.)
+    let mut result = String::with_capacity(path.len());
+    let mut chars = path.chars();
+
+    while let Some(ch) = chars.next() {
+        if ch == '%' {
+            // Try to decode percent-encoded character
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    result.push(byte as char);
+                    continue;
+                }
+            }
+            // If decoding fails, just keep the original
+            result.push('%');
+            result.push_str(&hex);
+        } else {
+            result.push(ch);
+        }
+    }
+
+    PathBuf::from(result)
 }
 
 #[proxy(
