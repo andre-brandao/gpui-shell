@@ -1,126 +1,82 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with
-code in this repository.
+AI agent guidance for working with GPUi Shell.
 
-## Project Overview
+## What is GPUi Shell?
 
-GPUi Shell is a Wayland desktop shell/status bar built with GPUI (Zed's UI
-framework) in Rust. It provides a system bar with modules, a command launcher,
-and a control center panel. Supports Hyprland and Niri compositors.
+A Wayland desktop shell/status bar built with GPUI (Zed's UI framework) in Rust.
+Provides a system bar, command launcher, and control center for Hyprland and Niri
+compositors.
 
-## Development Environment
-
-Requires Nix flakes. Enter the dev shell with `nix develop` or use direnv
-(auto-loads via `.envrc`). Rust nightly (2024 edition) is required.
-
-## Build Commands
+## Quick Start
 
 ```bash
-cargo build              # Debug build
-cargo run                # Run the application
-cargo clippy             # Lint
-cargo fmt                # Format
-nix build                # Release build (LTO, size-optimized)
-nix build .#debug        # Debug build via Nix
+nix develop        # Enter dev shell (or use direnv)
+cargo run          # Run the app
+cargo clippy       # Lint
+nix build          # Release build
 ```
 
-The binary is named `gpuishell`. Command-line arguments:
+Binary: `gpuishell --input "text"` opens launcher with pre-filled text.
 
-- `--input`, `-i` — Open launcher with pre-filled input
+## Codebase Structure
 
-## Workspace Structure
+```
+crates/
+├── app/         Main binary, UI components (bar, launcher, panels)
+├── services/    System integration (D-Bus, compositor, audio, network, etc.)
+├── ui/          Shared components and theme system
+└── assets/      Embedded SVG icons
+```
 
-Four crates in `crates/`:
+## Key Patterns
 
-- **app** — Main binary. Bar, launcher, control center, modules, and panel
-  management.
-- **services** — System integration layer. D-Bus bindings, compositor control,
-  audio, network, bluetooth, power, tray, sysinfo. No GPUI dependency.
-- **ui** — Shared UI components and the theme system.
-- **assets** — Embedded SVG icons via `rust-embed`, implements GPUI's
-  `AssetSource` trait.
+### Services (Reactive State)
 
-## Architecture
-
-### Services (Reactive Subscriber Pattern)
-
-Each service in `crates/services/src/` follows the same pattern:
-
-- Holds state in `futures_signals::signal::Mutable<T>` fields
-- Exposes `subscribe()` returning `MutableSignalCloned<T>` for reactive updates
-- Exposes `get()` for snapshot access
-- Accepts mutations via a `dispatch(Command)` method with a typed command enum
-  (e.g., `AudioCommand`, `NetworkCommand`)
-- Services are collected in `Services` struct, initialized once at startup, then
-  stored in `AppState` as a GPUI global
-
-### AppState (Global Service Accessor)
-
-Services are accessed via the `AppState` struct (`crates/app/src/state.rs`),
-registered as a GPUI `Global`. Modules access services through static accessor
-methods:
+Services in `crates/services/src/` use `futures_signals::signal::Mutable<T>`:
 
 ```rust
-// Reactive subscription
+// Subscribe for reactive updates
 let audio = AppState::audio(cx).subscribe();
 
-// Snapshot access
+// Get snapshot
 let network = AppState::network(cx).get();
 
-// Dispatch commands
+// Send commands
 AppState::compositor(cx).dispatch(CompositorCommand::FocusWorkspace(id));
 ```
 
-### Bar and Modules
+Services are global singletons accessed via `AppState` (`crates/app/src/state.rs`).
 
-The bar (`crates/app/src/bar/`) uses Wayland layer shell protocol. Modules are
-created via a factory in `crates/app/src/bar/modules/` that maps string names to
-constructor functions. Each module accesses services via `AppState`.
+### UI Components
 
-### Launcher (Pluggable View System)
+- **Bar** (`crates/app/src/bar/`) — Wayland layer shell status bar with pluggable
+  modules
+- **Launcher** (`crates/app/src/launcher/`) — Prefix-based command launcher
+  (views implement `LauncherView` trait)
+- **Control Center** (`crates/app/src/control_center/`) — Popup panels for
+  system controls
+- **Panel System** (`crates/app/src/panel.rs`) — Only one panel open at a time
+- **OSD** (`crates/app/src/osd/`) — Volume/brightness on-screen indicators
 
-`crates/app/src/launcher/` implements a command launcher with prefix-based view
-routing. Views implement the `LauncherView` trait
-(`crates/app/src/launcher/view.rs`).
+### Compositor Support
 
-### Control Center
+`crates/services/src/compositor/` auto-detects Hyprland or Niri at runtime.
+Commands use `CompositorCommand` enum with backend-specific implementations.
 
-`crates/app/src/control_center/` provides popup panels for audio, brightness,
-network, bluetooth, power, notifications, and media controls.
+## Important Conventions
 
-### Panel System
+- **Async timers**: Use `cx.background_executor().timer(duration).await` (NOT
+  `tokio::time::sleep`)
+- **Theme colors**: Access via `cx.theme().colors()` and `cx.theme().status()`
+  - Use `rems()` for text, `px()` for spacing
+- **Icons**: SVGs in `crates/assets/icons/`, loaded via GPUI asset system
+- **Logging**: `tracing` macros, enable with `RUST_LOG=debug`
+- **Styling**: Pure GPUI builder patterns (no CSS)
 
-`crates/app/src/panel.rs` manages popup panels. Only one panel can be open at a
-time — opening a new one closes the previous; toggling the same one closes it.
+## Tech Stack
 
-### OSD (On-Screen Display)
-
-`crates/app/src/osd/` displays volume and brightness indicators on key press.
-
-### Compositor Abstraction
-
-`crates/services/src/compositor/` auto-detects the active compositor at runtime.
-Commands go through `CompositorCommand` enum with backend implementations in
-`hyprland.rs` and `niri.rs`.
-
-### IPC / Single-Instance
-
-`crates/app/src/ipc/` handles instance locking. The first instance acquires a
-lock; subsequent invocations signal the primary instance to open the launcher.
-
-## Key Dependencies
-
-- **gpui** (git from zed-industries/zed, `wayland` feature) — UI framework
-- **zbus** — D-Bus communication (network, bluetooth, upower, tray)
-- **futures-signals** — Reactive state (`Mutable`, `MutableSignalCloned`)
+- **gpui** — UI framework (from zed-industries/zed, wayland feature)
+- **zbus** — D-Bus communication
+- **futures-signals** — Reactive state primitives
 - **tokio** — Async runtime
-
-## Conventions
-
-- Logging uses `tracing` macros; enable with `RUST_LOG=debug`
-- All styling is done via GPUI builder patterns and the theme module
-  (`crates/ui/src/theme/`) — no external CSS
-- Theme colors are accessed via module paths like `theme::bg::PRIMARY`,
-  `theme::accent::PRIMARY`
-- Icons are SVGs in `crates/assets/icons/`, loaded through GPUI's asset system
