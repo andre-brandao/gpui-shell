@@ -62,19 +62,20 @@ pub(super) fn notification_card_body<V>(
                     .child(
                         div()
                             .absolute()
-                            .bottom(px(2.0))
-                            .right(px(2.0))
-                            .size(px(20.0))
-                            .rounded(px(radius::SM))
+                            .bottom(px(4.0))
+                            .right(px(4.0))
+                            .size(px(24.0))
+                            .rounded(px(radius::MD))
                             .bg(theme.bg.primary)
                             .border_1()
                             .border_color(theme.border.default)
+                            .shadow_md()
                             .flex()
                             .items_center()
                             .justify_center()
                             .child(
                                 img(icon.clone())
-                                    .size(px(14.0))
+                                    .size(px(16.0))
                                     .object_fit(gpui::ObjectFit::Contain),
                             ),
                     )
@@ -129,6 +130,7 @@ pub(super) fn notification_card_body<V>(
                 .flex_col()
                 .gap(px(4.0))
                 .overflow_hidden()
+                .when(show_image, |el| el.pr(px(spacing::XL)))
                 .child(
                     div()
                         .flex()
