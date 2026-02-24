@@ -72,7 +72,6 @@ pub(super) fn notification_card_body<V>(
             div()
                 .flex_1()
                 .w_full()
-                .pr(px(spacing::XL))
                 .flex()
                 .flex_col()
                 .gap(px(3.0))
@@ -80,7 +79,7 @@ pub(super) fn notification_card_body<V>(
                     div()
                         .flex()
                         .items_center()
-                        .justify_between()
+                        .gap(px(spacing::SM))
                         .child(
                             div()
                                 .text_size(theme.font_sizes.xs)
@@ -92,7 +91,8 @@ pub(super) fn notification_card_body<V>(
                                 .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.muted)
                                 .child(timestamp),
-                        ),
+                        )
+                        .child(div().flex_1()),
                 )
                 .child(
                     div()
