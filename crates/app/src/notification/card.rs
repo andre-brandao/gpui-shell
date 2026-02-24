@@ -14,14 +14,16 @@ pub(super) fn notification_card_body<V>(
     let theme = cx.theme();
     let app_name = notification.app_name.clone();
     let app_icon_name = notification.app_icon.clone();
-    let icon_source = notification
-        .app_icon_path
-        .clone()
-        .or_else(|| image_source_from(&notification.app_icon));
-    let image_source = notification
-        .image_path
-        .clone()
-        .filter(|source| is_image_source(source));
+    let icon_source = notification.app_icon_path.as_ref().map(|p| {
+        tracing::debug!(
+            "Loading icon for {}: {} -> {:?}",
+            app_name,
+            notification.app_icon,
+            p
+        );
+        p.clone()
+    });
+    let image_source = notification.image_path.clone();
     let summary = notification.summary.clone();
     let body = notification.body.clone();
     let actions = notification.actions.clone();
@@ -31,72 +33,127 @@ pub(super) fn notification_card_body<V>(
     div()
         .w_full()
         .flex()
-        .items_stretch()
+        .items_start()
         .gap(px(spacing::SM))
         .child(
             div()
                 .w(px(3.0))
                 .flex_shrink_0()
                 .rounded(px(radius::SM))
-                .bg(urgency_color),
+                .bg(urgency_color)
+                .h_full(),
         )
         .child(
-            div()
-                .size(px(28.0))
-                .flex_shrink_0()
-                .rounded(px(radius::SM))
-                .bg(theme.bg.secondary)
-                .border_1()
-                .border_color(theme.border.subtle)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(
-                    icon_source
-                        .map(|src| {
-                            img(src)
-                                .size(px(18.0))
-                                .rounded(px(radius::SM))
-                                .into_any_element()
-                        })
-                        .unwrap_or_else(|| {
-                            div()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.secondary)
-                                .child(icon_fallback(&app_name, &app_icon_name))
-                                .into_any_element()
-                        }),
-                ),
+            // Icon/Image area: Show image if available, otherwise show app icon or fallback
+            match (&icon_source, &image_source, show_image) {
+                // If we have both icon and image, show a larger image with small icon overlay
+                (Some(icon), Some(img_src), true) => div()
+                    .w(px(64.0))
+                    .h(px(64.0))
+                    .flex_shrink_0()
+                    .rounded(px(radius::MD))
+                    .overflow_hidden()
+                    .relative()
+                    .child(
+                        img(img_src.clone())
+                            .size_full()
+                            .object_fit(gpui::ObjectFit::Cover),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .bottom(px(2.0))
+                            .right(px(2.0))
+                            .size(px(20.0))
+                            .rounded(px(radius::SM))
+                            .bg(theme.bg.primary)
+                            .border_1()
+                            .border_color(theme.border.default)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                img(icon.clone())
+                                    .size(px(14.0))
+                                    .object_fit(gpui::ObjectFit::Contain),
+                            ),
+                    )
+                    .into_any_element(),
+                // If only image, show larger image
+                (_, Some(img_src), true) => div()
+                    .w(px(64.0))
+                    .h(px(64.0))
+                    .flex_shrink_0()
+                    .rounded(px(radius::MD))
+                    .overflow_hidden()
+                    .child(
+                        img(img_src.clone())
+                            .size_full()
+                            .object_fit(gpui::ObjectFit::Cover),
+                    )
+                    .into_any_element(),
+                // Otherwise show app icon or fallback in 64x64px container
+                _ => div()
+                    .size(px(64.0))
+                    .flex_shrink_0()
+                    .rounded(px(radius::MD))
+                    .bg(theme.bg.secondary)
+                    .border_1()
+                    .border_color(theme.border.subtle)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        icon_source
+                            .map(|src| {
+                                img(src)
+                                    .size(px(28.0))
+                                    .object_fit(gpui::ObjectFit::Contain)
+                                    .into_any_element()
+                            })
+                            .unwrap_or_else(|| {
+                                div()
+                                    .text_size(theme.font_sizes.md)
+                                    .text_color(theme.text.secondary)
+                                    .child(icon_fallback(&app_name, &app_icon_name))
+                                    .into_any_element()
+                            }),
+                    )
+                    .into_any_element(),
+            },
         )
         .child(
             div()
                 .flex_1()
-                .w_full()
-                .pr(px(spacing::XL))
                 .flex()
                 .flex_col()
-                .gap(px(3.0))
+                .gap(px(4.0))
+                .overflow_hidden()
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .justify_between()
+                        .gap(px(spacing::SM))
                         .child(
                             div()
+                                .flex_1()
                                 .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.secondary)
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .whitespace_nowrap()
                                 .child(app_name),
                         )
                         .child(
                             div()
                                 .text_size(theme.font_sizes.xs)
                                 .text_color(theme.text.muted)
+                                .flex_shrink_0()
                                 .child(timestamp),
                         ),
                 )
                 .child(
                     div()
-                        .whitespace_normal()
                         .text_size(theme.font_sizes.sm)
                         .text_color(theme.text.primary)
                         .line_height(px(18.0))
@@ -105,7 +162,6 @@ pub(super) fn notification_card_body<V>(
                 .when(!body.is_empty(), |el| {
                     el.child(
                         div()
-                            .whitespace_normal()
                             .text_size(theme.font_sizes.xs)
                             .text_color(theme.text.muted)
                             .line_height(px(16.0))
@@ -148,37 +204,9 @@ pub(super) fn notification_card_body<V>(
                                     .child(label)
                             })),
                     )
-                })
-                .when(show_image, |el| {
-                    el.when_some(image_source, |el, source| {
-                        el.child(
-                            div()
-                                .mt(px(4.0))
-                                .h(px(56.0))
-                                .max_w_full()
-                                .rounded(px(radius::SM))
-                                .overflow_hidden()
-                                .child(img(source).h_full().w_auto()),
-                        )
-                    })
                 }),
         )
         .into_any_element()
-}
-
-fn image_source_from(value: &str) -> Option<String> {
-    if is_image_source(value) {
-        Some(value.to_string())
-    } else {
-        None
-    }
-}
-
-fn is_image_source(value: &str) -> bool {
-    value.starts_with('/')
-        || value.starts_with("file://")
-        || value.starts_with("http://")
-        || value.starts_with("https://")
 }
 
 fn icon_fallback(app_name: &str, app_icon_name: &str) -> String {
