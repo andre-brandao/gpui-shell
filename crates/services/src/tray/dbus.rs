@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use zbus::{
     Connection, Result,
     fdo::{DBusProxy, RequestNameFlags, RequestNameReply},
@@ -75,13 +75,18 @@ impl StatusNotifierWatcher {
                                 .iter()
                                 .position(|(unique_name, _)| unique_name == name)
                             {
-                                let emitter =
-                                    SignalEmitter::new(&internal_connection, OBJECT_PATH).unwrap();
-                                let service = interface.items.remove(idx).1;
-                                let _ = StatusNotifierWatcher::status_notifier_item_unregistered(
-                                    &emitter, &service,
-                                )
-                                .await;
+                                match SignalEmitter::new(&internal_connection, OBJECT_PATH) {
+                                    Ok(emitter) => {
+                                        let service = interface.items.remove(idx).1;
+                                        let _ = StatusNotifierWatcher::status_notifier_item_unregistered(
+                                            &emitter, &service,
+                                        )
+                                        .await;
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to create signal emitter for tray item unregistration: {}", e);
+                                    }
+                                }
                             }
                         }
                     }
@@ -125,14 +130,23 @@ impl StatusNotifierWatcher {
                 };
 
                 let mut watcher = interface.get_mut().await;
-                let emitter = SignalEmitter::new(conn, OBJECT_PATH).unwrap();
-                watcher
-                    .register_status_notifier_item_manual(
-                        "/StatusNotifierItem",
-                        sender.into_inner(),
-                        &emitter,
-                    )
-                    .await;
+                match SignalEmitter::new(conn, OBJECT_PATH) {
+                    Ok(emitter) => {
+                        watcher
+                            .register_status_notifier_item_manual(
+                                "/StatusNotifierItem",
+                                sender.into_inner(),
+                                &emitter,
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to create signal emitter for tray item registration: {}",
+                            e
+                        );
+                    }
+                }
             }
         }
         Ok(())
@@ -174,7 +188,11 @@ impl StatusNotifierWatcher {
         #[zbus(header)] header: Header<'_>,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
-        let sender = header.sender().unwrap().to_owned();
+        let Some(sender) = header.sender() else {
+            error!("Failed to get sender from header for tray item registration");
+            return;
+        };
+        let sender = sender.to_owned();
         self.register_status_notifier_item_manual(service, sender, &emitter)
             .await;
     }

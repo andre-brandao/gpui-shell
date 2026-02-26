@@ -11,6 +11,8 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use inotify::{EventMask, Inotify, WatchMask};
 use tracing::{debug, error, warn};
 
+use crate::ServiceStatus;
+
 const WEBCAM_DEVICE_PATH: &str = "/dev/video0";
 
 /// Media type being accessed.
@@ -82,6 +84,7 @@ impl PrivacyData {
 #[derive(Debug, Clone)]
 pub struct PrivacySubscriber {
     data: Mutable<PrivacyData>,
+    status: Mutable<ServiceStatus>,
 }
 
 impl PrivacySubscriber {
@@ -92,14 +95,15 @@ impl PrivacySubscriber {
             webcam_access: is_device_in_use(WEBCAM_DEVICE_PATH),
         };
         let data = Mutable::new(initial_data);
+        let status = Mutable::new(ServiceStatus::Active);
 
         // Start PipeWire listener
-        start_pipewire_listener(data.clone());
+        start_pipewire_listener(data.clone(), status.clone());
 
         // Start webcam watcher
-        start_webcam_watcher(data.clone());
+        start_webcam_watcher(data.clone(), status.clone());
 
-        Self { data }
+        Self { data, status }
     }
 
     /// Get a signal that emits when privacy state changes.
@@ -111,6 +115,11 @@ impl PrivacySubscriber {
     pub fn get(&self) -> PrivacyData {
         self.data.get_cloned()
     }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
+    }
 }
 
 impl Default for PrivacySubscriber {
@@ -120,10 +129,11 @@ impl Default for PrivacySubscriber {
 }
 
 /// Start the PipeWire listener thread for media stream tracking.
-fn start_pipewire_listener(data: Mutable<PrivacyData>) {
+fn start_pipewire_listener(data: Mutable<PrivacyData>, status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         if let Err(e) = run_pipewire_listener(data) {
             error!("PipeWire listener error: {}", e);
+            *status.lock_mut() = ServiceStatus::Error(None);
         }
     });
 }
@@ -176,10 +186,11 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
 }
 
 /// Start the webcam watcher thread.
-fn start_webcam_watcher(data: Mutable<PrivacyData>) {
+fn start_webcam_watcher(data: Mutable<PrivacyData>, status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         if let Err(e) = run_webcam_watcher(data) {
             warn!("Webcam watcher error: {}", e);
+            *status.lock_mut() = ServiceStatus::Error(None);
         }
     });
 }

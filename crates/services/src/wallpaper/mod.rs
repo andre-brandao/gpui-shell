@@ -10,6 +10,8 @@ use std::thread;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use tracing::{debug, error, warn};
 
+use crate::ServiceStatus;
+
 /// Supported wallpaper engines.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WallpaperEngine {
@@ -37,14 +39,16 @@ pub enum WallpaperCommand {
 #[derive(Debug, Clone)]
 pub struct WallpaperSubscriber {
     data: Mutable<WallpaperData>,
+    status: Mutable<ServiceStatus>,
 }
 
 impl WallpaperSubscriber {
     /// Create a new wallpaper subscriber and start the daemon.
     pub fn new() -> Self {
         let data = Mutable::new(WallpaperData::default());
+        let status = Mutable::new(ServiceStatus::Active);
         start_daemon();
-        Self { data }
+        Self { data, status }
     }
 
     /// Get a signal that emits when wallpaper state changes.
@@ -55,6 +59,11 @@ impl WallpaperSubscriber {
     /// Get the current wallpaper data snapshot.
     pub fn get(&self) -> WallpaperData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Execute a wallpaper command.

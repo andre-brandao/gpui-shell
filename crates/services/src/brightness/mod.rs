@@ -12,6 +12,8 @@ use tokio::io::unix::AsyncFd;
 use tracing::{debug, error, info, warn};
 use zbus::proxy;
 
+use crate::ServiceStatus;
+
 /// Brightness data state.
 #[derive(Debug, Clone, Default)]
 pub struct BrightnessData {
@@ -62,6 +64,7 @@ pub enum BrightnessCommand {
 #[derive(Debug, Clone)]
 pub struct BrightnessSubscriber {
     data: Mutable<BrightnessData>,
+    status: Mutable<ServiceStatus>,
     device_path: Option<PathBuf>,
     device_name: Option<String>,
     conn: Option<zbus::Connection>,
@@ -75,7 +78,7 @@ impl BrightnessSubscriber {
         // Find backlight device
         let device_path = find_backlight_device();
 
-        let (data, device_name, conn) = match &device_path {
+        let (data, status, device_name, conn) = match &device_path {
             Some(path) => {
                 let brightness_data = read_brightness(path)?;
                 let name = path.file_name().and_then(|n| n.to_str()).map(String::from);
@@ -86,16 +89,27 @@ impl BrightnessSubscriber {
                     brightness_data.current, brightness_data.max
                 );
 
-                (Mutable::new(brightness_data), name, conn)
+                (
+                    Mutable::new(brightness_data),
+                    Mutable::new(ServiceStatus::Active),
+                    name,
+                    conn,
+                )
             }
             None => {
                 warn!("No backlight device found");
-                (Mutable::new(BrightnessData::default()), None, None)
+                (
+                    Mutable::new(BrightnessData::default()),
+                    Mutable::new(ServiceStatus::Unavailable),
+                    None,
+                    None,
+                )
             }
         };
 
         let subscriber = Self {
             data: data.clone(),
+            status: status.clone(),
             device_path: device_path.clone(),
             device_name,
             conn,
@@ -117,6 +131,11 @@ impl BrightnessSubscriber {
     /// Get the current brightness data snapshot.
     pub fn get(&self) -> BrightnessData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Check if a backlight device is available.

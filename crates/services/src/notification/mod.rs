@@ -18,6 +18,7 @@ use zbus::{
     zvariant::OwnedValue,
 };
 
+use crate::ServiceStatus;
 use crate::applications::icons::lookup_icon;
 
 const NAME: WellKnownName =
@@ -77,6 +78,7 @@ pub enum NotificationCommand {
 #[derive(Debug, Clone)]
 pub struct NotificationSubscriber {
     data: Mutable<NotificationData>,
+    status: Mutable<ServiceStatus>,
     conn: Option<Connection>,
 }
 
@@ -85,6 +87,7 @@ impl NotificationSubscriber {
     pub async fn new() -> anyhow::Result<Self> {
         let conn = zbus::connection::Connection::session().await?;
         let data = Mutable::new(NotificationData::default());
+        let status = Mutable::new(ServiceStatus::Initializing);
         let server = NotificationServer::new(data.clone(), conn.clone());
         conn.object_server().at(OBJECT_PATH, server).await?;
 
@@ -92,11 +95,18 @@ impl NotificationSubscriber {
         let flags = RequestNameFlags::AllowReplacement;
         if dbus_proxy.request_name(NAME, flags.into()).await? == RequestNameReply::InQueue {
             warn!("Bus name '{NAME}' already owned, notifications will be unavailable");
-            return Ok(Self { data, conn: None });
+            status.set(ServiceStatus::Unavailable);
+            return Ok(Self {
+                data,
+                status,
+                conn: None,
+            });
         }
 
+        status.set(ServiceStatus::Active);
         Ok(Self {
             data,
+            status,
             conn: Some(conn),
         })
     }
@@ -105,6 +115,7 @@ impl NotificationSubscriber {
     pub fn disabled() -> Self {
         Self {
             data: Mutable::new(NotificationData::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
             conn: None,
         }
     }
@@ -115,6 +126,11 @@ impl NotificationSubscriber {
 
     pub fn get(&self) -> NotificationData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     pub fn latest_popup(&self) -> Option<Notification> {

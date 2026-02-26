@@ -10,6 +10,8 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use sysinfo::{Components, Disks, Networks, System};
 use tracing::debug;
 
+use crate::ServiceStatus;
+
 /// Network speed and IP data.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct NetworkInfo {
@@ -133,6 +135,7 @@ impl SysInfoData {
 #[derive(Debug, Clone)]
 pub struct SysInfoSubscriber {
     data: Mutable<SysInfoData>,
+    status: Mutable<ServiceStatus>,
 }
 
 impl SysInfoSubscriber {
@@ -141,11 +144,12 @@ impl SysInfoSubscriber {
     /// Polls system information every 2 seconds.
     pub fn new() -> Self {
         let data = Mutable::new(SysInfoData::default());
+        let status = Mutable::new(ServiceStatus::Active);
 
         // Start the polling listener
-        start_listener(data.clone());
+        start_listener(data.clone(), status.clone());
 
-        Self { data }
+        Self { data, status }
     }
 
     /// Get a signal that emits when system info changes.
@@ -156,6 +160,11 @@ impl SysInfoSubscriber {
     /// Get the current system info snapshot.
     pub fn get(&self) -> SysInfoData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 }
 
@@ -175,7 +184,7 @@ fn format_speed(kb_per_sec: u32) -> String {
 }
 
 /// Start the polling listener thread.
-fn start_listener(data: Mutable<SysInfoData>) {
+fn start_listener(data: Mutable<SysInfoData>, status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         let mut system = System::new();
         let mut components = Components::new_with_refreshed_list();
@@ -204,6 +213,11 @@ fn start_listener(data: Mutable<SysInfoData>) {
                     new_data.cpu_usage, new_data.memory_usage, new_data.temperature
                 );
                 *data.lock_mut() = new_data;
+            }
+
+            // Ensure status stays active (sysinfo polling doesn't fail)
+            if status.get_cloned() != ServiceStatus::Active {
+                *status.lock_mut() = ServiceStatus::Active;
             }
 
             thread::sleep(Duration::from_secs(2));
