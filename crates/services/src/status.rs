@@ -7,9 +7,9 @@
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ServiceStatus {
     /// Service is running and operational.
-    #[default]
     Active,
     /// Service is starting up.
+    #[default]
     Initializing,
     /// Service stopped due to error.
     Error(Option<String>),

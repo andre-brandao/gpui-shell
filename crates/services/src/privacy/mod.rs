@@ -84,7 +84,8 @@ impl PrivacyData {
 #[derive(Debug, Clone)]
 pub struct PrivacySubscriber {
     data: Mutable<PrivacyData>,
-    status: Mutable<ServiceStatus>,
+    pipewire_status: Mutable<ServiceStatus>,
+    webcam_status: Mutable<ServiceStatus>,
 }
 
 impl PrivacySubscriber {
@@ -95,15 +96,20 @@ impl PrivacySubscriber {
             webcam_access: is_device_in_use(WEBCAM_DEVICE_PATH),
         };
         let data = Mutable::new(initial_data);
-        let status = Mutable::new(ServiceStatus::Active);
+        let pipewire_status = Mutable::new(ServiceStatus::Active);
+        let webcam_status = Mutable::new(ServiceStatus::Active);
 
         // Start PipeWire listener
-        start_pipewire_listener(data.clone(), status.clone());
+        start_pipewire_listener(data.clone(), pipewire_status.clone());
 
         // Start webcam watcher
-        start_webcam_watcher(data.clone(), status.clone());
+        start_webcam_watcher(data.clone(), webcam_status.clone());
 
-        Self { data, status }
+        Self {
+            data,
+            pipewire_status,
+            webcam_status,
+        }
     }
 
     /// Get a signal that emits when privacy state changes.
@@ -117,9 +123,22 @@ impl PrivacySubscriber {
     }
 
     /// Get the current service status.
+    ///
+    /// Merges PipeWire and webcam watcher statuses — an error in either
+    /// subsystem is surfaced, so failures are not masked by the other.
     pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
+        let pw = self.pipewire_status.get_cloned();
+        let wc = self.webcam_status.get_cloned();
+        match (&pw, &wc) {
+            (ServiceStatus::Error(e), _) => ServiceStatus::Error(e.clone()),
+            (_, ServiceStatus::Error(e)) => ServiceStatus::Error(e.clone()),
+            (ServiceStatus::Initializing, _) | (_, ServiceStatus::Initializing) => {
+                ServiceStatus::Initializing
+            }
+            _ => ServiceStatus::Active,
+        }
     }
+
 }
 
 impl Default for PrivacySubscriber {
@@ -129,11 +148,11 @@ impl Default for PrivacySubscriber {
 }
 
 /// Start the PipeWire listener thread for media stream tracking.
-fn start_pipewire_listener(data: Mutable<PrivacyData>, status: Mutable<ServiceStatus>) {
+fn start_pipewire_listener(data: Mutable<PrivacyData>, pipewire_status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         if let Err(e) = run_pipewire_listener(data) {
             error!("PipeWire listener error: {}", e);
-            *status.lock_mut() = ServiceStatus::Error(None);
+            *pipewire_status.lock_mut() = ServiceStatus::Error(None);
         }
     });
 }
@@ -186,11 +205,11 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
 }
 
 /// Start the webcam watcher thread.
-fn start_webcam_watcher(data: Mutable<PrivacyData>, status: Mutable<ServiceStatus>) {
+fn start_webcam_watcher(data: Mutable<PrivacyData>, webcam_status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         if let Err(e) = run_webcam_watcher(data) {
             warn!("Webcam watcher error: {}", e);
-            *status.lock_mut() = ServiceStatus::Error(None);
+            *webcam_status.lock_mut() = ServiceStatus::Error(None);
         }
     });
 }

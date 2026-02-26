@@ -184,7 +184,7 @@ fn format_speed(kb_per_sec: u32) -> String {
 }
 
 /// Start the polling listener thread.
-fn start_listener(data: Mutable<SysInfoData>, status: Mutable<ServiceStatus>) {
+fn start_listener(data: Mutable<SysInfoData>, _status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         let mut system = System::new();
         let mut components = Components::new_with_refreshed_list();
@@ -213,11 +213,6 @@ fn start_listener(data: Mutable<SysInfoData>, status: Mutable<ServiceStatus>) {
                     new_data.cpu_usage, new_data.memory_usage, new_data.temperature
                 );
                 *data.lock_mut() = new_data;
-            }
-
-            // Ensure status stays active (sysinfo polling doesn't fail)
-            if status.get_cloned() != ServiceStatus::Active {
-                *status.lock_mut() = ServiceStatus::Active;
             }
 
             thread::sleep(Duration::from_secs(2));
