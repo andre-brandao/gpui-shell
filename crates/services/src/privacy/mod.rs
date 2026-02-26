@@ -126,6 +126,7 @@ impl PrivacySubscriber {
     ///
     /// Merges PipeWire and webcam watcher statuses — an error in either
     /// subsystem is surfaced, so failures are not masked by the other.
+    /// When both subsystems report errors, the PipeWire error takes priority.
     pub fn status(&self) -> ServiceStatus {
         let pw = self.pipewire_status.get_cloned();
         let wc = self.webcam_status.get_cloned();
@@ -138,7 +139,6 @@ impl PrivacySubscriber {
             _ => ServiceStatus::Active,
         }
     }
-
 }
 
 impl Default for PrivacySubscriber {

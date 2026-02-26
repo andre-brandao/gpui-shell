@@ -147,7 +147,7 @@ impl SysInfoSubscriber {
         let status = Mutable::new(ServiceStatus::Active);
 
         // Start the polling listener
-        start_listener(data.clone(), status.clone());
+        start_listener(data.clone());
 
         Self { data, status }
     }
@@ -184,7 +184,7 @@ fn format_speed(kb_per_sec: u32) -> String {
 }
 
 /// Start the polling listener thread.
-fn start_listener(data: Mutable<SysInfoData>, _status: Mutable<ServiceStatus>) {
+fn start_listener(data: Mutable<SysInfoData>) {
     thread::spawn(move || {
         let mut system = System::new();
         let mut components = Components::new_with_refreshed_list();
