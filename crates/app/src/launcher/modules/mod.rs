@@ -6,6 +6,7 @@
 
 pub mod apps;
 pub mod help;
+pub mod services;
 pub mod shell;
 pub mod theme;
 pub mod wallpaper;
@@ -14,6 +15,7 @@ pub mod workspaces;
 
 pub use apps::AppsView;
 pub use help::HelpView;
+pub use services::ServicesView;
 pub use shell::ShellView;
 pub use theme::ThemeView;
 pub use wallpaper::WallpaperView;
@@ -31,5 +33,6 @@ pub fn all_views(config: &LauncherConfig) -> Vec<Box<dyn LauncherView>> {
         Box::new(WorkspacesView::new(&config.modules.workspaces)),
         Box::new(WallpaperView::new(&config.modules.wallpaper)),
         Box::new(ThemeView::new(&config.modules.themes)),
+        Box::new(ServicesView::new(&config.modules.services)),
     ]
 }
