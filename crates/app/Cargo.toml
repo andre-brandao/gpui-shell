@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 gpui.workspace = true
+gpui_platform.workspace = true
 ui.workspace = true
 assets.workspace = true
 services.workspace = true
