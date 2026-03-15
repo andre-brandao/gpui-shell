@@ -18,7 +18,7 @@ desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 
 ![Bar](./docs/public/bar.png)
 
-![Showcase](./docs/public/showcase.gif)
+<video src="./docs/public/showcase.mp4" controls width="100%"></video>
 
 ## Features
 
