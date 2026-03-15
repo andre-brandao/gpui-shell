@@ -18,7 +18,7 @@ desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 
 ![Bar](./docs/public/bar.png)
 
-![Showcase](./docs/public/showcase.gif)
+https://github.com/user-attachments/assets/71003c4b-8b02-4585-8ddb-17560c27b389
 
 ## Features
 
