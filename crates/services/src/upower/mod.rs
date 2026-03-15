@@ -15,6 +15,7 @@ use futures_util::stream::select_all;
 use tracing::{debug, error, info, warn};
 use zbus::Connection;
 
+use crate::ServiceStatus;
 pub use dbus::{BatteryLevel, BatteryState, DeviceType, WarningLevel};
 use dbus::{DeviceProxy, PowerProfilesProxy, UPowerService};
 
@@ -310,6 +311,7 @@ pub enum UPowerCommand {
 #[derive(Debug, Clone)]
 pub struct UPowerSubscriber {
     data: Mutable<UPowerData>,
+    status: Mutable<ServiceStatus>,
     conn: Connection,
 }
 
@@ -317,11 +319,25 @@ impl UPowerSubscriber {
     /// Create a new UPower subscriber and start monitoring.
     pub async fn new() -> Result<Self> {
         let conn = Connection::system().await?;
-        let data = UPowerData::init(&conn).await?;
+        let status = Mutable::new(ServiceStatus::Initializing);
+
+        let data = match UPowerData::init(&conn).await {
+            Ok(d) => {
+                status.set(ServiceStatus::Active);
+                d
+            }
+            Err(e) => {
+                error!("Failed to initialize UPower data: {}", e);
+                status.set(ServiceStatus::Error(None));
+                UPowerData::default()
+            }
+        };
+
         let data = Mutable::new(data);
 
         let subscriber = Self {
             data: data.clone(),
+            status: status.clone(),
             conn: conn.clone(),
         };
 
@@ -330,6 +346,7 @@ impl UPowerSubscriber {
         tokio::spawn(async move {
             if let Err(e) = sub_for_task.run().await {
                 error!("UPower subscriber error: {}", e);
+                *sub_for_task.status.lock_mut() = ServiceStatus::Error(None);
             }
         });
 
@@ -344,6 +361,11 @@ impl UPowerSubscriber {
     /// Get the current data snapshot.
     pub fn get(&self) -> UPowerData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Execute a command.

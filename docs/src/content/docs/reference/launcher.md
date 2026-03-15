@@ -48,6 +48,23 @@ prefix = ";wp"
 directory = "~/Pictures/Wallpapers"
 ```
 
+### Services Module
+
+View the health status of all system services (Audio, Network, Bluetooth, UPower, MPRIS, Notifications, Tray, Sysinfo, Privacy, Wallpaper, and Brightness).
+
+**Invoke with:** `;s`
+
+| Option    | Type     | Default | Description                            |
+| --------- | -------- | ------- | -------------------------------------- |
+| `prefix`  | `string` | `";s"`  | Command prefix to invoke the services module. |
+
+#### Example
+
+```toml
+[launcher.modules.services]
+prefix = ";s"
+```
+
 ## Keyboard Shortcuts
 
 The launcher supports vim-style navigation via Ctrl key combinations alongside standard keys.

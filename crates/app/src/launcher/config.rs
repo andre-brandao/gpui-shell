@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::modules::{
-    apps::config::AppsConfig, help::config::HelpConfig, shell::config::ShellConfig,
-    theme::config::ThemesConfig, wallpaper::config::WallpaperConfig, web::config::WebConfig,
-    workspaces::config::WorkspacesConfig,
+    apps::config::AppsConfig, help::config::HelpConfig, services::config::ServicesConfig,
+    shell::config::ShellConfig, theme::config::ThemesConfig, wallpaper::config::WallpaperConfig,
+    web::config::WebConfig, workspaces::config::WorkspacesConfig,
 };
 
 /// Launcher window configuration.
@@ -43,6 +43,7 @@ pub struct ModulesConfig {
     pub workspaces: WorkspacesConfig,
     pub wallpaper: WallpaperConfig,
     pub themes: ThemesConfig,
+    pub services: ServicesConfig,
     pub help: HelpConfig,
 }
 
@@ -55,6 +56,7 @@ impl Default for ModulesConfig {
             workspaces: WorkspacesConfig::default(),
             wallpaper: WallpaperConfig::default(),
             themes: ThemesConfig::default(),
+            services: ServicesConfig::default(),
             help: HelpConfig::default(),
         }
     }

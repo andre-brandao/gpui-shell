@@ -18,6 +18,8 @@ use libpulse_binding::{
 };
 use tracing::{debug, error};
 
+use crate::ServiceStatus;
+
 /// Audio device data.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AudioData {
@@ -75,14 +77,16 @@ pub enum AudioCommand {
 #[derive(Debug, Clone)]
 pub struct AudioSubscriber {
     data: Mutable<AudioData>,
+    status: Mutable<ServiceStatus>,
 }
 
 impl AudioSubscriber {
     /// Create a new audio subscriber and start monitoring.
     pub fn new() -> Self {
         let data = Mutable::new(AudioData::default());
-        start_listener(data.clone());
-        Self { data }
+        let status = Mutable::new(ServiceStatus::Initializing);
+        start_listener(data.clone(), status.clone());
+        Self { data, status }
     }
 
     /// Get a signal that emits when audio state changes.
@@ -93,6 +97,11 @@ impl AudioSubscriber {
     /// Get the current audio data snapshot.
     pub fn get(&self) -> AudioData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Execute an audio command.
@@ -195,7 +204,7 @@ fn volume_to_percent(volume: Volume) -> u8 {
 }
 
 /// Start the PulseAudio event listener thread.
-fn start_listener(data: Mutable<AudioData>) {
+fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
     thread::spawn(move || {
         let mut proplist = Proplist::new().expect("Failed to create PulseAudio proplist");
         let _ = proplist.set_str(APPLICATION_NAME, "gpuishell");
@@ -213,12 +222,16 @@ fn start_listener(data: Mutable<AudioData>) {
         loop {
             match mainloop.iterate(true) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
-                    panic!("PulseAudio mainloop error during connect");
+                    error!("PulseAudio mainloop error during connect, stopping listener");
+                    *status.lock_mut() = ServiceStatus::Error(None);
+                    return;
                 }
                 IterateResult::Success(_) => match context.get_state() {
                     context::State::Ready => break,
                     context::State::Failed | context::State::Terminated => {
-                        panic!("PulseAudio context failed or terminated");
+                        error!("PulseAudio context failed or terminated, stopping listener");
+                        *status.lock_mut() = ServiceStatus::Error(None);
+                        return;
                     }
                     _ => {}
                 },
@@ -226,6 +239,7 @@ fn start_listener(data: Mutable<AudioData>) {
         }
 
         debug!("PulseAudio connection established");
+        *status.lock_mut() = ServiceStatus::Active;
 
         // Shared state for tracking pending queries and results
         let pending_queries = Rc::new(Cell::new(0u32));
@@ -293,7 +307,9 @@ fn start_listener(data: Mutable<AudioData>) {
         while pending_queries.get() > 0 {
             match mainloop.iterate(false) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
-                    panic!("PulseAudio mainloop error during initial query");
+                    error!("PulseAudio mainloop error during initial query, stopping listener");
+                    *status.lock_mut() = ServiceStatus::Error(None);
+                    return;
                 }
                 IterateResult::Success(_) => {}
             }
@@ -340,7 +356,9 @@ fn start_listener(data: Mutable<AudioData>) {
             let has_pending = pending_queries.get() > 0 || needs_refresh.get();
             match mainloop.iterate(!has_pending) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
-                    panic!("PulseAudio mainloop error");
+                    error!("PulseAudio mainloop error in event loop, stopping listener");
+                    *status.lock_mut() = ServiceStatus::Error(None);
+                    return;
                 }
                 IterateResult::Success(_) => {
                     // Check if we need to refresh due to a subscription event

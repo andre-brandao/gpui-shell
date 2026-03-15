@@ -14,6 +14,8 @@ use futures_util::stream::select_all;
 use tracing::{debug, error, info, trace, warn};
 use zbus::{Connection, fdo::DBusProxy, zvariant::OwnedValue};
 
+use crate::ServiceStatus;
+
 const MPRIS_PLAYER_SERVICE_PREFIX: &str = "org.mpris.MediaPlayer2.";
 const EVENT_DEBOUNCE_MS: u64 = 200;
 
@@ -145,6 +147,7 @@ pub enum PlayerCommand {
 #[derive(Debug, Clone)]
 pub struct MprisSubscriber {
     data: Mutable<MprisData>,
+    status: Mutable<ServiceStatus>,
     conn: Connection,
 }
 
@@ -152,12 +155,25 @@ impl MprisSubscriber {
     /// Create a new MPRIS subscriber and start monitoring player changes.
     pub async fn new() -> anyhow::Result<Self> {
         let conn = Connection::session().await?;
-        let initial_data = fetch_mpris_data(&conn).await.unwrap_or_default();
+        let status = Mutable::new(ServiceStatus::Initializing);
+
+        let initial_data = match fetch_mpris_data(&conn).await {
+            Ok(data) => {
+                status.set(ServiceStatus::Active);
+                data
+            }
+            Err(e) => {
+                error!("Failed to fetch initial MPRIS data: {}", e);
+                status.set(ServiceStatus::Error(None));
+                MprisData::default()
+            }
+        };
+
         let data = Mutable::new(initial_data);
 
-        start_listener(data.clone(), conn.clone());
+        start_listener(data.clone(), status.clone(), conn.clone());
 
-        Ok(Self { data, conn })
+        Ok(Self { data, status, conn })
     }
 
     /// Get a signal that emits when MPRIS state changes.
@@ -168,6 +184,11 @@ impl MprisSubscriber {
     /// Get the current MPRIS state snapshot.
     pub fn get(&self) -> MprisData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Execute a command for a specific player.
@@ -252,15 +273,22 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
 }
 
 /// Start the MPRIS listener in a dedicated thread.
-fn start_listener(data: Mutable<MprisData>, conn: Connection) {
+fn start_listener(data: Mutable<MprisData>, status: Mutable<ServiceStatus>, conn: Connection) {
     thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create Tokio runtime for MPRIS listener");
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                error!("Failed to create Tokio runtime for MPRIS listener: {}", e);
+                *status.lock_mut() = ServiceStatus::Error(None);
+                return;
+            }
+        };
 
         rt.block_on(async move {
-            if let Err(e) = run_listener(data, conn).await {
+            if let Err(e) = run_listener(data, status, conn).await {
                 error!("MPRIS listener error: {}", e);
             }
         });
@@ -268,14 +296,22 @@ fn start_listener(data: Mutable<MprisData>, conn: Connection) {
 }
 
 /// Run the MPRIS event listener loop.
-async fn run_listener(data: Mutable<MprisData>, conn: Connection) -> anyhow::Result<()> {
+async fn run_listener(
+    data: Mutable<MprisData>,
+    status: Mutable<ServiceStatus>,
+    conn: Connection,
+) -> anyhow::Result<()> {
     info!("MPRIS subscriber started");
 
     loop {
         let current = match fetch_mpris_data(&conn).await {
-            Ok(value) => value,
+            Ok(value) => {
+                *status.lock_mut() = ServiceStatus::Active;
+                value
+            }
             Err(err) => {
                 error!("Failed to fetch MPRIS data: {}", err);
+                *status.lock_mut() = ServiceStatus::Error(None);
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 continue;
             }

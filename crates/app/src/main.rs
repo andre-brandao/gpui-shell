@@ -9,7 +9,7 @@
 
 use crate::ipc::IpcSubscriber;
 use assets::Assets;
-use gpui::Application;
+use gpui_platform::application;
 use tracing_subscriber::EnvFilter;
 
 mod args;
@@ -49,7 +49,7 @@ async fn main() {
         .expect("Failed to initialize services");
 
     // Create and run the GPUI application
-    let app = Application::new().with_assets(Assets {});
+    let app = application().with_assets(Assets {});
     app.run(move |cx| {
         config::Config::init(cx);
         state::AppState::init(services, cx);

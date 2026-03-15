@@ -18,6 +18,8 @@ use futures_util::StreamExt;
 use futures_util::stream::select_all;
 use tracing::{debug, error, info};
 
+use crate::ServiceStatus;
+
 /// Icon data for a tray item.
 #[derive(Debug, Clone)]
 pub enum TrayIcon {
@@ -115,16 +117,30 @@ pub enum TrayCommand {
 #[derive(Debug, Clone)]
 pub struct TraySubscriber {
     data: Mutable<TrayData>,
+    status: Mutable<ServiceStatus>,
     conn: zbus::Connection,
 }
 
 impl TraySubscriber {
     /// Create a new tray subscriber and start monitoring.
     pub async fn new() -> anyhow::Result<Self> {
+        let status = Mutable::new(ServiceStatus::Initializing);
+
         // Start the StatusNotifierWatcher server
         let conn = StatusNotifierWatcher::start_server().await?;
 
-        let initial_data = fetch_tray_data(&conn).await.unwrap_or_default();
+        let initial_data = match fetch_tray_data(&conn).await {
+            Ok(data) => {
+                status.set(ServiceStatus::Active);
+                data
+            }
+            Err(e) => {
+                error!("Failed to fetch initial tray data: {}", e);
+                status.set(ServiceStatus::Error(None));
+                TrayData::default()
+            }
+        };
+
         let data = Mutable::new(initial_data);
 
         info!(
@@ -133,9 +149,9 @@ impl TraySubscriber {
         );
 
         // Start the event listener
-        start_listener(data.clone(), conn.clone());
+        start_listener(data.clone(), status.clone(), conn.clone());
 
-        Ok(Self { data, conn })
+        Ok(Self { data, status, conn })
     }
 
     /// Get a signal that emits when tray state changes.
@@ -146,6 +162,11 @@ impl TraySubscriber {
     /// Get the current tray data snapshot.
     pub fn get(&self) -> TrayData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Build a StatusNotifierItem proxy for the given item name.
@@ -334,17 +355,25 @@ async fn create_tray_item(conn: &zbus::Connection, name: &str) -> anyhow::Result
 }
 
 /// Start the D-Bus listener in a dedicated thread.
-fn start_listener(data: Mutable<TrayData>, conn: zbus::Connection) {
+fn start_listener(data: Mutable<TrayData>, status: Mutable<ServiceStatus>, conn: zbus::Connection) {
     thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create Tokio runtime for Tray listener");
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                error!("Failed to create Tokio runtime for Tray listener: {}", e);
+                *status.lock_mut() = ServiceStatus::Error(None);
+                return;
+            }
+        };
 
         rt.block_on(async move {
             loop {
                 if let Err(e) = run_listener(&data, &conn).await {
                     error!("Tray listener error: {}", e);
+                    *status.lock_mut() = ServiceStatus::Error(None);
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
             }

@@ -18,6 +18,8 @@ use std::thread;
 use std::time::Duration;
 use tracing::{debug, error, warn};
 
+use crate::ServiceStatus;
+
 /// Event-driven Bluetooth subscriber.
 ///
 /// This subscriber monitors Bluetooth adapter and device state via BlueZ D-Bus
@@ -25,6 +27,7 @@ use tracing::{debug, error, warn};
 #[derive(Debug, Clone)]
 pub struct BluetoothSubscriber {
     data: Mutable<BluetoothData>,
+    status: Mutable<ServiceStatus>,
     conn: zbus::Connection,
 }
 
@@ -32,13 +35,26 @@ impl BluetoothSubscriber {
     /// Create a new Bluetooth subscriber and start monitoring.
     pub async fn new() -> anyhow::Result<Self> {
         let conn = zbus::Connection::system().await?;
-        let initial_data = fetch_bluetooth_data(&conn).await.unwrap_or_default();
+        let status = Mutable::new(ServiceStatus::Initializing);
+
+        let initial_data = match fetch_bluetooth_data(&conn).await {
+            Ok(data) => {
+                status.set(ServiceStatus::Active);
+                data
+            }
+            Err(e) => {
+                error!("Failed to fetch initial bluetooth data: {}", e);
+                status.set(ServiceStatus::Error(None));
+                BluetoothData::default()
+            }
+        };
+
         let data = Mutable::new(initial_data);
 
         // Start the D-Bus listener
-        start_listener(data.clone(), conn.clone());
+        start_listener(data.clone(), status.clone(), conn.clone());
 
-        Ok(Self { data, conn })
+        Ok(Self { data, status, conn })
     }
 
     /// Get a signal that emits when Bluetooth state changes.
@@ -49,6 +65,11 @@ impl BluetoothSubscriber {
     /// Get the current Bluetooth data snapshot.
     pub fn get(&self) -> BluetoothData {
         self.data.get_cloned()
+    }
+
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
     }
 
     /// Execute a Bluetooth command.
@@ -148,16 +169,31 @@ async fn fetch_bluetooth_data(conn: &zbus::Connection) -> anyhow::Result<Bluetoo
 }
 
 /// Start the D-Bus listener in a dedicated thread.
-fn start_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) {
+fn start_listener(
+    data: Mutable<BluetoothData>,
+    status: Mutable<ServiceStatus>,
+    conn: zbus::Connection,
+) {
     thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create Tokio runtime for Bluetooth listener");
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                error!(
+                    "Failed to create Tokio runtime for Bluetooth listener: {}",
+                    e
+                );
+                *status.lock_mut() = ServiceStatus::Error(None);
+                return;
+            }
+        };
 
         rt.block_on(async move {
             if let Err(e) = run_listener(data, conn).await {
                 error!("Bluetooth listener error: {}", e);
+                *status.lock_mut() = ServiceStatus::Error(None);
             }
         });
     });
