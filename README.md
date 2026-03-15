@@ -18,7 +18,7 @@ desktop ecosystems via D-Bus while providing a modern, GPU-accelerated UI.
 
 ![Bar](./docs/public/bar.png)
 
-<video src="./docs/public/showcase.mp4" controls width="100%"></video>
+![Showcase](https://github.com/andre-brandao/gpui-shell/raw/refs/heads/dev/docs/public/showcase.mp4)
 
 ## Features
 
