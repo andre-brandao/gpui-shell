@@ -1,7 +1,8 @@
-use gpui::{App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::ActiveTheme;
 
+use crate::bar::modules::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
@@ -52,56 +53,36 @@ impl NotificationWidget {
             NotificationCenter::new(subscriber, cx)
         });
     }
-}
 
-impl Render for NotificationWidget {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-        let theme = cx.theme();
-        let config = &cx.config().notification;
-        let is_vertical = cx.config().bar.is_vertical();
+    fn render_widget_content(
+        &self,
+        theme: &ui::Theme,
+        icon: String,
+        is_vertical: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let unread = self.data.unread_count;
-
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let interactive_active = theme.interactive.active;
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
         let badge_color = theme.accent.primary;
 
         div()
             .id("notification-widget")
             .flex()
-            .when(is_vertical, |this| this.flex_col())
+            .when(is_vertical, |el| el.flex_col())
             .items_center()
-            .gap(px(spacing::XS))
-            .px(px(spacing::XS))
-            .py(px(3.0))
-            .rounded(px(radius::SM))
-            .cursor_pointer()
-            .bg(interactive_default)
-            .hover(move |el| el.bg(interactive_hover))
-            .active(move |el| el.bg(interactive_active))
+            .gap(px(style::CHIP_GAP))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event, window, cx| this.toggle_center(event, window, cx)),
             )
             .child(
                 div()
-                    .text_size(px(if is_vertical {
-                        icon_size::MD
-                    } else {
-                        icon_size::LG
-                    }))
+                    .text_size(px(style::icon(is_vertical)))
                     .text_color(if self.data.dnd {
-                        text_muted
+                        theme.text.muted
                     } else {
-                        text_primary
+                        theme.text.primary
                     })
-                    .child(if self.data.dnd {
-                        config.icons.bell_off.clone()
-                    } else {
-                        config.icons.bell.clone()
-                    }),
+                    .child(icon),
             )
             .when(unread > 0, |el| {
                 el.child(
@@ -111,5 +92,40 @@ impl Render for NotificationWidget {
                         .child(unread.to_string()),
                 )
             })
+            .into_any_element()
+    }
+}
+
+impl BarWidget for NotificationWidget {
+    fn is_interactive(&self) -> bool {
+        true
+    }
+
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = &cx.config().notification;
+        let icon = if self.data.dnd {
+            config.icons.bell_off.clone()
+        } else {
+            config.icons.bell.clone()
+        };
+        self.render_widget_content(&theme, icon, true, cx)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = &cx.config().notification;
+        let icon = if self.data.dnd {
+            config.icons.bell_off.clone()
+        } else {
+            config.icons.bell.clone()
+        };
+        self.render_widget_content(&theme, icon, false, cx)
+    }
+}
+
+impl Render for NotificationWidget {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }

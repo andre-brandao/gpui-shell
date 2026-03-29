@@ -10,7 +10,7 @@ use gpui::{
 use ui::{ActiveTheme, spacing};
 
 use super::config::BarPosition;
-use super::modules::Widget;
+use super::modules::{Widget, style};
 use crate::config::{ActiveConfig, Config};
 
 /// The main bar view.
@@ -54,7 +54,7 @@ impl Bar {
                 .w_full()
                 .flex_col()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(px(style::BAR_SECTION_GAP))
                 .when(matches!(align, SectionAlign::Center), |this| {
                     this.flex_1().justify_center()
                 })
@@ -70,7 +70,7 @@ impl Bar {
                 .flex()
                 .h_full()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(px(style::BAR_SECTION_GAP))
                 .when(matches!(align, SectionAlign::Start), |this| {
                     this.flex_1().justify_start()
                 })
@@ -88,6 +88,7 @@ impl Bar {
 impl Render for Bar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let bar = &cx.config().bar;
         let is_vertical = self.position.is_vertical();
 
         let start_elements: Vec<AnyElement> =
@@ -108,14 +109,16 @@ impl Render for Bar {
         if is_vertical {
             root.flex_col()
                 .items_center()
-                .px(px(spacing::XS))
+                .px(px(1.0))
                 .py(px(spacing::SM))
-                .when(matches!(self.position, BarPosition::Left), |this| {
-                    this.border_r_1()
-                })
-                .when(matches!(self.position, BarPosition::Right), |this| {
-                    this.border_l_1()
-                })
+                .when(
+                    bar.show_border && matches!(self.position, BarPosition::Left),
+                    |this| this.border_r_1(),
+                )
+                .when(
+                    bar.show_border && matches!(self.position, BarPosition::Right),
+                    |this| this.border_l_1(),
+                )
                 .child(Self::render_section(
                     is_vertical,
                     SectionAlign::Start,
@@ -133,13 +136,15 @@ impl Render for Bar {
                 ))
         } else {
             root.items_center()
-                .px(px(spacing::SM))
-                .when(matches!(self.position, BarPosition::Top), |this| {
-                    this.border_b_1()
-                })
-                .when(matches!(self.position, BarPosition::Bottom), |this| {
-                    this.border_t_1()
-                })
+                .px(px(bar.padding))
+                .when(
+                    bar.show_border && matches!(self.position, BarPosition::Top),
+                    |this| this.border_b_1(),
+                )
+                .when(
+                    bar.show_border && matches!(self.position, BarPosition::Bottom),
+                    |this| this.border_t_1(),
+                )
                 .child(Self::render_section(
                     is_vertical,
                     SectionAlign::Start,

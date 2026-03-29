@@ -3,11 +3,11 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{App, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
-use ui::{ActiveTheme, radius};
+use ui::ActiveTheme;
 
-use super::style;
+use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::AppState;
@@ -96,37 +96,24 @@ impl Mpris {
             .unwrap_or("Player")
             .to_string()
     }
-}
 
-impl Render for Mpris {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let config = &cx.config().bar.modules.mpris;
-        let icon = self.icon();
-        let label = self.label();
-
-        // Pre-compute colors for closures
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let interactive_active = theme.interactive.active;
-        let text_primary = theme.text.primary;
-        let text_secondary = theme.text.secondary;
+    fn render_widget_content(
+        &self,
+        theme: &ui::Theme,
+        icon: &'static str,
+        label: Option<String>,
+        is_vertical: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let max_width = cx.config().bar.modules.mpris.max_width;
 
         div()
             .id("mpris-widget")
             .flex()
-            .when(is_vertical, |this| this.flex_col())
+            .when(is_vertical, |el| el.flex_col())
             .items_center()
             .gap(px(style::CHIP_GAP))
-            .px(px(style::chip_padding_x(is_vertical)))
-            .py(px(style::CHIP_PADDING_Y))
-            .max_w(px(config.max_width))
-            .rounded(px(radius::SM))
-            .cursor_pointer()
-            .bg(interactive_default)
-            .hover(move |s| s.bg(interactive_hover))
-            .active(move |s| s.bg(interactive_active))
+            .max_w(px(max_width))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event, window, cx| {
@@ -136,19 +123,42 @@ impl Render for Mpris {
             .child(
                 div()
                     .text_size(px(style::icon(is_vertical)))
-                    .text_color(text_primary)
+                    .text_color(theme.text.primary)
                     .child(icon),
             )
-            .when(!is_vertical, |this| {
-                this.child(
+            .when_some(label, |el, label| {
+                el.child(
                     div()
                         .flex_1()
                         .overflow_hidden()
                         .text_ellipsis()
                         .text_size(style::label_size(theme, is_vertical))
-                        .text_color(text_secondary)
+                        .text_color(theme.text.secondary)
                         .child(label),
                 )
             })
+            .into_any_element()
+    }
+}
+
+impl BarWidget for Mpris {
+    fn is_interactive(&self) -> bool {
+        true
+    }
+
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        self.render_widget_content(&theme, self.icon(), None, true, cx)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        self.render_widget_content(&theme, self.icon(), Some(self.label()), false, cx)
+    }
+}
+
+impl Render for Mpris {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }

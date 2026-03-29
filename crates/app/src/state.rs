@@ -1,5 +1,9 @@
 //! Application-wide runtime state stored as a GPUI global.
 
+use std::future::Future;
+use std::time::{Duration, Instant};
+
+use anyhow::Context as _;
 use futures_signals::signal::{Signal, SignalExt};
 use futures_util::StreamExt;
 use gpui::{App, Context, Global};
@@ -26,25 +30,97 @@ pub(crate) struct Services {
     pub wallpaper: services::WallpaperSubscriber,
 }
 
+const SERVICE_INIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+fn init_sync_service<T>(name: &'static str, init: impl FnOnce() -> T) -> T {
+    let started = Instant::now();
+    tracing::info!("Initializing {name} service");
+    let service = init();
+    tracing::info!("Initialized {name} service in {:?}", started.elapsed());
+    service
+}
+
+async fn init_async_service<T, F>(name: &'static str, future: F) -> anyhow::Result<T>
+where
+    F: Future<Output = anyhow::Result<T>>,
+{
+    let started = Instant::now();
+    tracing::info!("Initializing {name} service");
+
+    let service = tokio::time::timeout(SERVICE_INIT_TIMEOUT, future)
+        .await
+        .with_context(|| format!("Timed out initializing {name} service"))??;
+
+    tracing::info!("Initialized {name} service in {:?}", started.elapsed());
+    Ok(service)
+}
+
+async fn init_optional_service<T, F, G>(
+    name: &'static str,
+    future: F,
+    fallback: G,
+) -> anyhow::Result<T>
+where
+    F: Future<Output = anyhow::Result<T>>,
+    G: Future<Output = anyhow::Result<T>>,
+{
+    match init_async_service(name, future).await {
+        Ok(service) => Ok(service),
+        Err(err) => {
+            tracing::warn!("{name} service unavailable during startup: {err:#}");
+            fallback
+                .await
+                .with_context(|| format!("Failed to initialize fallback for {name} service"))
+        }
+    }
+}
+
 pub(crate) async fn init_services() -> anyhow::Result<Services> {
-    let applications = services::ApplicationsService::new();
-    let audio = services::AudioSubscriber::new();
-    let bluetooth = services::BluetoothSubscriber::new().await?;
-    let brightness = services::BrightnessSubscriber::new().await?;
-    let compositor = services::CompositorSubscriber::new().await?;
-    let mpris = services::MprisSubscriber::new().await?;
-    let network = services::NetworkSubscriber::new().await?;
-    let notification = services::NotificationSubscriber::new()
+    let applications = init_sync_service("applications", services::ApplicationsService::new);
+    let audio = init_sync_service("audio", services::AudioSubscriber::new);
+    let bluetooth = init_optional_service(
+        "bluetooth",
+        services::BluetoothSubscriber::new(),
+        services::BluetoothSubscriber::unavailable(),
+    )
+    .await?;
+    let brightness =
+        init_async_service("brightness", services::BrightnessSubscriber::new()).await?;
+    let compositor =
+        init_async_service("compositor", services::CompositorSubscriber::new()).await?;
+    let mpris = init_optional_service(
+        "mpris",
+        services::MprisSubscriber::new(),
+        services::MprisSubscriber::unavailable(),
+    )
+    .await?;
+    let network = init_optional_service(
+        "network",
+        services::NetworkSubscriber::new(),
+        services::NetworkSubscriber::unavailable(),
+    )
+    .await?;
+    let notification = init_async_service("notification", services::NotificationSubscriber::new())
         .await
         .unwrap_or_else(|err| {
-            tracing::warn!("Notification service unavailable: {}", err);
+            tracing::warn!("Notification service unavailable during startup: {err:#}");
             services::NotificationSubscriber::disabled()
         });
-    let privacy = services::PrivacySubscriber::new();
-    let sysinfo = services::SysInfoSubscriber::new();
-    let tray = services::TraySubscriber::new().await?;
-    let upower = services::UPowerSubscriber::new().await?;
-    let wallpaper = services::WallpaperSubscriber::new();
+    let privacy = init_sync_service("privacy", services::PrivacySubscriber::new);
+    let sysinfo = init_sync_service("sysinfo", services::SysInfoSubscriber::new);
+    let tray = init_optional_service(
+        "tray",
+        services::TraySubscriber::new(),
+        services::TraySubscriber::unavailable(),
+    )
+    .await?;
+    let upower = init_optional_service(
+        "upower",
+        services::UPowerSubscriber::new(),
+        services::UPowerSubscriber::unavailable(),
+    )
+    .await?;
+    let wallpaper = init_sync_service("wallpaper", services::WallpaperSubscriber::new);
 
     Ok(Services {
         applications,

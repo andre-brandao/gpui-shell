@@ -3,11 +3,11 @@
 mod config;
 pub use config::KeyboardLayoutConfig;
 
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, radius};
+use ui::ActiveTheme;
 
-use super::style;
+use super::{BarWidget, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
@@ -137,43 +137,21 @@ impl KeyboardLayout {
             _ => None,
         }
     }
-}
 
-impl Render for KeyboardLayout {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let config = &cx.config().bar.modules.keyboard_layout;
-        let short_name = self.short_layout_name();
-        let icon = if config.show_flag {
-            self.flag_for_layout().unwrap_or(KEYBOARD_ICON)
-        } else {
-            KEYBOARD_ICON
-        };
-
-        // Pre-compute colors for closures
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let interactive_active = theme.interactive.active;
-        let text_secondary = theme.text.secondary;
-        let text_primary = theme.text.primary;
-        let icon_size = style::icon(is_vertical);
-        let text_size = style::label_size(theme, is_vertical);
-
+    fn render_layout_content(
+        &self,
+        theme: &ui::Theme,
+        icon: &'static str,
+        short_name: String,
+        is_vertical: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         div()
             .id("keyboard-layout")
             .flex()
-            .when(is_vertical, |this| this.flex_col())
+            .when(is_vertical, |el| el.flex_col())
             .items_center()
             .gap(px(style::CHIP_GAP))
-            .px(px(style::chip_padding_x(is_vertical)))
-            .py(px(style::CHIP_PADDING_Y))
-            .rounded(px(radius::SM))
-            .cursor_pointer()
-            .bg(interactive_default)
-            .hover(move |s| s.bg(interactive_hover))
-            .active(move |s| s.bg(interactive_active))
-            // Click to cycle layout
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _event, _window, _cx| {
@@ -182,15 +160,52 @@ impl Render for KeyboardLayout {
             )
             .child(
                 div()
-                    .text_size(px(icon_size))
-                    .text_color(text_secondary)
+                    .text_size(px(style::icon(is_vertical)))
+                    .text_color(theme.text.secondary)
                     .child(icon),
             )
             .child(
                 div()
-                    .text_size(text_size)
-                    .text_color(text_primary)
+                    .text_size(style::label_size(theme, is_vertical))
+                    .text_color(theme.text.primary)
                     .child(short_name),
             )
+            .into_any_element()
+    }
+}
+
+impl BarWidget for KeyboardLayout {
+    fn is_interactive(&self) -> bool {
+        true
+    }
+
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = &cx.config().bar.modules.keyboard_layout;
+        let short_name = self.short_layout_name();
+        let icon = if config.show_flag {
+            self.flag_for_layout().unwrap_or(KEYBOARD_ICON)
+        } else {
+            KEYBOARD_ICON
+        };
+        self.render_layout_content(&theme, icon, short_name, true, cx)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = &cx.config().bar.modules.keyboard_layout;
+        let short_name = self.short_layout_name();
+        let icon = if config.show_flag {
+            self.flag_for_layout().unwrap_or(KEYBOARD_ICON)
+        } else {
+            KEYBOARD_ICON
+        };
+        self.render_layout_content(&theme, icon, short_name, false, cx)
+    }
+}
+
+impl Render for KeyboardLayout {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }

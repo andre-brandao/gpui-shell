@@ -33,8 +33,16 @@ impl BarPosition {
 pub struct BarConfig {
     /// Main axis thickness in px (height for horizontal, width for vertical).
     pub size: f32,
+    /// Horizontal outer padding applied to the bar contents.
+    pub padding: f32,
     /// Screen edge where the bar is placed.
     pub position: BarPosition,
+    /// Whether the bar itself draws an edge border.
+    pub show_border: bool,
+    /// Whether widgets render a resting background fill.
+    pub widget_background: bool,
+    /// Whether widgets render a subtle border.
+    pub widget_border: bool,
     /// Start section widgets (left for horizontal, top for vertical).
     pub start: Vec<String>,
     /// Center section widgets.
@@ -82,7 +90,11 @@ impl Default for BarConfig {
     fn default() -> Self {
         Self {
             size: 32.0,
+            padding: 14.0,
             position: BarPosition::Left,
+            show_border: true,
+            widget_background: true,
+            widget_border: true,
             start: vec!["LauncherBtn".into(), "Workspaces".into(), "SysInfo".into()],
             center: vec!["ActiveWindow".into()],
             end: vec![

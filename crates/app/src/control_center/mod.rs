@@ -239,10 +239,7 @@ impl Render for ControlCenter {
                         let entity = entity.clone();
                         async move |cx| {
                             let result = services
-                                .dispatch(NetworkCommand::Connect {
-                                    ssid,
-                                    password,
-                                })
+                                .dispatch(NetworkCommand::Connect { ssid, password })
                                 .await;
 
                             entity.update(cx, |this, cx| {
@@ -545,8 +542,11 @@ impl Render for ControlCenter {
                         entity.update(cx, |this, cx| {
                             if let Some(ssid) = this.wifi_password.ssid.clone() {
                                 let password = this.wifi_password.input.text().to_string();
-                                let password =
-                                    if password.is_empty() { None } else { Some(password) };
+                                let password = if password.is_empty() {
+                                    None
+                                } else {
+                                    Some(password)
+                                };
 
                                 this.wifi_password.connecting = true;
                                 cx.notify();
@@ -555,10 +555,7 @@ impl Render for ControlCenter {
                                     let entity = cx.entity().clone();
                                     async move |_, cx| {
                                         let result = services
-                                            .dispatch(NetworkCommand::Connect {
-                                                ssid,
-                                                password,
-                                            })
+                                            .dispatch(NetworkCommand::Connect { ssid, password })
                                             .await;
 
                                         entity.update(cx, |this, cx| {

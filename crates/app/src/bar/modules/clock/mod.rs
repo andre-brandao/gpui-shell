@@ -4,11 +4,11 @@ mod config;
 pub use config::ClockConfig;
 
 use chrono::Local;
-use gpui::{Context, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, div, prelude::*, px};
 use std::time::Duration;
-use ui::{ActiveTheme, radius};
+use ui::ActiveTheme;
 
-use super::style;
+use super::{BarWidget, style};
 use crate::config::ActiveConfig;
 
 /// A clock widget that updates every second.
@@ -43,50 +43,67 @@ impl Clock {
             .map(str::to_string)
             .collect()
     }
+
+    fn render_vertical_content(
+        &self,
+        theme: &ui::Theme,
+        vertical_format: &str,
+        horizontal_fallback: &str,
+    ) -> AnyElement {
+        let mut lines = self.formatted_time_vertical(vertical_format);
+        if lines.is_empty() {
+            lines.push(self.formatted_time_horizontal(horizontal_fallback));
+        }
+
+        div()
+            .id("clock")
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(style::CHIP_GAP))
+            .children(lines.into_iter().enumerate().map(|(idx, line)| {
+                div()
+                    .text_size(style::label_size(theme, true))
+                    .text_color(if idx == 0 {
+                        theme.text.secondary
+                    } else {
+                        theme.text.primary
+                    })
+                    .child(line)
+            }))
+            .into_any_element()
+    }
+
+    fn render_horizontal_content(&self, theme: &ui::Theme, format: &str) -> AnyElement {
+        div()
+            .id("clock")
+            .flex()
+            .items_center()
+            .gap(px(style::CHIP_GAP))
+            .text_size(style::label_size(theme, false))
+            .text_color(theme.text.primary)
+            .child(self.formatted_time_horizontal(format))
+            .into_any_element()
+    }
+}
+
+impl BarWidget for Clock {
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        let config = &cx.config().bar.modules.clock;
+
+        self.render_vertical_content(theme, &config.format_vertical, &config.format_horizontal)
+    }
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        let config = &cx.config().bar.modules.clock;
+
+        self.render_horizontal_content(theme, &config.format_horizontal)
+    }
 }
 
 impl Render for Clock {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let config = &cx.config().bar.modules.clock;
-
-        if is_vertical {
-            let mut lines = self.formatted_time_vertical(&config.format_vertical);
-            if lines.is_empty() {
-                lines.push(self.formatted_time_horizontal(&config.format_horizontal));
-            }
-            div()
-                .id("clock")
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(px(style::CHIP_GAP))
-                .px(px(style::chip_padding_x(true)))
-                .py(px(style::CHIP_PADDING_Y))
-                .rounded(px(radius::SM))
-                .children(lines.into_iter().enumerate().map(|(idx, line)| {
-                    div()
-                        .text_size(style::label_size(theme, true))
-                        .text_color(if idx == 0 {
-                            theme.text.secondary
-                        } else {
-                            theme.text.primary
-                        })
-                        .child(line)
-                }))
-        } else {
-            div()
-                .id("clock")
-                .flex()
-                .items_center()
-                .gap(px(style::CHIP_GAP))
-                .px(px(style::chip_padding_x(false)))
-                .py(px(style::CHIP_PADDING_Y))
-                .rounded(px(radius::SM))
-                .text_size(style::label_size(theme, false))
-                .text_color(theme.text.primary)
-                .child(self.formatted_time_horizontal(&config.format_horizontal))
-        }
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }
