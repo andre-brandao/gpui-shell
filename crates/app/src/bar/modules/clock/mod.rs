@@ -62,14 +62,16 @@ impl Clock {
             .items_center()
             .gap(px(style::CHIP_GAP))
             .children(lines.into_iter().enumerate().map(|(idx, line)| {
-                div()
-                    .text_size(style::label_size(theme, true))
-                    .text_color(if idx == 0 {
-                        theme.text.secondary
-                    } else {
-                        theme.text.primary
-                    })
-                    .child(line)
+                style::vertical_text_line(
+                    div()
+                        .text_size(style::label_size(theme, true))
+                        .text_color(if idx == 0 {
+                            theme.text.secondary
+                        } else {
+                            theme.text.primary
+                        })
+                        .child(line),
+                )
             }))
             .into_any_element()
     }

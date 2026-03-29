@@ -126,12 +126,20 @@ impl Battery {
                 )
             })
             .when(!view.text.is_empty(), |this| {
-                this.child(
+                this.child(if is_vertical {
+                    style::vertical_text_line(
+                        div()
+                            .text_size(style::label_size(theme, is_vertical))
+                            .text_color(view.text_color)
+                            .child(view.text),
+                    )
+                } else {
                     div()
                         .text_size(style::label_size(theme, is_vertical))
                         .text_color(view.text_color)
-                        .child(view.text),
-                )
+                        .child(view.text)
+                        .into_any_element()
+                })
             })
             .into_any_element()
     }

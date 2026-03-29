@@ -239,14 +239,16 @@ impl BarWidget for ActiveWindow {
                     .into_iter()
                     .enumerate()
                     .map(move |(idx, line)| {
-                        div()
-                            .text_size(style::label_size(theme, true))
-                            .text_color(if idx == 0 {
-                                text_primary
-                            } else {
-                                text_secondary
-                            })
-                            .child(line)
+                        style::vertical_text_line(
+                            div()
+                                .text_size(style::label_size(theme, true))
+                                .text_color(if idx == 0 {
+                                    text_primary
+                                } else {
+                                    text_secondary
+                                })
+                                .child(line),
+                        )
                     }),
             )
             .into_any_element()

@@ -31,6 +31,8 @@ pub const WORKSPACE_PILL_WIDTH_HORIZONTAL: f32 = 22.0;
 pub const WORKSPACE_PILL_WIDTH_HORIZONTAL_ACTIVE: f32 = 28.0;
 /// Horizontal section divider height.
 pub const SECTION_DIVIDER_HEIGHT: f32 = 14.0;
+/// Fixed text line width for vertically stacked labels so each line shares one center axis.
+pub const VERTICAL_TEXT_LINE_WIDTH: f32 = 20.0;
 
 #[inline(always)]
 fn shell_radius(is_vertical: bool) -> f32 {
@@ -55,7 +57,7 @@ fn shell_height(is_vertical: bool) -> Option<f32> {
 #[inline(always)]
 pub fn chip_padding_x(is_vertical: bool) -> f32 {
     if is_vertical {
-        spacing::XS + 1.0
+        spacing::XS
     } else {
         spacing::SM
     }
@@ -166,7 +168,9 @@ pub fn bar_widget_shell(
     };
 
     div()
-        .when(is_vertical, |el| el.flex().flex_col().items_center())
+        .when(is_vertical, |el| {
+            el.w_full().flex().flex_col().items_center()
+        })
         .when(!is_vertical, |el| el.flex().items_center())
         .justify_center()
         .px(px(chip_padding_x(is_vertical)))
@@ -224,7 +228,9 @@ pub fn bar_group_shell(
     };
 
     div()
-        .when(is_vertical, |el| el.flex().flex_col().items_center())
+        .when(is_vertical, |el| {
+            el.w_full().flex().flex_col().items_center()
+        })
         .when(!is_vertical, |el| el.flex().items_center())
         .justify_center()
         .px(px(group_padding_x(is_vertical)))
@@ -264,13 +270,32 @@ pub fn bar_stat(
                 .text_color(color)
                 .child(icon_text),
         )
-        .child(
+        .child(if is_vertical {
+            vertical_text_line(
+                div()
+                    .flex_shrink()
+                    .text_size(label_size(theme, is_vertical))
+                    .text_color(color)
+                    .child(value_text),
+            )
+        } else {
             div()
                 .flex_shrink()
                 .text_size(label_size(theme, is_vertical))
                 .text_color(color)
-                .child(value_text),
-        )
+                .child(value_text)
+                .into_any_element()
+        })
+        .into_any_element()
+}
+
+/// Center a vertical text row to a fixed axis so stacked labels do not drift visually.
+pub fn vertical_text_line(content: impl IntoElement) -> AnyElement {
+    div()
+        .w(px(VERTICAL_TEXT_LINE_WIDTH))
+        .flex()
+        .justify_center()
+        .child(content)
         .into_any_element()
 }
 

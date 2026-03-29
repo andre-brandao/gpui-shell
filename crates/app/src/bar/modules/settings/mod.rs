@@ -314,12 +314,20 @@ impl Settings {
                 view.battery_color,
             ))
             .when(!view.battery_text.is_empty(), |el| {
-                el.child(
+                el.child(if is_vertical {
+                    style::vertical_text_line(
+                        div()
+                            .text_size(style::label_size(theme, is_vertical))
+                            .text_color(view.battery_color)
+                            .child(view.battery_text.clone()),
+                    )
+                } else {
                     div()
                         .text_size(style::label_size(theme, is_vertical))
                         .text_color(view.battery_color)
-                        .child(view.battery_text.clone()),
-                )
+                        .child(view.battery_text.clone())
+                        .into_any_element()
+                })
             })
             .into_any_element()
     }

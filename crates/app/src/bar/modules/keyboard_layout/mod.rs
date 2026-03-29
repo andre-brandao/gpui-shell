@@ -166,13 +166,22 @@ impl KeyboardLayout {
                     .text_color(theme.text.secondary)
                     .child(icon),
             )
-            .child(
+            .child(if is_vertical {
+                style::vertical_text_line(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(style::label_size(theme, is_vertical))
+                        .text_color(theme.text.primary)
+                        .child(short_name),
+                )
+            } else {
                 div()
                     .flex_shrink_0()
                     .text_size(style::label_size(theme, is_vertical))
                     .text_color(theme.text.primary)
-                    .child(short_name),
-            )
+                    .child(short_name)
+                    .into_any_element()
+            })
             .into_any_element()
     }
 }
