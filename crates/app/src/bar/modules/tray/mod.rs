@@ -477,78 +477,55 @@ impl Render for TrayMenuPanel {
 // Icon Mapping
 // ============================================================================
 
+/// Map a single identifier to a nerd font icon.
+fn lookup_icon(key: &str) -> Option<&'static str> {
+    match key {
+        "discord" | "vesktop" => Some("󰙯"),
+        "spotify" => Some("󰓇"),
+        "steam" => Some("󰓓"),
+        "firefox" => Some("󰈹"),
+        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => Some(""),
+        "telegram" | "telegram-desktop" => Some(""),
+        "slack" => Some("󰒱"),
+        "thunderbird" => Some("󰴃"),
+        "1password" => Some("󰢁"),
+        "bitwarden" => Some("󰞀"),
+        "dropbox" => Some("󰇣"),
+        "nextcloud" => Some("󰀸"),
+        "syncthing" | "syncthingtray" => Some("󰓦"),
+        "nm-applet" | "network-manager" | "network-manager-applet" => Some("󰖩"),
+        "blueman" | "blueman-applet" | "blueman-tray" => Some("󰂯"),
+        "pasystray" | "pavucontrol" => Some("󰕾"),
+        "udiskie" => Some("󰋊"),
+        "flameshot" => Some("󰹑"),
+        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some("󰄜"),
+        "tailscale" | "tailscale-systray" => Some("󰖂"),
+        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => {
+            Some("󰢹")
+        }
+        "network" | "network-wireless" => Some("󰖩"),
+        "bluetooth" | "bluetooth-active" => Some("󰂯"),
+        "audio" | "audio-volume-high" => Some("󰕾"),
+        "battery" | "battery-full" => Some("󰁹"),
+        _ => None,
+    }
+}
+
 /// Map common icon names or app IDs to nerd font characters.
 fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
-    // First try the icon name
-    let icon = match name.to_lowercase().as_str() {
-        "discord" => "󰙯",
-        "spotify" => "󰓇",
-        "steam" => "󰓓",
-        "firefox" => "󰈹",
-        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => "",
-        "telegram" | "telegram-desktop" => "",
-        "slack" => "󰒱",
-        "thunderbird" => "󰴃",
-        "vesktop" => "󰙯",
-        "1password" => "󰢁",
-        "bitwarden" => "󰞀",
-        "dropbox" => "󰇣",
-        "nextcloud" => "󰀸",
-        "syncthing" => "󰓦",
-        "nm-applet" | "network-manager" => "󰖩",
-        "blueman" | "blueman-applet" => "󰂯",
-        "pasystray" | "pavucontrol" => "󰕾",
-        "udiskie" => "󰋊",
-        "flameshot" => "󰹑",
-        "kdeconnect" => "󰄜",
-        "tailscale" => "󰖂",
-        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => "󰢹",
-        "network" | "network-wireless" => "󰖩",
-        "bluetooth" | "bluetooth-active" => "󰂯",
-        "audio" | "audio-volume-high" => "󰕾",
-        "battery" | "battery-full" => "󰁹",
-        _ => "",
-    };
-
-    if !icon.is_empty() {
+    if let Some(icon) = lookup_icon(&name.to_lowercase()) {
         return icon;
     }
 
-    // Try the app id as fallback
     if let Some(id) = app_id {
         let id_lower = id.to_lowercase();
 
         // Handle generic systray_XXXX pattern (often used by Go apps like Tailscale)
         if id_lower.starts_with("systray_") {
-            return "󰖂"; // Assume Tailscale for now
+            return "󰖂";
         }
 
-        let icon = match id_lower.as_str() {
-            "discord" | "vesktop" => "󰙯",
-            "spotify" => "󰓇",
-            "steam" => "󰓓",
-            "firefox" => "󰈹",
-            "chrome" | "google-chrome" | "chromium" | "chromium-browser" => "",
-            "telegram" | "telegram-desktop" => "",
-            "slack" => "󰒱",
-            "thunderbird" => "󰴃",
-            "1password" => "󰢁",
-            "bitwarden" => "󰞀",
-            "dropbox" => "󰇣",
-            "nextcloud" => "󰀸",
-            "syncthing" | "syncthingtray" => "󰓦",
-            "nm-applet" | "network-manager-applet" => "󰖩",
-            "blueman" | "blueman-applet" | "blueman-tray" => "󰂯",
-            "pasystray" | "pavucontrol" => "󰕾",
-            "udiskie" => "󰋊",
-            "flameshot" => "󰹑",
-            "kdeconnect" | "kdeconnectd" | "kde connect indicator" => "󰄜",
-            "tailscale" | "tailscale-systray" => "󰖂",
-            "remmina" | "org.remmina.remmina" | "remmina-icon" => "󰢹",
-            _ => "",
-        };
-
-        if !icon.is_empty() {
+        if let Some(icon) = lookup_icon(&id_lower) {
             return icon;
         }
     }
@@ -570,9 +547,9 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
 fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
     if hint.contains("chrome") || hint.contains("chromium") {
-        Some("")
+        Some("")
     } else if hint.contains("telegram") {
-        Some("")
+        Some("")
     } else if hint.contains("discord") || hint.contains("vesktop") {
         Some("󰙯")
     } else if hint.contains("spotify") {

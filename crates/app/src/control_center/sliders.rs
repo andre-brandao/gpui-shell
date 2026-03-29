@@ -63,13 +63,7 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
 
     let percent = brightness.percentage();
 
-    let icon = if percent < 33 {
-        icons::BRIGHTNESS_LOW
-    } else if percent < 66 {
-        icons::BRIGHTNESS
-    } else {
-        icons::BRIGHTNESS_HIGH
-    };
+    let icon = icons::brightness_icon(percent);
 
     let services_dec = AppState::brightness(cx).clone();
     let services_inc = AppState::brightness(cx).clone();

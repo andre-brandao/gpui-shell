@@ -48,40 +48,6 @@ impl Battery {
         }
     }
 
-    /// Get tooltip text with detailed battery info.
-    pub fn tooltip_text(&self) -> String {
-        match &self.data.battery {
-            Some(battery) => {
-                let mut parts = vec![format!("{}%", battery.percentage)];
-
-                let state_str = match battery.state {
-                    BatteryState::Charging => "Charging",
-                    BatteryState::Discharging => "Discharging",
-                    BatteryState::FullyCharged => "Fully charged",
-                    BatteryState::Empty => "Empty",
-                    BatteryState::PendingCharge => "Pending charge",
-                    BatteryState::PendingDischarge => "Pending discharge",
-                    BatteryState::Unknown => "Unknown",
-                };
-                parts.push(state_str.to_string());
-
-                if let Some(time_str) = battery.time_remaining_str() {
-                    if battery.is_charging() {
-                        parts.push(format!("{} until full", time_str));
-                    } else {
-                        parts.push(format!("{} remaining", time_str));
-                    }
-                }
-
-                if let Some(rate) = battery.energy_rate {
-                    parts.push(format!("{:.1}W", rate.abs()));
-                }
-
-                parts.join(" • ")
-            }
-            None => "No battery".to_string(),
-        }
-    }
 }
 
 impl Render for Battery {
