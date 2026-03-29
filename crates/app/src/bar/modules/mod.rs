@@ -1,6 +1,7 @@
 //! Bar modules for displaying system information.
 
 mod active_window;
+mod bar_widget;
 mod battery;
 mod clock;
 mod keyboard_layout;
@@ -14,6 +15,7 @@ mod tray;
 mod workspaces;
 
 pub use active_window::{ActiveWindow, ActiveWindowConfig};
+pub(crate) use bar_widget::{BarWidget, BarWidgetShell};
 pub use battery::{Battery, BatteryConfig};
 pub use clock::{Clock, ClockConfig};
 pub use keyboard_layout::{KeyboardLayout, KeyboardLayoutConfig};

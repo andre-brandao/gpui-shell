@@ -94,6 +94,17 @@ pub fn battery_icon(percentage: u8, charging: bool) -> &'static str {
     }
 }
 
+/// Get brightness icon based on percentage (0-100)
+pub fn brightness_icon(level: u8) -> &'static str {
+    if level < 33 {
+        BRIGHTNESS_LOW
+    } else if level < 66 {
+        BRIGHTNESS
+    } else {
+        BRIGHTNESS_HIGH
+    }
+}
+
 /// Get power profile icon
 pub fn power_profile_icon(profile: &str) -> &'static str {
     match profile {

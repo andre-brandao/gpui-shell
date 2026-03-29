@@ -83,16 +83,7 @@ impl OsdView {
     fn icon_and_level(&self) -> (&'static str, u8, bool) {
         match self.kind {
             OsdKind::Volume { level, muted } => (icons::volume_icon(level, muted), level, muted),
-            OsdKind::Brightness { level } => {
-                let icon = if level < 33 {
-                    icons::BRIGHTNESS_LOW
-                } else if level < 66 {
-                    icons::BRIGHTNESS
-                } else {
-                    icons::BRIGHTNESS_HIGH
-                };
-                (icon, level, false)
-            }
+            OsdKind::Brightness { level } => (icons::brightness_icon(level), level, false),
         }
     }
 

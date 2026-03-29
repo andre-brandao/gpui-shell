@@ -228,48 +228,33 @@ impl Render for ControlCenter {
                 let entity = entity.clone();
                 let services = services.clone();
                 if let Some(pwd) = password {
-                    // Connect with password
-                    let network = services.get();
-                    if let Some(ap) = network
-                        .wireless_access_points
-                        .iter()
-                        .find(|a| a.ssid == ssid)
-                    {
-                        let ap_path: zbus::zvariant::OwnedObjectPath = ap.path.clone().into();
-                        let device_path: zbus::zvariant::OwnedObjectPath =
-                            ap.device_path.clone().into();
-                        let password = if pwd.is_empty() { None } else { Some(pwd) };
+                    let password = if pwd.is_empty() { None } else { Some(pwd) };
 
-                        entity.update(cx, |this, cx| {
-                            this.wifi_password.connecting = true;
-                            cx.notify();
-                        });
+                    entity.update(cx, |this, cx| {
+                        this.wifi_password.connecting = true;
+                        cx.notify();
+                    });
 
-                        cx.spawn({
-                            let entity = entity.clone();
-                            async move |cx| {
-                                let result = services
-                                    .dispatch(NetworkCommand::ConnectToAccessPoint {
-                                        device_path,
-                                        ap_path,
-                                        password,
-                                    })
-                                    .await;
+                    cx.spawn({
+                        let entity = entity.clone();
+                        async move |cx| {
+                            let result = services
+                                .dispatch(NetworkCommand::Connect { ssid, password })
+                                .await;
 
-                                entity.update(cx, |this, cx| {
-                                    this.wifi_password.connecting = false;
-                                    if result.is_ok() {
-                                        this.wifi_password.clear();
-                                    } else {
-                                        this.wifi_password.error =
-                                            Some("Connection failed".to_string());
-                                    }
-                                    cx.notify();
-                                });
-                            }
-                        })
-                        .detach();
-                    }
+                            entity.update(cx, |this, cx| {
+                                this.wifi_password.connecting = false;
+                                if result.is_ok() {
+                                    this.wifi_password.clear();
+                                } else {
+                                    this.wifi_password.error =
+                                        Some("Connection failed".to_string());
+                                }
+                                cx.notify();
+                            });
+                        }
+                    })
+                    .detach();
                 } else {
                     // Need password - prompt for one
                     entity.update(cx, |this, cx| {
@@ -280,12 +265,12 @@ impl Render for ControlCenter {
             }
         });
 
-        let on_wifi_disconnect: Rc<dyn Fn(zbus::zvariant::OwnedObjectPath, &mut App)> = Rc::new({
+        let on_wifi_disconnect: Rc<dyn Fn(String, &mut App)> = Rc::new({
             let services = wifi_services.clone();
-            move |path: zbus::zvariant::OwnedObjectPath, cx: &mut App| {
+            move |ssid: String, cx: &mut App| {
                 let s = services.clone();
                 cx.spawn(async move |_| {
-                    let _ = s.dispatch(NetworkCommand::Disconnect(path)).await;
+                    let _ = s.dispatch(NetworkCommand::Disconnect(ssid)).await;
                 })
                 .detach();
             }
@@ -390,8 +375,8 @@ impl Render for ControlCenter {
             };
             let on_wifi_disconnect = {
                 let on_wifi_disconnect = on_wifi_disconnect.clone();
-                move |path: zbus::zvariant::OwnedObjectPath, cx: &mut App| {
-                    (on_wifi_disconnect)(path, cx);
+                move |ssid: String, cx: &mut App| {
+                    (on_wifi_disconnect)(ssid, cx);
                 }
             };
             let on_cancel_password = {
@@ -557,50 +542,35 @@ impl Render for ControlCenter {
                         entity.update(cx, |this, cx| {
                             if let Some(ssid) = this.wifi_password.ssid.clone() {
                                 let password = this.wifi_password.input.text().to_string();
-                                let network = services.get();
-                                if let Some(ap) = network
-                                    .wireless_access_points
-                                    .iter()
-                                    .find(|a| a.ssid == ssid)
-                                {
-                                    let ap_path: zbus::zvariant::OwnedObjectPath =
-                                        ap.path.clone().into();
-                                    let device_path: zbus::zvariant::OwnedObjectPath =
-                                        ap.device_path.clone().into();
-                                    let password = if password.is_empty() {
-                                        None
-                                    } else {
-                                        Some(password)
-                                    };
+                                let password = if password.is_empty() {
+                                    None
+                                } else {
+                                    Some(password)
+                                };
 
-                                    this.wifi_password.connecting = true;
-                                    cx.notify();
+                                this.wifi_password.connecting = true;
+                                cx.notify();
 
-                                    cx.spawn({
-                                        let entity = cx.entity().clone();
-                                        async move |_, cx| {
-                                            let result = services
-                                                .dispatch(NetworkCommand::ConnectToAccessPoint {
-                                                    device_path,
-                                                    ap_path,
-                                                    password,
-                                                })
-                                                .await;
+                                cx.spawn({
+                                    let entity = cx.entity().clone();
+                                    async move |_, cx| {
+                                        let result = services
+                                            .dispatch(NetworkCommand::Connect { ssid, password })
+                                            .await;
 
-                                            entity.update(cx, |this, cx| {
-                                                this.wifi_password.connecting = false;
-                                                if result.is_ok() {
-                                                    this.wifi_password.clear();
-                                                } else {
-                                                    this.wifi_password.error =
-                                                        Some("Connection failed".to_string());
-                                                }
-                                                cx.notify();
-                                            });
-                                        }
-                                    })
-                                    .detach();
-                                }
+                                        entity.update(cx, |this, cx| {
+                                            this.wifi_password.connecting = false;
+                                            if result.is_ok() {
+                                                this.wifi_password.clear();
+                                            } else {
+                                                this.wifi_password.error =
+                                                    Some("Connection failed".to_string());
+                                            }
+                                            cx.notify();
+                                        });
+                                    }
+                                })
+                                .detach();
                             }
                         });
                     }

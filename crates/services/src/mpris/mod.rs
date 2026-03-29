@@ -176,6 +176,15 @@ impl MprisSubscriber {
         Ok(Self { data, status, conn })
     }
 
+    /// Fallback subscriber used when MPRIS is unavailable during startup.
+    pub async fn unavailable() -> anyhow::Result<Self> {
+        Ok(Self {
+            data: Mutable::new(MprisData::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
+            conn: Connection::session().await?,
+        })
+    }
+
     /// Get a signal that emits when MPRIS state changes.
     pub fn subscribe(&self) -> MutableSignalCloned<MprisData> {
         self.data.signal_cloned()

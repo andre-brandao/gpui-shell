@@ -5,12 +5,13 @@ pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    App, Context, ElementId, MouseButton, Render, SharedString, Size, Window, div, prelude::*, px,
+    AnyElement, App, Context, ElementId, MouseButton, Render, SharedString, Size, Window, div,
+    prelude::*, px,
 };
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use ui::{ActiveTheme, radius, spacing};
 
-use super::style;
+use super::{BarWidget, BarWidgetShell, style};
 use crate::config::{ActiveConfig, Config};
 use crate::state::AppState;
 use crate::state::watch;
@@ -86,90 +87,128 @@ impl Tray {
         })
         .detach();
     }
-}
 
-impl Render for Tray {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let items: Vec<_> = self.data.items.clone();
-        let config = &cx.config().bar.modules.tray;
-        let icon_size = config.icon_size;
-        let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
+    fn render_tray_item(
+        &self,
+        item: TrayItem,
+        icon_size: f32,
+        item_size: f32,
+        theme: &ui::Theme,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let item_for_left = item.clone();
+        let item_for_right = item.clone();
+        let item_for_middle = item.clone();
 
-        // Pre-compute colors for closures
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let interactive_active = theme.interactive.active;
-        let text_primary = theme.text.primary;
+        let icon_char = match &item.icon {
+            Some(TrayIcon::Name(name)) => get_icon_char(name, item.id.as_deref()),
+            Some(TrayIcon::Pixmap { .. }) => get_icon_char("", item.id.as_deref()),
+            None => get_icon_char("", item.id.as_deref()),
+        };
 
+        div()
+            .id(ElementId::Name(SharedString::from(format!(
+                "tray-item-{}",
+                item.name
+            ))))
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(item_size))
+            .rounded(px(radius::SM))
+            .cursor_pointer()
+            .bg(theme.transparent)
+            .hover(move |s| s.bg(theme.bg.tertiary))
+            .active(move |s| s.bg(theme.interactive.active))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event, window, cx| {
+                    this.on_item_click(&item_for_left, event, window, cx);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, _event, _window, cx| {
+                    this.dispatch_command(
+                        TrayCommand::ContextMenu {
+                            item_name: item_for_right.name.clone(),
+                        },
+                        cx,
+                    );
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Middle,
+                cx.listener(move |this, _event, _window, cx| {
+                    this.dispatch_command(
+                        TrayCommand::SecondaryActivate {
+                            item_name: item_for_middle.name.clone(),
+                        },
+                        cx,
+                    );
+                }),
+            )
+            .child(
+                div()
+                    .text_size(px(icon_size))
+                    .text_color(theme.text.secondary)
+                    .child(icon_char),
+            )
+            .into_any_element()
+    }
+
+    fn render_tray_strip(
+        &self,
+        items: Vec<TrayItem>,
+        icon_size: f32,
+        item_size: f32,
+        theme: &ui::Theme,
+        is_vertical: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         div()
             .id("systray")
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(style::CHIP_GAP))
-            .children(items.into_iter().map(|item| {
-                let item_for_left = item.clone();
-                let item_for_right = item.clone();
-                let item_for_middle = item.clone();
+            .justify_center()
+            .gap(px(style::group_gap(is_vertical)))
+            .children(
+                items
+                    .into_iter()
+                    .map(|item| self.render_tray_item(item, icon_size, item_size, theme, cx)),
+            )
+            .into_any_element()
+    }
+}
 
-                // Get the best icon representation - prefer icon name for nerd font rendering
-                let icon_char = match &item.icon {
-                    Some(TrayIcon::Name(name)) => get_icon_char(name, item.id.as_deref()),
-                    Some(TrayIcon::Pixmap { .. }) => get_icon_char("", item.id.as_deref()),
-                    None => get_icon_char("", item.id.as_deref()),
-                };
+impl BarWidget for Tray {
+    fn shell(&self) -> BarWidgetShell {
+        BarWidgetShell::Group
+    }
 
-                div()
-                    .id(ElementId::Name(SharedString::from(format!(
-                        "tray-item-{}",
-                        item.name
-                    ))))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .size(px(item_size))
-                    .rounded(px(radius::SM))
-                    .cursor_pointer()
-                    .bg(interactive_default)
-                    .hover(move |s| s.bg(interactive_hover))
-                    .active(move |s| s.bg(interactive_active))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, event, window, cx| {
-                            this.on_item_click(&item_for_left, event, window, cx);
-                        }),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Right,
-                        cx.listener(move |this, _event, _window, cx| {
-                            this.dispatch_command(
-                                TrayCommand::ContextMenu {
-                                    item_name: item_for_right.name.clone(),
-                                },
-                                cx,
-                            );
-                        }),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Middle,
-                        cx.listener(move |this, _event, _window, cx| {
-                            this.dispatch_command(
-                                TrayCommand::SecondaryActivate {
-                                    item_name: item_for_middle.name.clone(),
-                                },
-                                cx,
-                            );
-                        }),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(icon_size))
-                            .text_color(text_primary)
-                            .child(icon_char),
-                    )
-            }))
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let items: Vec<_> = self.data.items.clone();
+        let config = &cx.config().bar.modules.tray;
+        let icon_size = config.icon_size;
+        let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
+        let theme = cx.theme().clone();
+        self.render_tray_strip(items, icon_size, item_size, &theme, true, cx)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let items: Vec<_> = self.data.items.clone();
+        let config = &cx.config().bar.modules.tray;
+        let icon_size = config.icon_size;
+        let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
+        let theme = cx.theme().clone();
+        self.render_tray_strip(items, icon_size, item_size, &theme, false, cx)
+    }
+}
+
+impl Render for Tray {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }
 
@@ -477,78 +516,55 @@ impl Render for TrayMenuPanel {
 // Icon Mapping
 // ============================================================================
 
+/// Map a single identifier to a nerd font icon.
+fn lookup_icon(key: &str) -> Option<&'static str> {
+    match key {
+        "discord" | "vesktop" => Some("󰙯"),
+        "spotify" => Some("󰓇"),
+        "steam" => Some("󰓓"),
+        "firefox" => Some("󰈹"),
+        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => Some(""),
+        "telegram" | "telegram-desktop" => Some(""),
+        "slack" => Some("󰒱"),
+        "thunderbird" => Some("󰴃"),
+        "1password" => Some("󰢁"),
+        "bitwarden" => Some("󰞀"),
+        "dropbox" => Some("󰇣"),
+        "nextcloud" => Some("󰀸"),
+        "syncthing" | "syncthingtray" => Some("󰓦"),
+        "nm-applet" | "network-manager" | "network-manager-applet" => Some("󰖩"),
+        "blueman" | "blueman-applet" | "blueman-tray" => Some("󰂯"),
+        "pasystray" | "pavucontrol" => Some("󰕾"),
+        "udiskie" => Some("󰋊"),
+        "flameshot" => Some("󰹑"),
+        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some("󰄜"),
+        "tailscale" | "tailscale-systray" => Some("󰖂"),
+        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => {
+            Some("󰢹")
+        }
+        "network" | "network-wireless" => Some("󰖩"),
+        "bluetooth" | "bluetooth-active" => Some("󰂯"),
+        "audio" | "audio-volume-high" => Some("󰕾"),
+        "battery" | "battery-full" => Some("󰁹"),
+        _ => None,
+    }
+}
+
 /// Map common icon names or app IDs to nerd font characters.
 fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
-    // First try the icon name
-    let icon = match name.to_lowercase().as_str() {
-        "discord" => "󰙯",
-        "spotify" => "󰓇",
-        "steam" => "󰓓",
-        "firefox" => "󰈹",
-        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => "",
-        "telegram" | "telegram-desktop" => "",
-        "slack" => "󰒱",
-        "thunderbird" => "󰴃",
-        "vesktop" => "󰙯",
-        "1password" => "󰢁",
-        "bitwarden" => "󰞀",
-        "dropbox" => "󰇣",
-        "nextcloud" => "󰀸",
-        "syncthing" => "󰓦",
-        "nm-applet" | "network-manager" => "󰖩",
-        "blueman" | "blueman-applet" => "󰂯",
-        "pasystray" | "pavucontrol" => "󰕾",
-        "udiskie" => "󰋊",
-        "flameshot" => "󰹑",
-        "kdeconnect" => "󰄜",
-        "tailscale" => "󰖂",
-        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => "󰢹",
-        "network" | "network-wireless" => "󰖩",
-        "bluetooth" | "bluetooth-active" => "󰂯",
-        "audio" | "audio-volume-high" => "󰕾",
-        "battery" | "battery-full" => "󰁹",
-        _ => "",
-    };
-
-    if !icon.is_empty() {
+    if let Some(icon) = lookup_icon(&name.to_lowercase()) {
         return icon;
     }
 
-    // Try the app id as fallback
     if let Some(id) = app_id {
         let id_lower = id.to_lowercase();
 
         // Handle generic systray_XXXX pattern (often used by Go apps like Tailscale)
         if id_lower.starts_with("systray_") {
-            return "󰖂"; // Assume Tailscale for now
+            return "󰖂";
         }
 
-        let icon = match id_lower.as_str() {
-            "discord" | "vesktop" => "󰙯",
-            "spotify" => "󰓇",
-            "steam" => "󰓓",
-            "firefox" => "󰈹",
-            "chrome" | "google-chrome" | "chromium" | "chromium-browser" => "",
-            "telegram" | "telegram-desktop" => "",
-            "slack" => "󰒱",
-            "thunderbird" => "󰴃",
-            "1password" => "󰢁",
-            "bitwarden" => "󰞀",
-            "dropbox" => "󰇣",
-            "nextcloud" => "󰀸",
-            "syncthing" | "syncthingtray" => "󰓦",
-            "nm-applet" | "network-manager-applet" => "󰖩",
-            "blueman" | "blueman-applet" | "blueman-tray" => "󰂯",
-            "pasystray" | "pavucontrol" => "󰕾",
-            "udiskie" => "󰋊",
-            "flameshot" => "󰹑",
-            "kdeconnect" | "kdeconnectd" | "kde connect indicator" => "󰄜",
-            "tailscale" | "tailscale-systray" => "󰖂",
-            "remmina" | "org.remmina.remmina" | "remmina-icon" => "󰢹",
-            _ => "",
-        };
-
-        if !icon.is_empty() {
+        if let Some(icon) = lookup_icon(&id_lower) {
             return icon;
         }
     }
@@ -570,9 +586,9 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
 fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
     if hint.contains("chrome") || hint.contains("chromium") {
-        Some("")
+        Some("")
     } else if hint.contains("telegram") {
-        Some("")
+        Some("")
     } else if hint.contains("discord") || hint.contains("vesktop") {
         Some("󰙯")
     } else if hint.contains("spotify") {

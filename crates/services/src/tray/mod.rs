@@ -154,6 +154,15 @@ impl TraySubscriber {
         Ok(Self { data, status, conn })
     }
 
+    /// Fallback subscriber used when the tray watcher is unavailable during startup.
+    pub async fn unavailable() -> anyhow::Result<Self> {
+        Ok(Self {
+            data: Mutable::new(TrayData::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
+            conn: zbus::Connection::session().await?,
+        })
+    }
+
     /// Get a signal that emits when tray state changes.
     pub fn subscribe(&self) -> MutableSignalCloned<TrayData> {
         self.data.signal_cloned()

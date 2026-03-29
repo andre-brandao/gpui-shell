@@ -57,6 +57,15 @@ impl BluetoothSubscriber {
         Ok(Self { data, status, conn })
     }
 
+    /// Fallback subscriber used when Bluetooth is unavailable during startup.
+    pub async fn unavailable() -> anyhow::Result<Self> {
+        Ok(Self {
+            data: Mutable::new(BluetoothData::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
+            conn: zbus::Connection::system().await?,
+        })
+    }
+
     /// Get a signal that emits when Bluetooth state changes.
     pub fn subscribe(&self) -> MutableSignalCloned<BluetoothData> {
         self.data.signal_cloned()

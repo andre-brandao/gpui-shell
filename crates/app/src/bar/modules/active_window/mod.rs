@@ -3,11 +3,11 @@
 mod config;
 pub use config::ActiveWindowConfig;
 
-use gpui::{Context, Render, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Render, Window, div, prelude::*, px};
 use services::CompositorState;
-use ui::{ActiveTheme, radius, spacing};
+use ui::ActiveTheme;
 
-use super::style;
+use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
@@ -19,6 +19,9 @@ pub struct ActiveWindow {
 }
 
 impl ActiveWindow {
+    const VERTICAL_LINE_WIDTH: usize = 3;
+    const VERTICAL_MAX_LINES: usize = 5;
+
     /// Create a new active window widget.
     pub fn new(cx: &mut Context<Self>) -> Self {
         let compositor = AppState::compositor(cx).clone();
@@ -36,15 +39,22 @@ impl ActiveWindow {
         }
     }
 
+    fn window_text(&self) -> &str {
+        let Some(window) = self.state.active_window.as_ref() else {
+            return "";
+        };
+
+        let title = window.title.trim();
+        if !title.is_empty() {
+            return title;
+        }
+
+        window.class.trim()
+    }
+
     /// Get the display title, truncated if necessary.
     fn display_title(&self, max_length: usize) -> String {
-        let title = self
-            .state
-            .active_window
-            .as_ref()
-            .map(|w| w.title.as_str())
-            .unwrap_or("");
-
+        let title = self.window_text();
         if title.is_empty() {
             return String::new();
         }
@@ -106,19 +116,7 @@ impl ActiveWindow {
     }
 
     fn vertical_lines(&self, max_length: usize) -> Vec<String> {
-        let source = self
-            .state
-            .active_window
-            .as_ref()
-            .map(|window| {
-                if window.title.trim().is_empty() {
-                    window.class.trim()
-                } else {
-                    window.title.trim()
-                }
-            })
-            .unwrap_or_default();
-
+        let source = self.window_text();
         if source.is_empty() {
             return Vec::new();
         }
@@ -127,37 +125,139 @@ impl ActiveWindow {
         } else {
             max_length
         };
-        let mut lines = Vec::new();
-        let mut count = 0;
+        let max_lines = Self::VERTICAL_MAX_LINES;
+        let line_width = Self::VERTICAL_LINE_WIDTH;
 
-        for ch in source.chars() {
-            if count >= max_length {
-                break;
-            }
-            if ch == '\n' || ch == '\r' {
-                continue;
-            }
-            lines.push(ch.to_string());
-            count += 1;
+        let filtered: String = source
+            .chars()
+            .filter(|ch| *ch != '\n' && *ch != '\r')
+            .take(max_length)
+            .collect();
+        let was_truncated = source
+            .chars()
+            .filter(|ch| *ch != '\n' && *ch != '\r')
+            .count()
+            > filtered.chars().count();
+
+        let tokens: Vec<String> = filtered
+            .split(|ch: char| !ch.is_alphanumeric())
+            .filter(|segment| !segment.is_empty())
+            .map(|segment| Self::vertical_segment(segment, line_width))
+            .filter(|segment| !segment.is_empty())
+            .collect();
+
+        let mut lines = if tokens.len() > 1 {
+            tokens
+        } else {
+            let condensed: String = filtered.chars().filter(|ch| ch.is_alphanumeric()).collect();
+            Self::chunk_vertical_text(&condensed, line_width)
+        };
+
+        if lines.is_empty() {
+            lines = Self::chunk_vertical_text(&filtered, line_width);
+        }
+
+        let clipped = lines.len() > max_lines;
+        lines.truncate(max_lines);
+
+        if was_truncated || clipped {
+            Self::mark_vertical_overflow(&mut lines);
         }
 
         lines
     }
+
+    fn vertical_segment(segment: &str, width: usize) -> String {
+        segment
+            .chars()
+            .take(width)
+            .collect::<String>()
+            .to_uppercase()
+    }
+
+    fn chunk_vertical_text(source: &str, width: usize) -> Vec<String> {
+        let chars: Vec<char> = source.chars().collect();
+        chars
+            .chunks(width)
+            .map(|chunk| chunk.iter().collect::<String>().to_uppercase())
+            .collect()
+    }
+
+    fn mark_vertical_overflow(lines: &mut [String]) {
+        let Some(last) = lines.last_mut() else {
+            return;
+        };
+
+        let mut chars: Vec<char> = last.chars().collect();
+        if chars.is_empty() {
+            *last = "…".to_string();
+            return;
+        }
+
+        if chars.len() >= 3 {
+            chars.truncate(chars.len() - 1);
+        } else {
+            chars.truncate(1);
+        }
+
+        chars.push('…');
+        *last = chars.into_iter().collect();
+    }
+
+    fn has_window_content(&self) -> bool {
+        !self.window_text().is_empty()
+    }
 }
 
-impl Render for ActiveWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let has_window_text = self
-            .state
-            .active_window
-            .as_ref()
-            .map(|window| !window.title.trim().is_empty())
-            .unwrap_or(false);
+impl BarWidget for ActiveWindow {
+    fn shell(&self) -> BarWidgetShell {
+        if self.has_window_content() {
+            BarWidgetShell::Standard
+        } else {
+            BarWidgetShell::None
+        }
+    }
 
-        if !has_window_text {
-            return div().id("active-window");
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        if !self.has_window_content() {
+            return div().id("active-window").into_any_element();
+        }
+
+        let vertical_lines = self.vertical_lines(15);
+        let text_primary = theme.text.primary;
+        let text_secondary = theme.text.secondary;
+
+        div()
+            .id("active-window")
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(1.0))
+            .children(
+                vertical_lines
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(idx, line)| {
+                        style::vertical_text_line(
+                            div()
+                                .text_size(style::label_size(theme, true))
+                                .text_color(if idx == 0 {
+                                    text_primary
+                                } else {
+                                    text_secondary
+                                })
+                                .child(line),
+                        )
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        if !self.has_window_content() {
+            return div().id("active-window").into_any_element();
         }
 
         let config = &cx.config().bar.modules.active_window;
@@ -167,63 +267,39 @@ impl Render for ActiveWindow {
         } else {
             None
         };
-        let vertical_lines = self.vertical_lines(15);
-        let interactive_default = theme.interactive.default;
-        let border_subtle = theme.border.subtle;
-        let text_primary = theme.text.primary;
-        let text_secondary = theme.text.secondary;
 
-        if is_vertical {
-            div()
-                .id("active-window")
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(px(0.1))
-                // .px(px(style::chip_padding_x(true)))
-                // .py(px(style::CHIP_PADDING_Y))
-                .rounded(px(radius::SM))
-                .children(
-                    vertical_lines
-                        .into_iter()
-                        .enumerate()
-                        .map(move |(idx, line)| {
-                            div()
-                                .text_size(style::label_size(theme, true))
-                                .text_color(if idx == 0 {
-                                    text_primary
-                                } else {
-                                    text_secondary
-                                })
-                                .child(line)
-                        }),
+        div()
+            .id("active-window")
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(style::CHIP_GAP))
+            .max_w(px(460.0))
+            .overflow_hidden()
+            .when_some(icon, |el, icon| {
+                el.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(style::icon(false)))
+                        .text_color(theme.text.secondary)
+                        .child(icon),
                 )
-        } else {
-            div()
-                .id("active-window")
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(px(style::CHIP_GAP))
-                .px(px(spacing::MD))
-                .py(px(style::CHIP_PADDING_Y))
-                .max_w(px(460.0))
-                .rounded(px(radius::SM))
-                .bg(interactive_default)
-                .border_1()
-                .border_color(border_subtle)
-                .text_size(style::label_size(theme, false))
-                .text_color(theme.text.primary)
-                .overflow_hidden()
-                .when_some(icon, |el, icon| {
-                    el.child(
-                        div()
-                            .text_size(px(style::icon(false)))
-                            .text_color(theme.text.secondary)
-                            .child(icon),
-                    )
-                })
-                .child(div().overflow_hidden().text_ellipsis().child(title))
-        }
+            })
+            .child(
+                div()
+                    .flex_shrink()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .text_size(style::label_size(theme, false))
+                    .text_color(theme.text.primary)
+                    .child(title),
+            )
+            .into_any_element()
+    }
+}
+
+impl Render for ActiveWindow {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }

@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 
 use anyhow::Result;
-use zbus::zvariant::OwnedObjectPath;
+use tracing::debug;
+use zbus::zvariant::{OwnedObjectPath, Value};
 
 use super::dbus::access_point::AccessPointProxy;
 use super::dbus::active_connection::ActiveConnectionProxy;
@@ -183,6 +184,120 @@ impl<'a> NetworkManager<'a> {
         }
 
         Ok(network_statistics)
+    }
+
+    /// Find a saved connection profile by SSID.
+    ///
+    /// Returns the D-Bus object path of the connection if found.
+    pub async fn find_connection_by_ssid(&self, ssid: &str) -> Result<Option<OwnedObjectPath>> {
+        let settings_proxy = SettingsProxy::new(self.inner().connection()).await?;
+        let connections = settings_proxy.list_connections().await?;
+
+        for conn_path in connections {
+            let conn_proxy = ConnectionProxy::builder(self.inner().connection())
+                .path(conn_path)?
+                .build()
+                .await?;
+
+            if let Ok(settings) = conn_proxy.get_settings().await
+                && let Some(conn_section) = settings.get("connection")
+                && let Some(id_value) = conn_section.get("id")
+                && let Ok(id) = <String>::try_from(id_value.clone())
+                && id == ssid
+            {
+                return Ok(Some(conn_proxy.inner().path().to_owned().into()));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Connect to a network by SSID.
+    ///
+    /// For known networks, activates the existing connection profile.
+    /// For new networks, finds the best AP and creates a new connection.
+    pub async fn connect_by_ssid(&self, ssid: &str, password: Option<String>) -> Result<()> {
+        let existing = self.find_connection_by_ssid(ssid).await?;
+
+        // Find the AP and device for this SSID from current scan results
+        let aps = self.wireless_access_points().await?;
+        let ap = aps
+            .iter()
+            .find(|a| a.ssid == ssid)
+            .ok_or_else(|| anyhow::anyhow!("Access point '{}' not found", ssid))?;
+
+        let device = zbus::zvariant::ObjectPath::try_from(ap.device_path.as_str())?;
+
+        if let Some(conn_path) = existing {
+            debug!("Activating known connection for {}", ssid);
+            let conn_obj = zbus::zvariant::ObjectPath::try_from(conn_path.as_str())?;
+            let root = zbus::zvariant::ObjectPath::try_from("/")?;
+            self.0
+                .activate_connection(&conn_obj, &device, &root)
+                .await?;
+        } else {
+            debug!("Creating new connection for {}", ssid);
+            let ap_obj = zbus::zvariant::ObjectPath::try_from(ap.path.as_str())?;
+
+            let mut settings: HashMap<&str, HashMap<&str, Value<'_>>> = HashMap::from([
+                (
+                    "802-11-wireless",
+                    HashMap::from([("ssid", Value::Array(ssid.as_bytes().into()))]),
+                ),
+                (
+                    "connection",
+                    HashMap::from([
+                        ("id", Value::Str(ssid.into())),
+                        ("type", Value::Str("802-11-wireless".into())),
+                    ]),
+                ),
+            ]);
+
+            if let Some(ref password) = password {
+                settings.insert(
+                    "802-11-wireless-security",
+                    HashMap::from([
+                        ("psk", Value::Str(password.clone().into())),
+                        ("key-mgmt", Value::Str("wpa-psk".into())),
+                    ]),
+                );
+            }
+
+            self.0
+                .add_and_activate_connection(settings, &device, &ap_obj)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Disconnect an active WiFi connection by SSID.
+    pub async fn disconnect_by_ssid(&self, ssid: &str) -> Result<()> {
+        let active = self.active_connections().await?;
+        let wifi_conn = active.iter().find_map(|c| {
+            if let ActiveConnectionInfo::WiFi {
+                name, object_path, ..
+            } = c
+            {
+                if name == ssid {
+                    Some(object_path.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        if let Some(path) = wifi_conn {
+            self.0
+                .deactivate_connection(&zbus::zvariant::ObjectPath::try_from(path.as_str())?)
+                .await?;
+        } else {
+            anyhow::bail!("No active WiFi connection for '{}'", ssid);
+        }
+
+        Ok(())
     }
 
     /// Get SSIDs of all known/saved WiFi connections.
