@@ -275,12 +275,11 @@ pub enum NetworkCommand {
     ToggleWifi,
     /// Request a scan for wireless networks.
     RequestScan,
-    /// Connect to a wireless network.
-    ConnectToAccessPoint {
-        device_path: OwnedObjectPath,
-        ap_path: OwnedObjectPath,
+    /// Connect to a wireless network by SSID.
+    Connect {
+        ssid: String,
         password: Option<String>,
     },
-    /// Disconnect the active connection.
-    Disconnect(OwnedObjectPath),
+    /// Disconnect the active WiFi connection by SSID.
+    Disconnect(String),
 }

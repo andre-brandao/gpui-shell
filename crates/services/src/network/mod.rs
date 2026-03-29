@@ -100,34 +100,13 @@ impl NetworkSubscriber {
                         .await;
                 }
             }
-            NetworkCommand::ConnectToAccessPoint {
-                device_path,
-                ap_path,
-                password,
-            } => {
-                debug!("Connecting to access point: {:?}", ap_path);
-                let device = zbus::zvariant::ObjectPath::try_from(device_path.as_str())?;
-                let ap = zbus::zvariant::ObjectPath::try_from(ap_path.as_str())?;
-
-                if let Some(ref password) = password {
-                    let mut settings = std::collections::HashMap::new();
-                    let mut wifi_security = std::collections::HashMap::new();
-                    wifi_security.insert("key-mgmt", zbus::zvariant::Value::from("wpa-psk"));
-                    wifi_security.insert("psk", zbus::zvariant::Value::from(password.as_str()));
-                    settings.insert("802-11-wireless-security", wifi_security);
-                    nm.add_and_activate_connection(settings, &device, &ap)
-                        .await?;
-                } else {
-                    nm.add_and_activate_connection(std::collections::HashMap::new(), &device, &ap)
-                        .await?;
-                };
+            NetworkCommand::Connect { ssid, password } => {
+                debug!("Connecting to: {}", ssid);
+                nm.connect_by_ssid(&ssid, password).await?;
             }
-            NetworkCommand::Disconnect(connection_path) => {
-                debug!("Disconnecting: {:?}", connection_path);
-                nm.deactivate_connection(&zbus::zvariant::ObjectPath::try_from(
-                    connection_path.as_str(),
-                )?)
-                .await?;
+            NetworkCommand::Disconnect(ssid) => {
+                debug!("Disconnecting: {}", ssid);
+                nm.disconnect_by_ssid(&ssid).await?;
             }
         }
 
@@ -216,7 +195,7 @@ async fn run_listener(data: Mutable<NetworkData>, conn: Connection) -> anyhow::R
         })
         .boxed();
 
-    // Stream for active connections changes
+    // Stream for active connections changes — also refresh AP list
     let data_ac = data.clone();
     let conn_ac = conn.clone();
     let active_connections = nm
@@ -226,15 +205,53 @@ async fn run_listener(data: Mutable<NetworkData>, conn: Connection) -> anyhow::R
             let data = data_ac.clone();
             let conn = conn_ac.clone();
             async move {
-                if let Ok(nm) = NetworkManager::new(&conn).await
-                    && let Ok(connections) = nm.active_connections().await
-                {
-                    data.lock_mut().active_connections = connections;
-                    debug!("Active connections changed");
+                if let Ok(nm) = NetworkManager::new(&conn).await {
+                    if let Ok(connections) = nm.active_connections().await {
+                        data.lock_mut().active_connections = connections;
+                        debug!("Active connections changed");
+                    }
+                    // Also refresh access points so connected/disconnected state is current
+                    if let Ok(aps) = nm.wireless_access_points().await {
+                        data.lock_mut().wireless_access_points = aps;
+                    }
                 }
             }
         })
         .boxed();
+
+    // Set up streams for scan completion on wireless devices
+    // When a scan completes, refresh the entire AP list
+    let wireless_devices = nm.wireless_devices().await?;
+    let mut scan_changes = Vec::new();
+
+    for device_path in &wireless_devices {
+        if let Ok(wireless) = dbus::device::wireless::WirelessDeviceProxy::builder(&conn)
+            .path(device_path.clone())?
+            .build()
+            .await
+        {
+            let data_scan = data.clone();
+            let conn_scan = conn.clone();
+            scan_changes.push(
+                wireless
+                    .receive_last_scan_changed()
+                    .await
+                    .then(move |_| {
+                        let data = data_scan.clone();
+                        let conn = conn_scan.clone();
+                        async move {
+                            if let Ok(nm) = NetworkManager::new(&conn).await
+                                && let Ok(aps) = nm.wireless_access_points().await
+                            {
+                                data.lock_mut().wireless_access_points = aps;
+                                debug!("Access points refreshed after scan");
+                            }
+                        }
+                    })
+                    .boxed(),
+            );
+        }
+    }
 
     // Set up streams for access point strength changes
     let wireless_aps = nm.wireless_access_points().await?;
@@ -362,6 +379,10 @@ async fn run_listener(data: Mutable<NetworkData>, conn: Connection) -> anyhow::R
         connectivity_changed,
         active_connections,
     ]);
+
+    for stream in scan_changes {
+        events.push(stream);
+    }
 
     for stream in strength_changes {
         events.push(stream);

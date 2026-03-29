@@ -6,7 +6,6 @@
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
 use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_masked_input_line, spacing};
-use zbus::zvariant::OwnedObjectPath;
 
 use crate::state::AppState;
 
@@ -52,7 +51,7 @@ impl WifiPasswordState {
 pub fn render_wifi_section(
     password_state: &WifiPasswordState,
     on_connect: impl Fn(String, Option<String>, &mut App) + Clone + 'static,
-    on_disconnect: impl Fn(OwnedObjectPath, &mut App) + Clone + 'static,
+    on_disconnect: impl Fn(String, &mut App) + Clone + 'static,
     on_cancel_password: impl Fn(&mut App) + Clone + 'static,
     cx: &App,
 ) -> impl IntoElement {
@@ -61,19 +60,14 @@ pub fn render_wifi_section(
     let list_bg = theme.bg.primary;
     let list_border = theme.border.subtle;
 
-    // Get current connection name + object path
-    let active_wifi = network.active_connections.iter().find_map(|c| {
-        if let services::ActiveConnectionInfo::WiFi {
-            name, object_path, ..
-        } = c
-        {
-            Some((name.clone(), object_path.clone()))
+    // Get current connected WiFi SSID
+    let connected_name = network.active_connections.iter().find_map(|c| {
+        if let services::ActiveConnectionInfo::WiFi { name, .. } = c {
+            Some(name.clone())
         } else {
             None
         }
     });
-    let connected_name = active_wifi.as_ref().map(|(name, _)| name.clone());
-    let connected_path = active_wifi.map(|(_, path)| path);
     let wifi_enabled = network.wifi_enabled;
 
     // Sort access points: connected first, then by signal strength
@@ -170,7 +164,7 @@ pub fn render_wifi_section(
                         let on_cancel = on_cancel_password.clone();
                         let current_password = password_state.input.clone();
                         let is_connecting = password_state.connecting;
-                        let disconnect_path = connected_path.clone();
+                        let disconnect_ssid = connected_name.clone();
 
                         if is_entering_password {
                             let ssid_submit = ssid.clone();
@@ -196,7 +190,7 @@ pub fn render_wifi_section(
                                 is_secured,
                                 is_known,
                                 is_connected,
-                                disconnect_path.clone(),
+                                disconnect_ssid.clone(),
                                 move |cx| {
                                     if is_connected {
                                         // Already connected, do nothing or disconnect
@@ -235,9 +229,9 @@ fn render_network_item(
     secured: bool,
     known: bool,
     connected: bool,
-    disconnect_path: Option<OwnedObjectPath>,
+    disconnect_ssid: Option<String>,
     on_click: impl Fn(&mut App) + 'static,
-    on_disconnect: impl Fn(OwnedObjectPath, &mut App) + 'static,
+    on_disconnect: impl Fn(String, &mut App) + 'static,
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
@@ -333,7 +327,7 @@ fn render_network_item(
             )
         })
         .when(connected, move |el| {
-            let disconnect_path = disconnect_path.clone();
+            let disconnect_ssid = disconnect_ssid.clone();
             el.child(
                 div()
                     .id(ElementId::Name(SharedString::from(format!(
@@ -350,8 +344,8 @@ fn render_network_item(
                     .hover(move |s| s.bg(interactive_hover))
                     .tooltip(control_center_tooltip("Disconnect"))
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        if let Some(path) = disconnect_path.clone() {
-                            on_disconnect(path, cx);
+                        if let Some(ssid) = disconnect_ssid.clone() {
+                            on_disconnect(ssid, cx);
                         }
                     })
                     .child(
