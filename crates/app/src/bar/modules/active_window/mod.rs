@@ -273,18 +273,25 @@ impl BarWidget for ActiveWindow {
             .justify_center()
             .gap(px(style::CHIP_GAP))
             .max_w(px(460.0))
-            .text_size(style::label_size(theme, false))
-            .text_color(theme.text.primary)
             .overflow_hidden()
             .when_some(icon, |el, icon| {
                 el.child(
                     div()
+                        .flex_shrink_0()
                         .text_size(px(style::icon(false)))
                         .text_color(theme.text.secondary)
                         .child(icon),
                 )
             })
-            .child(div().overflow_hidden().text_ellipsis().child(title))
+            .child(
+                div()
+                    .flex_shrink()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .text_size(style::label_size(theme, false))
+                    .text_color(theme.text.primary)
+                    .child(title),
+            )
             .into_any_element()
     }
 }

@@ -151,6 +151,7 @@ impl KeyboardLayout {
             .flex()
             .when(is_vertical, |el| el.flex_col())
             .items_center()
+            .justify_center()
             .gap(px(style::CHIP_GAP))
             .on_mouse_down(
                 MouseButton::Left,
@@ -160,12 +161,14 @@ impl KeyboardLayout {
             )
             .child(
                 div()
+                    .flex_shrink_0()
                     .text_size(px(style::icon(is_vertical)))
                     .text_color(theme.text.secondary)
                     .child(icon),
             )
             .child(
                 div()
+                    .flex_shrink_0()
                     .text_size(style::label_size(theme, is_vertical))
                     .text_color(theme.text.primary)
                     .child(short_name),

@@ -69,6 +69,7 @@ impl NotificationWidget {
             .flex()
             .when(is_vertical, |el| el.flex_col())
             .items_center()
+            .justify_center()
             .gap(px(style::CHIP_GAP))
             .on_mouse_down(
                 MouseButton::Left,
@@ -76,6 +77,7 @@ impl NotificationWidget {
             )
             .child(
                 div()
+                    .flex_shrink_0()
                     .text_size(px(style::icon(is_vertical)))
                     .text_color(if self.data.dnd {
                         theme.text.muted
@@ -87,6 +89,7 @@ impl NotificationWidget {
             .when(unread > 0, |el| {
                 el.child(
                     div()
+                        .flex_shrink_0()
                         .text_size(theme.font_sizes.xs)
                         .text_color(badge_color)
                         .child(unread.to_string()),

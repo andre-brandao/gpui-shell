@@ -168,6 +168,7 @@ pub fn bar_widget_shell(
     div()
         .when(is_vertical, |el| el.flex().flex_col().items_center())
         .when(!is_vertical, |el| el.flex().items_center())
+        .justify_center()
         .px(px(chip_padding_x(is_vertical)))
         .py(px(shell_padding_y(is_vertical)))
         .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
@@ -225,6 +226,7 @@ pub fn bar_group_shell(
     div()
         .when(is_vertical, |el| el.flex().flex_col().items_center())
         .when(!is_vertical, |el| el.flex().items_center())
+        .justify_center()
         .px(px(group_padding_x(is_vertical)))
         .py(px(shell_padding_y(is_vertical)))
         .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
@@ -253,15 +255,18 @@ pub fn bar_stat(
         .flex()
         .when(is_vertical, |el| el.flex_col())
         .items_center()
+        .justify_center()
         .gap(px(CHIP_GAP))
         .child(
             div()
+                .flex_shrink_0()
                 .text_size(px(icon(is_vertical)))
                 .text_color(color)
                 .child(icon_text),
         )
         .child(
             div()
+                .flex_shrink()
                 .text_size(label_size(theme, is_vertical))
                 .text_color(color)
                 .child(value_text),

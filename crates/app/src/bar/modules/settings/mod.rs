@@ -286,6 +286,10 @@ impl Settings {
 
     fn render_status_icon(icon: &'static str, size: f32, color: gpui::Hsla) -> AnyElement {
         div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_shrink_0()
             .text_size(px(size))
             .text_color(color)
             .child(icon)
@@ -302,6 +306,7 @@ impl Settings {
             .flex()
             .when(is_vertical, |el| el.flex_col())
             .items_center()
+            .justify_center()
             .gap(px(style::CHIP_GAP))
             .child(Self::render_status_icon(
                 view.battery_icon,
@@ -335,6 +340,7 @@ impl BarWidget for Settings {
             .flex()
             .flex_col()
             .items_center()
+            .justify_center()
             .gap(px(style::CHIP_GAP))
             .on_mouse_down(
                 MouseButton::Left,
@@ -391,6 +397,7 @@ impl BarWidget for Settings {
             .id("settings-widget")
             .flex()
             .items_center()
+            .justify_center()
             .gap(px(3.0))
             .on_mouse_down(
                 MouseButton::Left,

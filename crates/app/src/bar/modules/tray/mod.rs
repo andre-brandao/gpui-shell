@@ -171,6 +171,7 @@ impl Tray {
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
+            .justify_center()
             .gap(px(style::group_gap(is_vertical)))
             .children(
                 items

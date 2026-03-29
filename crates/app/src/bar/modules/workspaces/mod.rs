@@ -176,6 +176,7 @@ impl Workspaces {
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
+            .justify_center()
             .gap(px(style::group_gap(is_vertical)))
             .on_scroll_wheel(
                 cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, _cx| {
