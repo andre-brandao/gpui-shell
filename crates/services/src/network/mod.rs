@@ -58,6 +58,15 @@ impl NetworkSubscriber {
         Ok(Self { data, status, conn })
     }
 
+    /// Fallback subscriber used when NetworkManager is unavailable during startup.
+    pub async fn unavailable() -> anyhow::Result<Self> {
+        Ok(Self {
+            data: Mutable::new(NetworkData::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
+            conn: Connection::system().await?,
+        })
+    }
+
     /// Get a signal that emits when network state changes.
     pub fn subscribe(&self) -> MutableSignalCloned<NetworkData> {
         self.data.signal_cloned()

@@ -3,11 +3,11 @@
 mod config;
 pub use config::WorkspacesConfig;
 
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
 use ui::{ActiveTheme, radius};
 
-use super::style;
+use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
@@ -91,38 +91,96 @@ impl Workspaces {
             name.chars().take(3).collect::<String>().to_uppercase()
         }
     }
-}
 
-impl Render for Workspaces {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let active_workspace_id = self.state.active_workspace_id;
-        let config = &cx.config().bar.modules.workspaces;
-        let show_numbers = config.show_numbers;
-        let show_icons = config.show_icons;
+    fn render_workspace_pill(
+        &self,
+        ws: &services::Workspace,
+        active_workspace_id: Option<i32>,
+        theme: &ui::Theme,
+        is_vertical: bool,
+        show_numbers: bool,
+        show_icons: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let workspace_id = ws.id;
+        let is_active = active_workspace_id == Some(ws.id);
+        let has_windows = ws.windows > 0;
+        let label = Self::workspace_label(ws, is_vertical, show_numbers, show_icons);
 
-        // Pre-compute colors for closures
-        let accent_primary = theme.accent.primary;
-        let accent_hover = theme.accent.hover;
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let bg_primary = theme.bg.primary;
-        let text_secondary = theme.text.secondary;
-        let text_muted = theme.text.muted;
-        let transparent = gpui::transparent_black();
+        div()
+            .id(format!("workspace-{}", ws.id))
+            .flex()
+            .items_center()
+            .justify_center()
+            .w(if is_vertical {
+                if is_active {
+                    px(style::WORKSPACE_PILL_WIDTH_ACTIVE)
+                } else {
+                    px(style::WORKSPACE_PILL_WIDTH)
+                }
+            } else if is_active {
+                px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL_ACTIVE)
+            } else {
+                px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL)
+            })
+            .h(px(style::WORKSPACE_PILL_HEIGHT))
+            .rounded(px(radius::SM))
+            .cursor_pointer()
+            .bg(if is_active {
+                theme.accent.primary
+            } else if has_windows {
+                theme.bg.tertiary
+            } else {
+                gpui::transparent_black()
+            })
+            .hover(move |s| {
+                if is_active {
+                    s.bg(theme.accent.hover)
+                } else {
+                    s.bg(theme.interactive.hover)
+                }
+            })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _event, _window, _cx| {
+                    this.focus_workspace(workspace_id);
+                }),
+            )
+            .when(!label.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_size(style::label_size(theme, is_vertical))
+                        .text_color(if is_active {
+                            theme.bg.primary
+                        } else if has_windows {
+                            theme.text.secondary
+                        } else {
+                            theme.text.muted
+                        })
+                        .child(label),
+                )
+            })
+            .into_any_element()
+    }
 
+    fn render_workspace_strip(
+        &self,
+        theme: &ui::Theme,
+        is_vertical: bool,
+        active_workspace_id: Option<i32>,
+        config: &WorkspacesConfig,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         div()
             .id("workspaces")
             .flex()
             .when(is_vertical, |this| this.flex_col())
             .items_center()
-            .gap(px(style::CHIP_GAP))
-            // Scroll to switch workspaces
+            .justify_center()
+            .gap(px(style::group_gap(is_vertical)))
             .on_scroll_wheel(
                 cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, _cx| {
                     let delta = event.delta.pixel_delta(px(1.0));
-                    // Use Pixels comparison methods instead of accessing private field
                     if delta.y.abs() > px(0.5) {
                         let direction = if delta.y > px(0.0) { -1 } else { 1 };
                         this.scroll_workspace(direction);
@@ -135,70 +193,41 @@ impl Render for Workspaces {
                     .iter()
                     .filter(|ws| !ws.is_special)
                     .map(|ws| {
-                        let workspace_id = ws.id;
-                        let is_active = active_workspace_id == Some(ws.id);
-                        let has_windows = ws.windows > 0;
-                        let label =
-                            Self::workspace_label(ws, is_vertical, show_numbers, show_icons);
-
-                        div()
-                            .id(format!("workspace-{}", ws.id))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .when(is_vertical, |this| {
-                                this.w(if is_active {
-                                    px(style::WORKSPACE_PILL_WIDTH_ACTIVE)
-                                } else {
-                                    px(style::WORKSPACE_PILL_WIDTH)
-                                })
-                                .h(px(style::WORKSPACE_PILL_HEIGHT))
-                            })
-                            .when(!is_vertical, |this| {
-                                this.w(if is_active {
-                                    px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL_ACTIVE)
-                                } else {
-                                    px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL)
-                                })
-                                .h(px(style::WORKSPACE_PILL_HEIGHT))
-                            })
-                            .rounded(px(radius::SM))
-                            .cursor_pointer()
-                            .bg(if is_active {
-                                accent_primary
-                            } else if has_windows {
-                                interactive_default
-                            } else {
-                                transparent
-                            })
-                            .hover(move |s| {
-                                if is_active {
-                                    s.bg(accent_hover)
-                                } else {
-                                    s.bg(interactive_hover)
-                                }
-                            })
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, _event, _window, _cx| {
-                                    this.focus_workspace(workspace_id);
-                                }),
-                            )
-                            .when(!label.is_empty(), |this| {
-                                this.child(
-                                    div()
-                                        .text_size(style::label_size(theme, is_vertical))
-                                        .text_color(if is_active {
-                                            bg_primary
-                                        } else if has_windows {
-                                            text_secondary
-                                        } else {
-                                            text_muted
-                                        })
-                                        .child(label),
-                                )
-                            })
+                        self.render_workspace_pill(
+                            ws,
+                            active_workspace_id,
+                            theme,
+                            is_vertical,
+                            config.show_numbers,
+                            config.show_icons,
+                            cx,
+                        )
                     }),
             )
+            .into_any_element()
+    }
+}
+
+impl BarWidget for Workspaces {
+    fn shell(&self) -> BarWidgetShell {
+        BarWidgetShell::Group
+    }
+
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = cx.config().bar.modules.workspaces.clone();
+        self.render_workspace_strip(&theme, true, self.state.active_workspace_id, &config, cx)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = cx.config().bar.modules.workspaces.clone();
+        self.render_workspace_strip(&theme, false, self.state.active_workspace_id, &config, cx)
+    }
+}
+
+impl Render for Workspaces {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }

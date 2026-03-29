@@ -353,6 +353,15 @@ impl UPowerSubscriber {
         Ok(subscriber)
     }
 
+    /// Fallback subscriber used when UPower is unavailable during startup.
+    pub async fn unavailable() -> Result<Self> {
+        Ok(Self {
+            data: Mutable::new(UPowerData::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
+            conn: Connection::system().await?,
+        })
+    }
+
     /// Get a signal that emits when data changes.
     pub fn subscribe(&self) -> MutableSignalCloned<UPowerData> {
         self.data.signal_cloned()

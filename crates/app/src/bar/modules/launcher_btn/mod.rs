@@ -4,10 +4,10 @@ mod config;
 pub use config::LauncherBtnConfig;
 
 use crate::launcher;
-use gpui::{Context, MouseButton, Window, div, prelude::*, px};
-use ui::{ActiveTheme, radius};
+use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
+use ui::ActiveTheme;
 
-use super::style;
+use super::{BarWidget, style};
 use crate::config::ActiveConfig;
 
 /// A button widget that opens the launcher when clicked.
@@ -20,37 +20,27 @@ impl LauncherBtn {
     pub fn new(_cx: &mut Context<Self>) -> Self {
         LauncherBtn
     }
-}
 
-impl Render for LauncherBtn {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-        let config = &cx.config().bar.modules.launcher_btn;
-        let icon = if config.icon.trim().is_empty() {
+    fn icon(&self, configured_icon: &str) -> String {
+        if configured_icon.trim().is_empty() {
             LAUNCHER_ICON.to_string()
         } else {
-            config.icon.clone()
-        };
+            configured_icon.to_string()
+        }
+    }
 
-        // Pre-compute colors for closures
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let interactive_active = theme.interactive.active;
-        let text_primary = theme.text.primary;
-
+    fn render_button_content(
+        &self,
+        icon: String,
+        theme: &ui::Theme,
+        is_vertical: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         div()
             .id("launcher-btn")
             .flex()
             .items_center()
             .justify_center()
-            .px(px(style::chip_padding_x(is_vertical)))
-            .py(px(style::CHIP_PADDING_Y))
-            .rounded(px(radius::SM))
-            .cursor_pointer()
-            .bg(interactive_default)
-            .hover(move |s| s.bg(interactive_hover))
-            .active(move |s| s.bg(interactive_active))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |_, _, _, cx| {
@@ -61,9 +51,34 @@ impl Render for LauncherBtn {
                 div().flex().items_center().justify_center().child(
                     div()
                         .text_size(px(style::icon(is_vertical)))
-                        .text_color(text_primary)
+                        .text_color(theme.text.primary)
                         .child(icon),
                 ),
             )
+            .into_any_element()
+    }
+}
+
+impl BarWidget for LauncherBtn {
+    fn is_interactive(&self) -> bool {
+        true
+    }
+
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = &cx.config().bar.modules.launcher_btn;
+        self.render_button_content(self.icon(&config.icon), &theme, true, cx)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme().clone();
+        let config = &cx.config().bar.modules.launcher_btn;
+        self.render_button_content(self.icon(&config.icon), &theme, false, cx)
+    }
+}
+
+impl Render for LauncherBtn {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }

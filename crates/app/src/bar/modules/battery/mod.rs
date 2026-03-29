@@ -3,11 +3,11 @@
 mod config;
 pub use config::BatteryConfig;
 
-use gpui::{Context, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, div, prelude::*, px};
 use services::{BatteryState, UPowerData};
-use ui::{ActiveTheme, radius};
+use ui::ActiveTheme;
 
-use super::style;
+use super::{BarWidget, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
@@ -15,6 +15,13 @@ use crate::state::watch;
 /// A battery widget that displays the current battery percentage and status.
 pub struct Battery {
     data: UPowerData,
+}
+
+struct BatteryView {
+    icon: Option<&'static str>,
+    text: String,
+    icon_color: gpui::Hsla,
+    text_color: gpui::Hsla,
 }
 
 impl Battery {
@@ -48,45 +55,8 @@ impl Battery {
         }
     }
 
-}
-
-impl Render for Battery {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let is_vertical = cx.config().bar.is_vertical();
-
-        let config = &cx.config().bar.modules.battery;
-        let icon = if config.show_icon {
-            Some(self.battery_icon())
-        } else {
-            None
-        };
-        let text = if config.show_percentage {
-            self.battery_text(is_vertical)
-        } else {
-            String::new()
-        };
-        let icon_size = style::icon(is_vertical);
-        let text_size = style::label_size(theme, is_vertical);
-
-        // Get the text color based on battery state
-        let text_color = match &self.data.battery {
-            Some(battery) => {
-                if battery.is_critical() {
-                    theme.status.error
-                } else if battery.is_low() {
-                    theme.status.warning
-                } else if battery.is_charging() {
-                    theme.status.info
-                } else {
-                    theme.text.primary
-                }
-            }
-            None => theme.text.muted,
-        };
-
-        // Get the icon color based on battery state
-        let icon_color = match &self.data.battery {
+    fn icon_color(&self, theme: &ui::Theme) -> gpui::Hsla {
+        match &self.data.battery {
             Some(battery) => {
                 if battery.is_critical() {
                     theme.status.error
@@ -102,63 +72,95 @@ impl Render for Battery {
                 }
             }
             None => theme.text.muted,
-        };
-
-        if is_vertical {
-            div()
-                .id("battery-widget")
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(px(style::CHIP_GAP))
-                .px(px(style::chip_padding_x(true)))
-                .py(px(style::CHIP_PADDING_Y))
-                .rounded(px(radius::SM))
-                // Battery icon
-                .when_some(icon, |el, icon| {
-                    el.child(
-                        div()
-                            .text_size(px(icon_size))
-                            .text_color(icon_color)
-                            .child(icon),
-                    )
-                })
-                // Battery percentage
-                .when(!text.is_empty(), |this| {
-                    this.child(
-                        div()
-                            .text_size(text_size)
-                            .text_color(text_color)
-                            .child(text),
-                    )
-                })
-        } else {
-            div()
-                .id("battery-widget")
-                .flex()
-                .items_center()
-                .gap(px(style::CHIP_GAP))
-                .px(px(style::chip_padding_x(false)))
-                .py(px(style::CHIP_PADDING_Y))
-                .rounded(px(radius::SM))
-                // Battery icon
-                .when_some(icon, |el, icon| {
-                    el.child(
-                        div()
-                            .text_size(px(icon_size))
-                            .text_color(icon_color)
-                            .child(icon),
-                    )
-                })
-                // Battery percentage
-                .when(!text.is_empty(), |this| {
-                    this.child(
-                        div()
-                            .text_size(text_size)
-                            .text_color(text_color)
-                            .child(text),
-                    )
-                })
         }
+    }
+
+    fn text_color(&self, theme: &ui::Theme) -> gpui::Hsla {
+        match &self.data.battery {
+            Some(battery) => {
+                if battery.is_critical() {
+                    theme.status.error
+                } else if battery.is_low() {
+                    theme.status.warning
+                } else if battery.is_charging() {
+                    theme.status.info
+                } else {
+                    theme.text.primary
+                }
+            }
+            None => theme.text.muted,
+        }
+    }
+
+    fn view(&self, theme: &ui::Theme, is_vertical: bool, config: &BatteryConfig) -> BatteryView {
+        BatteryView {
+            icon: config.show_icon.then(|| self.battery_icon()),
+            text: if config.show_percentage {
+                self.battery_text(is_vertical)
+            } else {
+                String::new()
+            },
+            icon_color: self.icon_color(theme),
+            text_color: self.text_color(theme),
+        }
+    }
+
+    fn render_battery_content(
+        &self,
+        theme: &ui::Theme,
+        view: BatteryView,
+        is_vertical: bool,
+    ) -> AnyElement {
+        div()
+            .id("battery-widget")
+            .flex()
+            .when(is_vertical, |el| el.flex_col())
+            .items_center()
+            .gap(px(style::CHIP_GAP))
+            .when_some(view.icon, |el, icon| {
+                el.child(
+                    div()
+                        .text_size(px(style::icon(is_vertical)))
+                        .text_color(view.icon_color)
+                        .child(icon),
+                )
+            })
+            .when(!view.text.is_empty(), |this| {
+                this.child(if is_vertical {
+                    style::vertical_text_line(
+                        div()
+                            .text_size(style::label_size(theme, is_vertical))
+                            .text_color(view.text_color)
+                            .child(view.text),
+                    )
+                } else {
+                    div()
+                        .text_size(style::label_size(theme, is_vertical))
+                        .text_color(view.text_color)
+                        .child(view.text)
+                        .into_any_element()
+                })
+            })
+            .into_any_element()
+    }
+}
+
+impl BarWidget for Battery {
+    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        let config = &cx.config().bar.modules.battery;
+        self.render_battery_content(theme, self.view(theme, true, config), true)
+    }
+
+    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        let config = &cx.config().bar.modules.battery;
+        self.render_battery_content(theme, self.view(theme, false, config), false)
+    }
+}
+
+impl Render for Battery {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_bar_widget(window, cx)
     }
 }
