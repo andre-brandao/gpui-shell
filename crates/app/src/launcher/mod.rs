@@ -24,7 +24,7 @@ use crate::config::Config;
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorDown, CursorLeft, CursorRight, CursorUp, DeleteWordBack,
     PageDown, PageUp, SelectAll, SelectLeft, SelectRight, SelectWordLeft, SelectWordRight,
-    WordLeft, WordRight,
+    TabComplete, WordLeft, WordRight,
 };
 use crate::state::{AppState, watch};
 
@@ -248,6 +248,9 @@ impl Launcher {
                     ViewInput::Enter => {
                         return self.execute_selected(cx);
                     }
+                    ViewInput::Tab => {
+                        // Tab is only handled by views that opt in
+                    }
                 }
                 false
             }
@@ -308,19 +311,7 @@ impl Launcher {
     }
 
     fn footer_prefix_hints(&self) -> String {
-        let mut hints: Vec<String> = self
-            .views
-            .iter()
-            .filter_map(|view| Self::format_prefix_hint(view.prefix(), view.name()))
-            .collect();
-
-        if let Some(help_hint) =
-            Self::format_prefix_hint(self.help_view.prefix(), self.help_view.name())
-        {
-            hints.push(help_hint);
-        }
-
-        hints.join(" · ")
+        Self::format_prefix_hint(self.help_view.prefix(), self.help_view.name()).unwrap_or_default()
     }
 }
 
@@ -363,7 +354,6 @@ impl Render for Launcher {
         let content = current_view.render_content(&vx, cx);
 
         // Pre-compute colors for closures
-        let text_primary = theme.text.primary;
         let text_muted = theme.text.muted;
         let text_secondary = theme.text.secondary;
         let text_disabled = theme.text.disabled;
@@ -410,6 +400,10 @@ impl Render for Launcher {
             }))
             .on_action(cx.listener(|this, _: &PageDown, _window, cx| {
                 this.handle_input(ViewInput::PageDown, cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &TabComplete, _window, cx| {
+                this.handle_input(ViewInput::Tab, cx);
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &Backspace, _window, cx| {
@@ -487,7 +481,7 @@ impl Render for Launcher {
             .border_1()
             .border_color(border_default)
             .rounded(px(radius::LG))
-            .text_color(text_primary)
+            .text_color(theme.text.primary)
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -512,7 +506,7 @@ impl Render for Launcher {
                         div()
                             .flex_1()
                             .text_size(theme.font_sizes.md)
-                            .text_color(text_primary)
+                            .text_color(theme.text.primary)
                             .child(render_input_line(&self.input, &placeholder, cx)),
                     )
                     // View badge (right side)
@@ -569,13 +563,25 @@ impl Render for Launcher {
                         div()
                             .flex()
                             .items_center()
+                            .min_w_0()
+                            .flex_shrink()
                             .gap(px(spacing::SM))
                             .text_size(theme.font_sizes.xs)
                             .text_color(text_disabled)
-                            .child(div().flex().items_center().gap(px(4.)).child(prefix_hints)),
+                            .overflow_hidden()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(4.))
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .whitespace_nowrap()
+                                    .child(prefix_hints),
+                            ),
                     )
                     // Right side - action hints from view
-                    .child(footer_bar),
+                    .child(div().flex_shrink_0().child(footer_bar)),
             )
     }
 }

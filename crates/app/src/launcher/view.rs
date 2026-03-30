@@ -32,6 +32,8 @@ pub enum ViewInput {
     PageDown,
     /// Enter pressed.
     Enter,
+    /// Tab pressed.
+    Tab,
 }
 
 /// Result of handling input.

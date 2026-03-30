@@ -24,6 +24,7 @@ actions!(
         SelectWordRight,
         SelectLeft,
         SelectRight,
+        TabComplete,
     ]
 );
 
@@ -55,6 +56,7 @@ pub fn register(cx: &mut App) {
         KeyBinding::new("ctrl-a", SelectAll, Some("Launcher")),
         KeyBinding::new("shift-left", SelectLeft, Some("Launcher")),
         KeyBinding::new("shift-right", SelectRight, Some("Launcher")),
+        KeyBinding::new("tab", TabComplete, Some("Launcher")),
         KeyBinding::new("ctrl-f", CursorRight, Some("Launcher")),
         KeyBinding::new("ctrl-h", CursorLeft, Some("Launcher")),
         KeyBinding::new("ctrl-l", CursorRight, Some("Launcher")),
