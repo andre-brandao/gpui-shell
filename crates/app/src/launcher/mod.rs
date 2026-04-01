@@ -26,6 +26,42 @@ use crate::keybinds::{
     PageDown, PageUp, SelectAll, SelectLeft, SelectRight, SelectWordLeft, SelectWordRight,
     TabComplete, WordLeft, WordRight,
 };
+
+/// All commands the launcher can execute, mapped from keybind actions.
+enum LauncherCommand {
+    Cancel,
+    Confirm,
+    CursorUp,
+    CursorDown,
+    PageUp,
+    PageDown,
+    TabComplete,
+    Backspace,
+    DeleteWordBack,
+    CursorLeft,
+    CursorRight,
+    WordLeft,
+    WordRight,
+    SelectWordLeft,
+    SelectWordRight,
+    SelectLeft,
+    SelectRight,
+    SelectAll,
+}
+
+/// Bind a GPUI action type to a `LauncherCommand` variant, routing through
+/// `Launcher::execute`. Closes the window when `execute` returns `true`.
+macro_rules! bind_cmd {
+    ($el:expr, $cx:expr, $action:ty, $cmd:expr) => {
+        $el.on_action($cx.listener(|this, _: &$action, window, cx| {
+            if this.execute($cmd, cx) {
+                *LAUNCHER_WINDOW.lock().unwrap() = None;
+                window.remove_window();
+            }
+            cx.notify();
+        }))
+    };
+}
 use crate::state::{AppState, watch};
 
 /// Number of items to jump when using Page Up/Down.
@@ -313,6 +349,86 @@ impl Launcher {
     fn footer_prefix_hints(&self) -> String {
         Self::format_prefix_hint(self.help_view.prefix(), self.help_view.name()).unwrap_or_default()
     }
+
+    /// Unified command dispatch. Returns `true` if the launcher window should close.
+    fn execute(&mut self, cmd: LauncherCommand, cx: &mut App) -> bool {
+        match cmd {
+            LauncherCommand::Cancel => {
+                if self.input.is_empty() {
+                    return true;
+                }
+                self.input.clear();
+                self.selected_index = 0;
+                self.reset_scroll();
+                false
+            }
+            LauncherCommand::Confirm => self.handle_input(ViewInput::Enter, cx),
+            LauncherCommand::CursorUp => {
+                self.handle_input(ViewInput::Up, cx);
+                false
+            }
+            LauncherCommand::CursorDown => {
+                self.handle_input(ViewInput::Down, cx);
+                false
+            }
+            LauncherCommand::PageUp => {
+                self.handle_input(ViewInput::PageUp, cx);
+                false
+            }
+            LauncherCommand::PageDown => {
+                self.handle_input(ViewInput::PageDown, cx);
+                false
+            }
+            LauncherCommand::TabComplete => {
+                self.handle_input(ViewInput::Tab, cx);
+                false
+            }
+            LauncherCommand::Backspace => {
+                self.handle_input(ViewInput::Backspace, cx);
+                false
+            }
+            LauncherCommand::DeleteWordBack => {
+                self.delete_word_back();
+                false
+            }
+            LauncherCommand::CursorLeft => {
+                self.input.move_left(false);
+                false
+            }
+            LauncherCommand::CursorRight => {
+                self.input.move_right(false);
+                false
+            }
+            LauncherCommand::WordLeft => {
+                self.input.move_word_left(false);
+                false
+            }
+            LauncherCommand::WordRight => {
+                self.input.move_word_right(false);
+                false
+            }
+            LauncherCommand::SelectWordLeft => {
+                self.input.move_word_left(true);
+                false
+            }
+            LauncherCommand::SelectWordRight => {
+                self.input.move_word_right(true);
+                false
+            }
+            LauncherCommand::SelectLeft => {
+                self.input.move_left(true);
+                false
+            }
+            LauncherCommand::SelectRight => {
+                self.input.move_right(true);
+                false
+            }
+            LauncherCommand::SelectAll => {
+                self.input.select_all();
+                false
+            }
+        }
+    }
 }
 
 impl Focusable for Launcher {
@@ -361,95 +477,29 @@ impl Render for Launcher {
         let border_default = theme.border.default;
         let interactive_default = theme.interactive.default;
 
-        div()
+        let el = div()
             .id("launcher")
             .track_focus(&self.focus_handle)
-            .key_context("Launcher")
-            .on_action(cx.listener(|this, _: &Cancel, window, cx| {
-                if this.input.is_empty() {
-                    // Clear the static handle before removing window
-                    *LAUNCHER_WINDOW.lock().unwrap() = None;
-                    window.remove_window();
-                } else {
-                    // First Esc clears input; second Esc closes.
-                    this.input.clear();
-                    this.selected_index = 0;
-                    this.reset_scroll();
-                    cx.notify();
-                }
-            }))
-            .on_action(cx.listener(|this, _: &Confirm, window, cx| {
-                if this.handle_input(ViewInput::Enter, cx) {
-                    // Clear the static handle before removing window
-                    *LAUNCHER_WINDOW.lock().unwrap() = None;
-                    window.remove_window();
-                }
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorUp, _window, cx| {
-                this.handle_input(ViewInput::Up, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorDown, _window, cx| {
-                this.handle_input(ViewInput::Down, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &PageUp, _window, cx| {
-                this.handle_input(ViewInput::PageUp, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &PageDown, _window, cx| {
-                this.handle_input(ViewInput::PageDown, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &TabComplete, _window, cx| {
-                this.handle_input(ViewInput::Tab, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &Backspace, _window, cx| {
-                this.handle_input(ViewInput::Backspace, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &DeleteWordBack, _window, cx| {
-                this.delete_word_back();
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorLeft, _window, cx| {
-                this.input.move_left(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorRight, _window, cx| {
-                this.input.move_right(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &WordLeft, _window, cx| {
-                this.input.move_word_left(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &WordRight, _window, cx| {
-                this.input.move_word_right(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectWordLeft, _window, cx| {
-                this.input.move_word_left(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectWordRight, _window, cx| {
-                this.input.move_word_right(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectLeft, _window, cx| {
-                this.input.move_left(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectRight, _window, cx| {
-                this.input.move_right(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectAll, _window, cx| {
-                this.input.select_all();
-                cx.notify();
-            }))
+            .key_context("Launcher");
+        let el = bind_cmd!(el, cx, Cancel, LauncherCommand::Cancel);
+        let el = bind_cmd!(el, cx, Confirm, LauncherCommand::Confirm);
+        let el = bind_cmd!(el, cx, CursorUp, LauncherCommand::CursorUp);
+        let el = bind_cmd!(el, cx, CursorDown, LauncherCommand::CursorDown);
+        let el = bind_cmd!(el, cx, PageUp, LauncherCommand::PageUp);
+        let el = bind_cmd!(el, cx, PageDown, LauncherCommand::PageDown);
+        let el = bind_cmd!(el, cx, TabComplete, LauncherCommand::TabComplete);
+        let el = bind_cmd!(el, cx, Backspace, LauncherCommand::Backspace);
+        let el = bind_cmd!(el, cx, DeleteWordBack, LauncherCommand::DeleteWordBack);
+        let el = bind_cmd!(el, cx, CursorLeft, LauncherCommand::CursorLeft);
+        let el = bind_cmd!(el, cx, CursorRight, LauncherCommand::CursorRight);
+        let el = bind_cmd!(el, cx, WordLeft, LauncherCommand::WordLeft);
+        let el = bind_cmd!(el, cx, WordRight, LauncherCommand::WordRight);
+        let el = bind_cmd!(el, cx, SelectWordLeft, LauncherCommand::SelectWordLeft);
+        let el = bind_cmd!(el, cx, SelectWordRight, LauncherCommand::SelectWordRight);
+        let el = bind_cmd!(el, cx, SelectLeft, LauncherCommand::SelectLeft);
+        let el = bind_cmd!(el, cx, SelectRight, LauncherCommand::SelectRight);
+        let el = bind_cmd!(el, cx, SelectAll, LauncherCommand::SelectAll);
+        el
             .on_key_down(
                 cx.listener(move |this, event: &gpui::KeyDownEvent, _window, cx| {
                     if event.keystroke.modifiers.control || event.keystroke.modifiers.alt {

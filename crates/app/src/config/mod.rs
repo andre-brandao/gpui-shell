@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use services::FileWatcher;
 use ui::Theme;
 
+use crate::keybinds::{self, KeybindsConfig};
+
 pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
 pub use crate::control_center::ControlCenterConfig;
 pub use crate::launcher::config::LauncherConfig;
@@ -27,6 +29,8 @@ pub struct Config {
     pub watch_config: bool,
     /// Watch theme.toml for changes and hot-reload (requires restart to change).
     pub watch_theme: bool,
+    /// Watch keybinds.toml for changes and hot-reload (requires restart to change).
+    pub watch_keybinds: bool,
 }
 
 impl Default for Config {
@@ -39,6 +43,7 @@ impl Default for Config {
             control_center: ControlCenterConfig::default(),
             watch_config: true,
             watch_theme: true,
+            watch_keybinds: true,
         }
     }
 }
@@ -64,6 +69,17 @@ impl Config {
             }
         };
 
+        // Load keybinds from keybinds.toml (or use defaults)
+        let keybinds_config = match keybinds::load_keybinds() {
+            Ok(kb) => kb,
+            Err(err) => {
+                tracing::warn!("Failed to load keybinds, using defaults: {}", err);
+                KeybindsConfig::default()
+            }
+        };
+        keybinds::register(&keybinds_config, cx);
+
+        cx.set_global(keybinds_config);
         cx.set_global(theme);
         cx.set_global(config);
         Self::start_hot_reload(cx);
@@ -157,6 +173,37 @@ impl Config {
                 }
             })
             .detach();
+        }
+
+        // Start keybinds file watcher
+        if config.watch_keybinds {
+            if let Ok(path) = keybinds::keybinds_path() {
+                if path.exists() {
+                    let mut rx = FileWatcher::watch(path);
+
+                    cx.spawn(async move |cx| {
+                        while rx.recv().await.is_some() {
+                            cx.update(|cx| {
+                                tracing::info!("Keybinds file changed, reloading");
+                                match keybinds::load_keybinds() {
+                                    Ok(kb) => {
+                                        keybinds::register(&kb, cx);
+                                        *cx.global_mut::<KeybindsConfig>() = kb;
+                                    }
+                                    Err(err) => {
+                                        tracing::warn!(
+                                            "Failed to reload keybinds from disk: {}",
+                                            err
+                                        );
+                                    }
+                                }
+                                cx.refresh_windows();
+                            });
+                        }
+                    })
+                    .detach();
+                }
+            }
         }
 
         // Start theme file watcher

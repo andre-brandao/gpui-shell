@@ -1,20 +1,30 @@
-use gpui::{App, KeyBinding, actions};
+//! Keyboard actions and configurable key bindings.
+//!
+//! Bindings are loaded from `~/.config/gpuishell/keybinds.toml`. If the file
+//! does not exist, sensible defaults are used. User overrides replace the
+//! default keystrokes for a given action; unmentioned actions keep defaults.
 
-// Shared keyboard actions used across views.
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use gpui::{App, Global, KeyBinding, actions};
+use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
 actions!(
     keybinds,
     [
         Cancel,
         Confirm,
-        // Launcher list navigation
         CursorUp,
         CursorDown,
         PageUp,
         PageDown,
-        // Editing
         Backspace,
         DeleteWordBack,
-        // Cursor movement / selection
         CursorLeft,
         CursorRight,
         WordLeft,
@@ -28,59 +38,202 @@ actions!(
     ]
 );
 
-pub fn register(cx: &mut App) {
-    // Launcher bindings (arrows + safe vim-ish defaults).
-    cx.bind_keys([
-        KeyBinding::new("escape", Cancel, Some("Launcher")),
-        KeyBinding::new("enter", Confirm, Some("Launcher")),
-        KeyBinding::new("up", CursorUp, Some("Launcher")),
-        KeyBinding::new("down", CursorDown, Some("Launcher")),
-        KeyBinding::new("pageup", PageUp, Some("Launcher")),
-        KeyBinding::new("pagedown", PageDown, Some("Launcher")),
-        KeyBinding::new("ctrl-k", CursorUp, Some("Launcher")),
-        KeyBinding::new("ctrl-p", CursorUp, Some("Launcher")),
-        KeyBinding::new("ctrl-j", CursorDown, Some("Launcher")),
-        KeyBinding::new("ctrl-n", CursorDown, Some("Launcher")),
-        KeyBinding::new("ctrl-u", PageUp, Some("Launcher")),
-        KeyBinding::new("ctrl-d", PageDown, Some("Launcher")),
-        KeyBinding::new("backspace", Backspace, Some("Launcher")),
-        KeyBinding::new("ctrl-backspace", DeleteWordBack, Some("Launcher")),
-        KeyBinding::new("left", CursorLeft, Some("Launcher")),
-        KeyBinding::new("right", CursorRight, Some("Launcher")),
-        KeyBinding::new("ctrl-left", WordLeft, Some("Launcher")),
-        KeyBinding::new("ctrl-right", WordRight, Some("Launcher")),
-        KeyBinding::new("ctrl-shift-left", SelectWordLeft, Some("Launcher")),
-        KeyBinding::new("ctrl-shift-right", SelectWordRight, Some("Launcher")),
-        KeyBinding::new("ctrl-b", WordLeft, Some("Launcher")),
-        KeyBinding::new("ctrl-w", WordRight, Some("Launcher")),
-        KeyBinding::new("ctrl-a", SelectAll, Some("Launcher")),
-        KeyBinding::new("shift-left", SelectLeft, Some("Launcher")),
-        KeyBinding::new("shift-right", SelectRight, Some("Launcher")),
-        KeyBinding::new("tab", TabComplete, Some("Launcher")),
-        KeyBinding::new("ctrl-f", CursorRight, Some("Launcher")),
-        KeyBinding::new("ctrl-h", CursorLeft, Some("Launcher")),
-        KeyBinding::new("ctrl-l", CursorRight, Some("Launcher")),
-    ]);
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
-    // Control Center (WiFi password prompt editing).
-    cx.bind_keys([
-        KeyBinding::new("escape", Cancel, Some("ControlCenter")),
-        KeyBinding::new("enter", Confirm, Some("ControlCenter")),
-        KeyBinding::new("backspace", Backspace, Some("ControlCenter")),
-        KeyBinding::new("ctrl-backspace", DeleteWordBack, Some("ControlCenter")),
-        KeyBinding::new("left", CursorLeft, Some("ControlCenter")),
-        KeyBinding::new("right", CursorRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-left", WordLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-right", WordRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-shift-left", SelectWordLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-shift-right", SelectWordRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-b", WordLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-w", WordRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-a", SelectAll, Some("ControlCenter")),
-        KeyBinding::new("shift-left", SelectLeft, Some("ControlCenter")),
-        KeyBinding::new("shift-right", SelectRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-f", CursorRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-h", CursorLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-l", CursorRight, Some("ControlCenter")),
-    ]);
+/// Per-context binding overrides: action name → list of keystrokes.
+type BindingMap = HashMap<String, Vec<String>>;
+
+/// User-configurable keybindings loaded from `keybinds.toml`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeybindsConfig {
+    pub launcher: BindingMap,
+    pub control_center: BindingMap,
+}
+
+impl Global for KeybindsConfig {}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+pub fn keybinds_path() -> anyhow::Result<PathBuf> {
+    let dir = if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        PathBuf::from(xdg).join("gpuishell")
+    } else if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home).join(".config").join("gpuishell")
+    } else {
+        anyhow::bail!("Unable to determine config path (XDG_CONFIG_HOME/HOME not set)");
+    };
+    Ok(dir.join("keybinds.toml"))
+}
+
+pub fn load_keybinds() -> anyhow::Result<KeybindsConfig> {
+    let path = keybinds_path()?;
+    if !path.exists() {
+        return Ok(KeybindsConfig::default());
+    }
+    let raw = std::fs::read_to_string(&path)?;
+    Ok(toml::from_str(&raw)?)
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic binding builder
+// ---------------------------------------------------------------------------
+
+/// Emit `KeyBinding`s for one action in a given context.
+///
+/// Uses a macro because `KeyBinding::new` requires a concrete `Action` type.
+macro_rules! emit_bindings {
+    ($bindings:expr, $overrides:expr, $context:expr, $name:expr, $defaults:expr, $action:expr) => {{
+        let keys = $overrides.get($name);
+        if let Some(user_keys) = keys {
+            for keystroke in user_keys {
+                $bindings.push(KeyBinding::new(keystroke.as_str(), $action, Some($context)));
+            }
+        } else {
+            for keystroke in $defaults {
+                $bindings.push(KeyBinding::new(*keystroke, $action, Some($context)));
+            }
+        }
+    }};
+}
+
+/// Build shared editing bindings for a context.
+fn build_shared_editing(overrides: &BindingMap, context: &str) -> Vec<KeyBinding> {
+    let mut b = Vec::new();
+    emit_bindings!(b, overrides, context, "cancel", &["escape"], Cancel);
+    emit_bindings!(b, overrides, context, "confirm", &["enter"], Confirm);
+    emit_bindings!(b, overrides, context, "backspace", &["backspace"], Backspace);
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "delete_word_back",
+        &["ctrl-backspace"],
+        DeleteWordBack
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "cursor_left",
+        &["left", "ctrl-h"],
+        CursorLeft
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "cursor_right",
+        &["right", "ctrl-f", "ctrl-l"],
+        CursorRight
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "word_left",
+        &["ctrl-left", "ctrl-b"],
+        WordLeft
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "word_right",
+        &["ctrl-right", "ctrl-w"],
+        WordRight
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "select_word_left",
+        &["ctrl-shift-left"],
+        SelectWordLeft
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "select_word_right",
+        &["ctrl-shift-right"],
+        SelectWordRight
+    );
+    emit_bindings!(b, overrides, context, "select_all", &["ctrl-a"], SelectAll);
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "select_left",
+        &["shift-left"],
+        SelectLeft
+    );
+    emit_bindings!(
+        b,
+        overrides,
+        context,
+        "select_right",
+        &["shift-right"],
+        SelectRight
+    );
+    b
+}
+
+// ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
+
+/// Register keybindings with GPUI, merging defaults with user config.
+pub fn register(config: &KeybindsConfig, cx: &mut App) {
+    // Launcher: shared editing + navigation
+    let mut launcher = build_shared_editing(&config.launcher, "Launcher");
+    emit_bindings!(
+        launcher,
+        &config.launcher,
+        "Launcher",
+        "cursor_up",
+        &["up", "ctrl-k", "ctrl-p"],
+        CursorUp
+    );
+    emit_bindings!(
+        launcher,
+        &config.launcher,
+        "Launcher",
+        "cursor_down",
+        &["down", "ctrl-j", "ctrl-n"],
+        CursorDown
+    );
+    emit_bindings!(
+        launcher,
+        &config.launcher,
+        "Launcher",
+        "page_up",
+        &["pageup", "ctrl-u"],
+        PageUp
+    );
+    emit_bindings!(
+        launcher,
+        &config.launcher,
+        "Launcher",
+        "page_down",
+        &["pagedown", "ctrl-d"],
+        PageDown
+    );
+    emit_bindings!(
+        launcher,
+        &config.launcher,
+        "Launcher",
+        "tab_complete",
+        &["tab"],
+        TabComplete
+    );
+    cx.bind_keys(launcher);
+
+    // ControlCenter: shared editing only
+    let control_center = build_shared_editing(&config.control_center, "ControlCenter");
+    cx.bind_keys(control_center);
 }

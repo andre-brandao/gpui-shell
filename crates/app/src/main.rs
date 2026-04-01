@@ -54,9 +54,6 @@ async fn main() {
         config::Config::init(cx);
         state::AppState::init(services, cx);
 
-        // Register keybindings
-        keybinds::register(cx);
-
         bar::init(cx);
         notification::init(cx);
         osd::init(cx);
