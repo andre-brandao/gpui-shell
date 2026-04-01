@@ -2458,7 +2458,7 @@ dependencies = [
 
 [[package]]
 name = "gpuishell"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "assets",
@@ -2469,6 +2469,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "hyprland",
+ "image",
  "serde",
  "services",
  "tokio",

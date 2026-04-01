@@ -5,10 +5,12 @@ pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    AnyElement, App, Context, ElementId, MouseButton, Render, SharedString, Size, Window, div,
-    prelude::*, px,
+    AnyElement, App, Context, ElementId, MouseButton, RenderImage, Render, SharedString, Size,
+    Window, div, img, prelude::*, px,
 };
+use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
+use std::sync::Arc;
 use ui::{ActiveTheme, radius, spacing};
 
 use super::{BarWidget, BarWidgetShell, style};
@@ -100,10 +102,34 @@ impl Tray {
         let item_for_right = item.clone();
         let item_for_middle = item.clone();
 
-        let icon_char = match &item.icon {
-            Some(TrayIcon::Name(name)) => get_icon_char(name, item.id.as_deref()),
-            Some(TrayIcon::Pixmap { .. }) => get_icon_char("", item.id.as_deref()),
-            None => get_icon_char("", item.id.as_deref()),
+        let icon_element: AnyElement = if let Some((w, h, data)) = item.icon_pixmap() {
+            let mut bgra = data.to_vec();
+            for pixel in bgra.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+            }
+            if let Some(buffer) = RgbaImage::from_raw(w, h, bgra) {
+                let frame = Frame::new(buffer);
+                let render_img = Arc::new(RenderImage::new(vec![frame]));
+                img(render_img).size(px(icon_size)).into_any_element()
+            } else {
+                let icon_char = get_icon_char("", item.id.as_deref());
+                div()
+                    .text_size(px(icon_size))
+                    .text_color(theme.text.secondary)
+                    .child(icon_char)
+                    .into_any_element()
+            }
+        } else {
+            let icon_char = match &item.icon {
+                Some(TrayIcon::Name(name)) => get_icon_char(name, item.id.as_deref()),
+                None => get_icon_char("", item.id.as_deref()),
+                Some(TrayIcon::Pixmap { .. }) => unreachable!(),
+            };
+            div()
+                .text_size(px(icon_size))
+                .text_color(theme.text.secondary)
+                .child(icon_char)
+                .into_any_element()
         };
 
         div()
@@ -148,12 +174,7 @@ impl Tray {
                     );
                 }),
             )
-            .child(
-                div()
-                    .text_size(px(icon_size))
-                    .text_color(theme.text.secondary)
-                    .child(icon_char),
-            )
+            .child(icon_element)
             .into_any_element()
     }
 
