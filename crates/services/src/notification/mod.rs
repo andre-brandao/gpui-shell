@@ -483,43 +483,10 @@ fn is_image_source(value: &str) -> bool {
         || value.starts_with("https://")
 }
 
-// this code is kinda trash TODO: replace it
-/// Normalize a file path from D-Bus hints, handling file:// URIs and URL encoding.
 fn normalize_path(value: &str) -> PathBuf {
     let path = value.strip_prefix("file://").unwrap_or(value);
-
-    // URL decode percent-encoded characters, handling UTF-8 properly
-    let mut result = Vec::with_capacity(path.len());
-    let mut chars = path.chars();
-
-    while let Some(ch) = chars.next() {
-        if ch == '%' {
-            // Try to decode percent-encoded byte
-            let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    result.push(byte);
-                    continue;
-                }
-            }
-            // If decoding fails, keep the original as UTF-8 bytes
-            result.push(b'%');
-            result.extend_from_slice(hex.as_bytes());
-        } else {
-            // Push the UTF-8 bytes of the character
-            let mut buf = [0; 4];
-            let s = ch.encode_utf8(&mut buf);
-            result.extend_from_slice(s.as_bytes());
-        }
-    }
-
-    // Convert the byte vector to a String, handling invalid UTF-8
-    let decoded = String::from_utf8(result).unwrap_or_else(|e| {
-        // If UTF-8 decoding fails, use lossy conversion
-        String::from_utf8_lossy(&e.into_bytes()).into_owned()
-    });
-
-    PathBuf::from(decoded)
+    let decoded = percent_encoding::percent_decode_str(path).decode_utf8_lossy();
+    PathBuf::from(decoded.as_ref())
 }
 
 #[proxy(

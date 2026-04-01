@@ -4983,6 +4983,7 @@ dependencies = [
  "itertools 0.14.0",
  "libpulse-binding",
  "niri-ipc",
+ "percent-encoding",
  "pipewire",
  "serde",
  "serde_json",
