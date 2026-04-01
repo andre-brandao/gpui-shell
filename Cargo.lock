@@ -2469,6 +2469,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "hyprland",
+ "image",
  "serde",
  "services",
  "tokio",
