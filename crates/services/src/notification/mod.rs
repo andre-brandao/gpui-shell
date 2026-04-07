@@ -25,6 +25,10 @@ const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
 const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 const DEFAULT_TIMEOUT_MS: i32 = 5000;
+/// Maximum number of notifications retained in history. Older notifications
+/// are dropped in FIFO order to prevent unbounded memory growth on
+/// long-running sessions.
+const MAX_NOTIFICATION_HISTORY: usize = 100;
 
 /// A single desktop notification.
 #[derive(Debug, Clone, Default)]
@@ -356,6 +360,14 @@ impl NotificationServer {
             data.notifications.retain(|n| n.id != id);
             data.popup_ids.retain(|n| *n != id);
             data.notifications.insert(0, notification);
+            if data.notifications.len() > MAX_NOTIFICATION_HISTORY {
+                let evicted: Vec<u32> = data
+                    .notifications
+                    .drain(MAX_NOTIFICATION_HISTORY..)
+                    .map(|n| n.id)
+                    .collect();
+                data.popup_ids.retain(|pid| !evicted.contains(pid));
+            }
             if !data.dnd {
                 data.popup_ids.insert(0, id);
             }
