@@ -455,7 +455,7 @@ fn remove_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
 
 fn deactivate_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
     let mut state = data.lock_mut();
-    let had_popup = state.popup_ids.iter().any(|x| *x == id);
+    let had_popup = state.popup_ids.contains(&id);
     state.popup_ids.retain(|x| *x != id);
     had_popup || state.notifications.iter().any(|n| n.id == id)
 }
