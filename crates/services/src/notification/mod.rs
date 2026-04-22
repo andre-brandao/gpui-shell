@@ -483,43 +483,33 @@ fn is_image_source(value: &str) -> bool {
         || value.starts_with("https://")
 }
 
-// this code is kinda trash TODO: replace it
-/// Normalize a file path from D-Bus hints, handling file:// URIs and URL encoding.
 fn normalize_path(value: &str) -> PathBuf {
     let path = value.strip_prefix("file://").unwrap_or(value);
-
-    // URL decode percent-encoded characters, handling UTF-8 properly
-    let mut result = Vec::with_capacity(path.len());
-    let mut chars = path.chars();
-
-    while let Some(ch) = chars.next() {
-        if ch == '%' {
-            // Try to decode percent-encoded byte
-            let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    result.push(byte);
-                    continue;
-                }
-            }
-            // If decoding fails, keep the original as UTF-8 bytes
-            result.push(b'%');
-            result.extend_from_slice(hex.as_bytes());
-        } else {
-            // Push the UTF-8 bytes of the character
-            let mut buf = [0; 4];
-            let s = ch.encode_utf8(&mut buf);
-            result.extend_from_slice(s.as_bytes());
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(h), Some(l)) = (hex_nibble(bytes[i + 1]), hex_nibble(bytes[i + 2]))
+        {
+            out.push((h << 4) | l);
+            i += 3;
+            continue;
         }
+        out.push(bytes[i]);
+        i += 1;
     }
+    PathBuf::from(String::from_utf8_lossy(&out).into_owned())
+}
 
-    // Convert the byte vector to a String, handling invalid UTF-8
-    let decoded = String::from_utf8(result).unwrap_or_else(|e| {
-        // If UTF-8 decoding fails, use lossy conversion
-        String::from_utf8_lossy(&e.into_bytes()).into_owned()
-    });
-
-    PathBuf::from(decoded)
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[proxy(
@@ -531,4 +521,56 @@ fn normalize_path(value: &str) -> PathBuf {
 trait Notifications {
     #[zbus(name = "CloseNotification")]
     fn close_notification(&self, id: u32) -> zbus::Result<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_path_unchanged() {
+        assert_eq!(normalize_path("/home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+    }
+
+    #[test]
+    fn strips_file_scheme() {
+        assert_eq!(normalize_path("file:///home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+    }
+
+    #[test]
+    fn decodes_percent_space() {
+        assert_eq!(
+            normalize_path("file:///home/user/My%20Pictures/test.png"),
+            PathBuf::from("/home/user/My Pictures/test.png"),
+        );
+    }
+
+    #[test]
+    fn decodes_utf8_sequence() {
+        assert_eq!(normalize_path("/tmp/%C3%A9.png"), PathBuf::from("/tmp/é.png"));
+    }
+
+    #[test]
+    fn decodes_lowercase_hex() {
+        assert_eq!(normalize_path("/a/b%2fc"), PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn keeps_invalid_hex_literal() {
+        assert_eq!(normalize_path("/a/%ZZ/b"), PathBuf::from("/a/%ZZ/b"));
+    }
+
+    #[test]
+    fn keeps_trailing_short_percent() {
+        assert_eq!(normalize_path("/a/%2"), PathBuf::from("/a/%2"));
+        assert_eq!(normalize_path("/a/%"), PathBuf::from("/a/%"));
+    }
+
+    #[test]
+    fn mixed_encoding() {
+        assert_eq!(
+            normalize_path("file:///tmp/My%20%C3%A9.png"),
+            PathBuf::from("/tmp/My é.png"),
+        );
+    }
 }
