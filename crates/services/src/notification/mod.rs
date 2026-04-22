@@ -485,8 +485,31 @@ fn is_image_source(value: &str) -> bool {
 
 fn normalize_path(value: &str) -> PathBuf {
     let path = value.strip_prefix("file://").unwrap_or(value);
-    let decoded = percent_encoding::percent_decode_str(path).decode_utf8_lossy();
-    PathBuf::from(decoded.as_ref())
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(h), Some(l)) = (hex_nibble(bytes[i + 1]), hex_nibble(bytes[i + 2]))
+        {
+            out.push((h << 4) | l);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    PathBuf::from(String::from_utf8_lossy(&out).into_owned())
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[proxy(
