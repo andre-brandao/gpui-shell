@@ -522,3 +522,55 @@ trait Notifications {
     #[zbus(name = "CloseNotification")]
     fn close_notification(&self, id: u32) -> zbus::Result<()>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_path_unchanged() {
+        assert_eq!(normalize_path("/home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+    }
+
+    #[test]
+    fn strips_file_scheme() {
+        assert_eq!(normalize_path("file:///home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+    }
+
+    #[test]
+    fn decodes_percent_space() {
+        assert_eq!(
+            normalize_path("file:///home/user/My%20Pictures/test.png"),
+            PathBuf::from("/home/user/My Pictures/test.png"),
+        );
+    }
+
+    #[test]
+    fn decodes_utf8_sequence() {
+        assert_eq!(normalize_path("/tmp/%C3%A9.png"), PathBuf::from("/tmp/é.png"));
+    }
+
+    #[test]
+    fn decodes_lowercase_hex() {
+        assert_eq!(normalize_path("/a/b%2fc"), PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn keeps_invalid_hex_literal() {
+        assert_eq!(normalize_path("/a/%ZZ/b"), PathBuf::from("/a/%ZZ/b"));
+    }
+
+    #[test]
+    fn keeps_trailing_short_percent() {
+        assert_eq!(normalize_path("/a/%2"), PathBuf::from("/a/%2"));
+        assert_eq!(normalize_path("/a/%"), PathBuf::from("/a/%"));
+    }
+
+    #[test]
+    fn mixed_encoding() {
+        assert_eq!(
+            normalize_path("file:///tmp/My%20%C3%A9.png"),
+            PathBuf::from("/tmp/My é.png"),
+        );
+    }
+}
