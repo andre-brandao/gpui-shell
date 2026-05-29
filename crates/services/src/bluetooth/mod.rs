@@ -13,9 +13,10 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use futures_util::StreamExt;
 use inotify::{Inotify, WatchMask};
 use std::process::Command;
-use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use tokio::sync::Notify;
 use tracing::{debug, error, warn};
 
 use crate::ServiceStatus;
@@ -227,7 +228,7 @@ async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> a
     };
 
     // Set up rfkill monitoring using inotify
-    let rfkill_rx = setup_rfkill_monitor();
+    let rfkill_notify = setup_rfkill_monitor();
 
     // Main event loop
     loop {
@@ -259,16 +260,8 @@ async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> a
                 true
             }
             _ = async {
-                match &rfkill_rx {
-                    Some(rx) => {
-                        // Poll periodically since std mpsc isn't async
-                        loop {
-                            if rx.try_recv().is_ok() {
-                                break;
-                            }
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
-                    }
+                match &rfkill_notify {
+                    Some(notify) => notify.notified().await,
                     None => std::future::pending::<()>().await,
                 }
             } => {
@@ -284,21 +277,22 @@ async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> a
 }
 
 /// Set up rfkill monitoring via inotify.
-fn setup_rfkill_monitor() -> Option<mpsc::Receiver<()>> {
+fn setup_rfkill_monitor() -> Option<Arc<Notify>> {
     let mut inotify = Inotify::init().ok()?;
     inotify
         .watches()
         .add("/dev/rfkill", WatchMask::MODIFY)
         .ok()?;
 
-    let (tx, rx) = mpsc::sync_channel(1);
+    let notify = Arc::new(Notify::new());
+    let notify_thread = notify.clone();
 
     thread::spawn(move || {
-        let mut buffer = [0; 512];
+        let mut buffer = [0u8; 512];
         loop {
             match inotify.read_events_blocking(&mut buffer) {
                 Ok(_events) => {
-                    let _ = tx.try_send(());
+                    notify_thread.notify_one();
                 }
                 Err(e) => {
                     error!("Error reading rfkill events: {}", e);
@@ -308,5 +302,5 @@ fn setup_rfkill_monitor() -> Option<mpsc::Receiver<()>> {
         }
     });
 
-    Some(rx)
+    Some(notify)
 }
