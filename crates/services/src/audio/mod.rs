@@ -373,8 +373,7 @@ fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
                     // If all pending queries completed, check for changes
                     if pending_queries.get() == 0 {
                         let local = local_data.borrow().clone();
-                        let current = data.lock_ref().clone();
-                        if local != current {
+                        if *data.lock_ref() != local {
                             debug!(
                                 "Audio state changed: sink={}% (muted={}), source={}% (muted={})",
                                 local.sink_volume,
