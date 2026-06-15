@@ -4,6 +4,7 @@ mod card;
 mod config;
 mod pannel;
 mod popup;
+mod popup_controller;
 mod widget;
 
 pub use config::{NotificationConfig, NotificationPopupPosition};

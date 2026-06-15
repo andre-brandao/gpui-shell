@@ -1,6 +1,6 @@
 use gpui::prelude::*;
 use gpui::{Context, MouseButton, div, img, px};
-use services::{Notification, NotificationCommand, NotificationSubscriber};
+use services::{Notification, NotificationCommand, NotificationSubscriber, NotificationUrgency};
 use ui::{ActiveTheme, radius, spacing};
 
 use super::dispatch_notification_command;
@@ -177,9 +177,10 @@ pub(super) fn notification_card_body<V>(
                             .flex()
                             .flex_wrap()
                             .gap(px(spacing::XS))
-                            .children(actions.into_iter().map(|(key, label)| {
+                            .children(actions.into_iter().map(|action| {
                                 let sub = subscriber.clone();
                                 let notification_id = notification.id;
+                                let key = action.key;
                                 div()
                                     .px(px(spacing::SM))
                                     .py(px(2.0))
@@ -203,7 +204,7 @@ pub(super) fn notification_card_body<V>(
                                             ),
                                         );
                                     })
-                                    .child(label)
+                                    .child(action.label)
                             })),
                     )
                 }),
@@ -232,11 +233,11 @@ fn format_notification_time(timestamp_ms: i64) -> String {
         .unwrap_or_default()
 }
 
-fn urgency_color<V>(urgency: u8, cx: &Context<V>) -> gpui::Hsla {
+fn urgency_color<V>(urgency: NotificationUrgency, cx: &Context<V>) -> gpui::Hsla {
     let theme = cx.theme();
     match urgency {
-        2 => theme.status.error,
-        0 => theme.text.muted,
-        _ => theme.accent.primary,
+        NotificationUrgency::Critical => theme.status.error,
+        NotificationUrgency::Low => theme.text.muted,
+        NotificationUrgency::Normal => theme.accent.primary,
     }
 }

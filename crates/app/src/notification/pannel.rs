@@ -68,7 +68,7 @@ impl Render for NotificationCenter {
                                     cx.listener(move |_, _, _, _cx| {
                                         dispatch_notification_command(
                                             dismiss_subscriber.clone(),
-                                            NotificationCommand::Dismiss(id),
+                                            NotificationCommand::Remove(id),
                                         );
                                     }),
                                 )
@@ -143,7 +143,7 @@ impl Render for NotificationCenter {
                                         cx.listener(move |_, _, _, _cx| {
                                             dispatch_notification_command(
                                                 clear_subscriber.clone(),
-                                                NotificationCommand::DismissAll,
+                                                NotificationCommand::ClearHistory,
                                             );
                                         }),
                                     )

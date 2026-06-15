@@ -22,8 +22,97 @@ use crate::applications::icons::lookup_icon;
 const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
 const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
-const DEFAULT_TIMEOUT_MS: i32 = 5000;
 const MAX_NOTIFICATION_HISTORY: usize = 200;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NotificationUrgency {
+    Low,
+    #[default]
+    Normal,
+    Critical,
+}
+
+impl From<u8> for NotificationUrgency {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Low,
+            2 => Self::Critical,
+            _ => Self::Normal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NotificationTimeout {
+    #[default]
+    Default,
+    Never,
+    Millis(u64),
+}
+
+impl NotificationTimeout {
+    fn from_dbus_timeout(expire_timeout: i32) -> Self {
+        match expire_timeout {
+            value if value < 0 => Self::Default,
+            0 => Self::Never,
+            value => Self::Millis(value as u64),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationCloseReason {
+    Expired,
+    Dismissed,
+    ClosedByClient,
+    Undefined,
+}
+
+impl NotificationCloseReason {
+    fn dbus_reason(self) -> u32 {
+        match self {
+            Self::Expired => 1,
+            Self::Dismissed => 2,
+            Self::ClosedByClient => 3,
+            Self::Undefined => 4,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NotificationState {
+    #[default]
+    Open,
+    Closed {
+        reason: NotificationCloseReason,
+        closed_at_ms: i64,
+    },
+}
+
+impl NotificationState {
+    pub fn is_open(self) -> bool {
+        matches!(self, Self::Open)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct NotificationAction {
+    pub key: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum NotificationEvent {
+    Added(Notification),
+    Replaced(Notification),
+    Closed {
+        id: u32,
+        revision: u64,
+        reason: NotificationCloseReason,
+    },
+    Removed(u32),
+    DndChanged(bool),
+}
 
 /// A single desktop notification.
 #[derive(Debug, Clone, Default)]
@@ -31,16 +120,17 @@ pub struct Notification {
     pub id: u32,
     pub app_name: String,
     pub app_icon: String,
+    pub revision: u64,
     pub app_icon_path: Option<PathBuf>,
     pub image_path: Option<PathBuf>,
     pub summary: String,
     pub body: String,
-    pub urgency: u8,
-    pub timeout_ms: i32,
+    pub urgency: NotificationUrgency,
+    pub timeout: NotificationTimeout,
     pub timestamp_ms: i64,
-    pub actions: Vec<(String, String)>,
+    pub actions: Vec<NotificationAction>,
     pub read: bool,
-    pub closed: bool,
+    pub state: NotificationState,
 }
 
 /// Notification center state.
@@ -60,9 +150,11 @@ impl NotificationData {
 /// Commands for the notification service.
 #[derive(Debug, Clone)]
 pub enum NotificationCommand {
-    Dismiss(u32),
-    DismissLatest,
-    DismissAll,
+    Close(u32),
+    CloseLatest,
+    CloseAll,
+    Remove(u32),
+    ClearHistory,
     SetDnd(bool),
     MarkAllRead,
     InvokeAction(u32, String),
@@ -72,6 +164,7 @@ pub enum NotificationCommand {
 #[derive(Debug, Clone)]
 pub struct NotificationSubscriber {
     data: Mutable<NotificationData>,
+    events: Mutable<Option<NotificationEvent>>,
     status: Mutable<ServiceStatus>,
     conn: Option<Connection>,
 }
@@ -81,8 +174,9 @@ impl NotificationSubscriber {
     pub async fn new() -> anyhow::Result<Self> {
         let conn = zbus::connection::Connection::session().await?;
         let data = Mutable::new(NotificationData::default());
+        let events = Mutable::new(None);
         let status = Mutable::new(ServiceStatus::Initializing);
-        let server = NotificationServer::new(data.clone());
+        let server = NotificationServer::new(data.clone(), events.clone());
         conn.object_server().at(OBJECT_PATH, server).await?;
 
         let dbus_proxy = DBusProxy::new(&conn).await?;
@@ -92,6 +186,7 @@ impl NotificationSubscriber {
             status.set(ServiceStatus::Unavailable);
             return Ok(Self {
                 data,
+                events,
                 status,
                 conn: None,
             });
@@ -100,6 +195,7 @@ impl NotificationSubscriber {
         status.set(ServiceStatus::Active);
         Ok(Self {
             data,
+            events,
             status,
             conn: Some(conn),
         })
@@ -109,6 +205,7 @@ impl NotificationSubscriber {
     pub fn disabled() -> Self {
         Self {
             data: Mutable::new(NotificationData::default()),
+            events: Mutable::new(None),
             status: Mutable::new(ServiceStatus::Unavailable),
             conn: None,
         }
@@ -116,6 +213,10 @@ impl NotificationSubscriber {
 
     pub fn subscribe(&self) -> MutableSignalCloned<NotificationData> {
         self.data.signal_cloned()
+    }
+
+    pub fn subscribe_events(&self) -> MutableSignalCloned<Option<NotificationEvent>> {
+        self.events.signal_cloned()
     }
 
     pub fn get(&self) -> NotificationData {
@@ -129,15 +230,45 @@ impl NotificationSubscriber {
 
     pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
         match command {
-            NotificationCommand::Dismiss(id) => {
-                self.dismiss_by_id(id).await?;
+            NotificationCommand::Close(id) => {
+                self.close_by_id(id, NotificationCloseReason::Dismissed)
+                    .await?;
             }
-            NotificationCommand::DismissLatest => {
-                if let Some(id) = self.data.lock_ref().notifications.first().map(|n| n.id) {
-                    self.dismiss_by_id(id).await?;
+            NotificationCommand::CloseLatest => {
+                let latest = self
+                    .data
+                    .lock_ref()
+                    .notifications
+                    .iter()
+                    .find(|n| n.state.is_open())
+                    .map(|n| n.id);
+                if let Some(id) = latest {
+                    self.close_by_id(id, NotificationCloseReason::Dismissed)
+                        .await?;
                 }
             }
-            NotificationCommand::DismissAll => {
+            NotificationCommand::CloseAll => {
+                let ids: Vec<u32> = self
+                    .data
+                    .lock_ref()
+                    .notifications
+                    .iter()
+                    .filter(|n| n.state.is_open())
+                    .map(|n| n.id)
+                    .collect();
+                for id in ids {
+                    self.close_by_id(id, NotificationCloseReason::Dismissed)
+                        .await?;
+                }
+            }
+            NotificationCommand::Remove(id) => {
+                self.close_by_id(id, NotificationCloseReason::Dismissed)
+                    .await?;
+                if remove_notification(&self.data, id) {
+                    self.publish_event(NotificationEvent::Removed(id));
+                }
+            }
+            NotificationCommand::ClearHistory => {
                 let ids: Vec<u32> = self
                     .data
                     .lock_ref()
@@ -145,12 +276,19 @@ impl NotificationSubscriber {
                     .iter()
                     .map(|n| n.id)
                     .collect();
+                for id in &ids {
+                    self.close_by_id(*id, NotificationCloseReason::Dismissed)
+                        .await?;
+                }
+                self.data.lock_mut().notifications.clear();
+                self.data.lock_mut().recompute_unread();
                 for id in ids {
-                    self.dismiss_by_id(id).await?;
+                    self.publish_event(NotificationEvent::Removed(id));
                 }
             }
             NotificationCommand::SetDnd(enabled) => {
                 self.data.lock_mut().dnd = enabled;
+                self.publish_event(NotificationEvent::DndChanged(enabled));
             }
             NotificationCommand::MarkAllRead => {
                 let mut data = self.data.lock_mut();
@@ -161,7 +299,8 @@ impl NotificationSubscriber {
             }
             NotificationCommand::InvokeAction(id, action_key) => {
                 self.emit_action_invoked(id, &action_key).await;
-                self.dismiss_by_id(id).await?;
+                self.close_by_id(id, NotificationCloseReason::Dismissed)
+                    .await?;
             }
         }
 
@@ -180,11 +319,46 @@ impl NotificationSubscriber {
         }
     }
 
-    pub async fn expire_notification(&self, id: u32, timestamp_ms: i64) -> anyhow::Result<bool> {
-        if !close_notification(&self.data, id, Some(timestamp_ms)) {
+    pub async fn close_notification(
+        &self,
+        id: u32,
+        revision: u64,
+        reason: NotificationCloseReason,
+    ) -> anyhow::Result<bool> {
+        let Some(closed) = close_notification(&self.data, id, Some(revision), reason) else {
             return Ok(false);
-        }
+        };
 
+        self.emit_notification_closed(id, reason).await;
+        self.publish_event(NotificationEvent::Closed {
+            id,
+            revision: closed.revision,
+            reason,
+        });
+
+        Ok(true)
+    }
+
+    fn publish_event(&self, event: NotificationEvent) {
+        self.events.set(Some(event));
+    }
+
+    async fn close_by_id(&self, id: u32, reason: NotificationCloseReason) -> anyhow::Result<bool> {
+        let Some(closed) = close_notification(&self.data, id, None, reason) else {
+            return Ok(false);
+        };
+
+        self.emit_notification_closed(id, reason).await;
+        self.publish_event(NotificationEvent::Closed {
+            id,
+            revision: closed.revision,
+            reason,
+        });
+
+        Ok(true)
+    }
+
+    async fn emit_notification_closed(&self, id: u32, reason: NotificationCloseReason) {
         if let Some(conn) = &self.conn
             && let Ok(iface) = conn
                 .object_server()
@@ -192,19 +366,8 @@ impl NotificationSubscriber {
                 .await
         {
             let ctx = iface.signal_emitter();
-            let _ = NotificationServer::notification_closed(ctx, id, 1).await;
+            let _ = NotificationServer::notification_closed(ctx, id, reason.dbus_reason()).await;
         }
-
-        Ok(true)
-    }
-
-    async fn dismiss_by_id(&self, id: u32) -> anyhow::Result<()> {
-        if let Some(conn) = &self.conn {
-            let proxy = NotificationsProxy::new(conn).await?;
-            let _ = proxy.close_notification(id).await;
-        }
-        remove_notification(&self.data, id);
-        Ok(())
     }
 }
 
@@ -217,12 +380,23 @@ impl Default for NotificationSubscriber {
 #[derive(Debug)]
 struct NotificationServer {
     data: Mutable<NotificationData>,
+    events: Mutable<Option<NotificationEvent>>,
     next_id: u32,
+    next_revision: u64,
 }
 
 impl NotificationServer {
-    fn new(data: Mutable<NotificationData>) -> Self {
-        Self { data, next_id: 1 }
+    fn new(data: Mutable<NotificationData>, events: Mutable<Option<NotificationEvent>>) -> Self {
+        Self {
+            data,
+            events,
+            next_id: 1,
+            next_revision: 1,
+        }
+    }
+
+    fn publish_event(&self, event: NotificationEvent) {
+        self.events.set(Some(event));
     }
 }
 
@@ -268,26 +442,28 @@ impl NotificationServer {
         hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
-        let id = {
-            let existing = self
+        let replaces_existing = replaces_id != 0
+            && self
                 .data
                 .lock_ref()
                 .notifications
                 .iter()
                 .any(|n| n.id == replaces_id);
-            if replaces_id != 0 && existing {
-                replaces_id
-            } else {
-                let id = self.next_id;
-                self.next_id = self.next_id.saturating_add(1);
-                id
-            }
+        let id = if replaces_existing {
+            replaces_id
+        } else {
+            let id = self.next_id;
+            self.next_id = self.next_id.saturating_add(1);
+            id
         };
+        let revision = self.next_revision;
+        self.next_revision = self.next_revision.saturating_add(1);
 
         let urgency = hints
             .get("urgency")
             .and_then(|v| u8::try_from(v.clone()).ok())
-            .unwrap_or(1);
+            .map(NotificationUrgency::from)
+            .unwrap_or_default();
         let image_path =
             hint_string(&hints, &["image-path", "image_path"]).map(|p| normalize_path(&p));
         let app_icon_path = if is_image_source(app_icon) {
@@ -309,15 +485,14 @@ impl NotificationServer {
         let app_icon_path = app_icon_path.or_else(|| {
             hint_string(&hints, &["desktop-entry"]).and_then(|entry| lookup_icon(&entry))
         });
-        let timeout_ms = if expire_timeout < 0 {
-            DEFAULT_TIMEOUT_MS
-        } else {
-            expire_timeout
-        };
+        let timeout = NotificationTimeout::from_dbus_timeout(expire_timeout);
         let parsed_actions = actions
             .chunks(2)
             .filter_map(|chunk| match chunk {
-                [key, label] => Some((key.clone(), label.clone())),
+                [key, label] => Some(NotificationAction {
+                    key: key.clone(),
+                    label: label.clone(),
+                }),
                 _ => None,
             })
             .collect();
@@ -326,27 +501,34 @@ impl NotificationServer {
             id,
             app_name: app_name.to_string(),
             app_icon: app_icon.to_string(),
+            revision,
             app_icon_path,
             image_path,
             summary: summary.to_string(),
             body: body.to_string(),
             urgency,
-            timeout_ms,
+            timeout,
             timestamp_ms: Utc::now().timestamp_millis(),
             actions: parsed_actions,
             read: false,
-            closed: false,
+            state: NotificationState::Open,
         };
 
         {
             let mut data = self.data.lock_mut();
             data.notifications.retain(|n| n.id != id);
-            data.notifications.insert(0, notification);
+            data.notifications.insert(0, notification.clone());
             if data.notifications.len() > MAX_NOTIFICATION_HISTORY {
                 data.notifications.truncate(MAX_NOTIFICATION_HISTORY);
             }
             data.recompute_unread();
         }
+
+        self.publish_event(if replaces_existing {
+            NotificationEvent::Replaced(notification)
+        } else {
+            NotificationEvent::Added(notification)
+        });
 
         id
     }
@@ -357,8 +539,20 @@ impl NotificationServer {
         id: u32,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
-        if close_notification(&self.data, id, None) {
-            let _ = NotificationServer::notification_closed(&emitter, id, 2).await;
+        if let Some(closed) = close_notification(
+            &self.data,
+            id,
+            None,
+            NotificationCloseReason::ClosedByClient,
+        ) {
+            let reason = NotificationCloseReason::ClosedByClient;
+            let _ =
+                NotificationServer::notification_closed(&emitter, id, reason.dbus_reason()).await;
+            self.publish_event(NotificationEvent::Closed {
+                id,
+                revision: closed.revision,
+                reason,
+            });
         }
     }
 
@@ -388,25 +582,26 @@ fn remove_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
 fn close_notification(
     data: &Mutable<NotificationData>,
     id: u32,
-    timestamp_ms: Option<i64>,
-) -> bool {
+    revision: Option<u64>,
+    reason: NotificationCloseReason,
+) -> Option<Notification> {
     let mut state = data.lock_mut();
-    let Some(notification) = state
+    let notification = state
         .notifications
         .iter_mut()
-        .find(|notification| notification.id == id)
-    else {
-        return false;
-    };
+        .find(|notification| notification.id == id)?;
 
-    if timestamp_ms.is_some_and(|timestamp_ms| notification.timestamp_ms != timestamp_ms)
-        || notification.closed
+    if revision.is_some_and(|revision| notification.revision != revision)
+        || !notification.state.is_open()
     {
-        return false;
+        return None;
     }
 
-    notification.closed = true;
-    true
+    notification.state = NotificationState::Closed {
+        reason,
+        closed_at_ms: Utc::now().timestamp_millis(),
+    };
+    Some(notification.clone())
 }
 
 fn hint_string(hints: &HashMap<String, OwnedValue>, keys: &[&str]) -> Option<String> {

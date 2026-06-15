@@ -1,6 +1,4 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::{LazyLock, Mutex};
-use std::time::Duration;
+use std::collections::HashMap;
 
 use futures_signals::signal::SignalExt;
 use futures_util::StreamExt;
@@ -9,7 +7,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div,
     layer_shell::*, prelude::*, px,
 };
-use services::{Notification, NotificationCommand, NotificationData, NotificationSubscriber};
+use services::{Notification, NotificationCommand, NotificationSubscriber};
 use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::ActiveConfig;
@@ -18,9 +16,7 @@ use crate::state::AppState;
 use super::card::notification_card_body;
 use super::config::{NotificationConfig, NotificationPopupPosition};
 use super::dispatch_notification_command;
-
-static POPUP_STATE: LazyLock<Mutex<HashMap<Option<DisplayId>, PopupWindowState>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+use super::popup_controller::PopupController;
 
 struct PopupWindowState {
     handle: AnyWindowHandle,
@@ -91,7 +87,7 @@ impl Render for NotificationPopupStack {
                                         cx.listener(move |_, _, _, _cx| {
                                             dispatch_notification_command(
                                                 dismiss_subscriber.clone(),
-                                                NotificationCommand::Dismiss(id),
+                                                NotificationCommand::Close(id),
                                             );
                                         }),
                                     )
@@ -174,26 +170,29 @@ fn popup_targets(cx: &App) -> Vec<Option<DisplayId>> {
     }
 }
 
-fn close_popups(cx: &mut App) {
-    let mut guard = POPUP_STATE.lock().unwrap();
-    for (_, state) in guard.drain() {
+fn close_popups(windows: &mut HashMap<Option<DisplayId>, PopupWindowState>, cx: &mut App) {
+    for (_, state) in windows.drain() {
         let _ = cx.update_window(state.handle, |_, window, _cx| {
             window.remove_window();
         });
     }
 }
 
-fn sync_popup(subscriber: &NotificationSubscriber, notifications: Vec<Notification>, cx: &mut App) {
+fn sync_popup(
+    windows: &mut HashMap<Option<DisplayId>, PopupWindowState>,
+    subscriber: &NotificationSubscriber,
+    notifications: Vec<Notification>,
+    cx: &mut App,
+) {
     let config = cx.config().notification.clone();
     if notifications.is_empty() {
-        close_popups(cx);
+        close_popups(windows, cx);
         return;
     }
 
     let targets = popup_targets(cx);
-    let mut guard = POPUP_STATE.lock().unwrap();
 
-    guard.retain(|display_id, state| {
+    windows.retain(|display_id, state| {
         if targets.contains(display_id) {
             true
         } else {
@@ -205,7 +204,7 @@ fn sync_popup(subscriber: &NotificationSubscriber, notifications: Vec<Notificati
     });
 
     for display_id in targets {
-        if let Some(existing) = guard.get(&display_id) {
+        if let Some(existing) = windows.get(&display_id) {
             let view = existing.view.clone();
             let handle = existing.handle;
             let updated = cx
@@ -221,7 +220,7 @@ fn sync_popup(subscriber: &NotificationSubscriber, notifications: Vec<Notificati
             }
         }
 
-        guard.remove(&display_id);
+        windows.remove(&display_id);
         let sub = subscriber.clone();
         let notifications = notifications.clone();
         if let Ok(handle) = cx
@@ -230,7 +229,7 @@ fn sync_popup(subscriber: &NotificationSubscriber, notifications: Vec<Notificati
             })
         {
             let view = handle.update(cx, |_, _, cx| cx.entity().clone()).unwrap();
-            guard.insert(
+            windows.insert(
                 display_id,
                 PopupWindowState {
                     handle: handle.into(),
@@ -241,111 +240,29 @@ fn sync_popup(subscriber: &NotificationSubscriber, notifications: Vec<Notificati
     }
 }
 
-fn notification_key(notification: &Notification) -> (u32, i64) {
-    (notification.id, notification.timestamp_ms)
-}
-
-#[derive(Default)]
-struct PopupController {
-    active: Vec<(u32, i64)>,
-    seen: HashSet<(u32, i64)>,
-}
-
-impl PopupController {
-    fn reconcile(
-        &mut self,
-        data: &NotificationData,
-        subscriber: &NotificationSubscriber,
-        cx: &mut App,
-    ) {
-        let current_keys: HashSet<(u32, i64)> =
-            data.notifications.iter().map(notification_key).collect();
-        let open_keys: HashSet<(u32, i64)> = data
-            .notifications
-            .iter()
-            .filter(|notification| !notification.closed)
-            .map(notification_key)
-            .collect();
-
-        self.seen.retain(|key| current_keys.contains(key));
-        self.active.retain(|key| open_keys.contains(key));
-
-        if data.dnd {
-            self.active.clear();
-            self.seen.extend(current_keys);
-            return;
-        }
-
-        let new_popups: Vec<Notification> = data
-            .notifications
-            .iter()
-            .filter(|notification| !notification.closed)
-            .filter(|notification| !self.seen.contains(&notification_key(notification)))
-            .cloned()
-            .collect();
-
-        if !new_popups.is_empty() {
-            self.active
-                .splice(0..0, new_popups.iter().map(notification_key));
-            for notification in new_popups {
-                schedule_expiration_timer(subscriber, notification, cx);
-            }
-        }
-
-        self.seen.extend(current_keys);
-    }
-
-    fn active_notifications(&self, data: &NotificationData, limit: usize) -> Vec<Notification> {
-        self.active
-            .iter()
-            .filter_map(|(id, timestamp_ms)| {
-                data.notifications
-                    .iter()
-                    .find(|notification| {
-                        notification.id == *id
-                            && notification.timestamp_ms == *timestamp_ms
-                            && !notification.closed
-                    })
-                    .cloned()
-            })
-            .take(limit)
-            .collect()
-    }
-}
-
-fn schedule_expiration_timer(
-    subscriber: &NotificationSubscriber,
-    notification: Notification,
-    cx: &mut App,
-) {
-    if notification.timeout_ms <= 0 {
-        return;
-    }
-
-    let service = subscriber.clone();
-    cx.spawn(async move |cx| {
-        cx.background_executor()
-            .timer(Duration::from_millis(notification.timeout_ms as u64))
-            .await;
-        let _ = service
-            .expire_notification(notification.id, notification.timestamp_ms)
-            .await;
-    })
-    .detach();
-}
-
 pub fn init(cx: &mut App) {
     let subscriber = AppState::notification(cx).clone();
     cx.spawn({
-        let mut signal = subscriber.subscribe().to_stream();
+        let mut events = subscriber.subscribe_events().to_stream();
         let service = subscriber.clone();
         let mut controller = PopupController::default();
+        let mut windows = HashMap::new();
         async move |cx| {
-            while let Some(data) = signal.next().await {
+            let _ = events.next().await;
+            while let Some(event) = events.next().await {
+                let Some(event) = event else {
+                    continue;
+                };
+                let data = service.get();
                 cx.update(|cx| {
-                    controller.reconcile(&data, &service, cx);
+                    controller.handle_event(event, &data, &service, cx);
                     let limit = cx.config().notification.popup_stack_limit;
-                    sync_popup(&service, controller.active_notifications(&data, limit), cx);
+                    sync_popup(
+                        &mut windows,
+                        &service,
+                        controller.active_notifications(&data, limit),
+                        cx,
+                    );
                 });
             }
         }
