@@ -13,7 +13,8 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use futures_util::StreamExt;
 use futures_util::stream::select_all;
 use std::thread;
-use tracing::{debug, error, info};
+use std::time::Duration;
+use tracing::{debug, error, info, warn};
 use zbus::Connection;
 
 use self::dbus::access_point::AccessPointProxy;
@@ -158,9 +159,20 @@ fn start_listener(data: Mutable<NetworkData>, status: Mutable<ServiceStatus>, co
         };
 
         rt.block_on(async move {
-            if let Err(e) = run_listener(data, conn).await {
-                error!("Network listener error: {}", e);
+            loop {
+                match run_listener(data.clone(), conn.clone()).await {
+                    Err(e) => error!("Network listener error: {}", e),
+                    Ok(()) => warn!("Network listener stream exhausted, restarting"),
+                }
                 *status.lock_mut() = ServiceStatus::Error(None);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                match fetch_network_data(&conn).await {
+                    Ok(new_data) => {
+                        *data.lock_mut() = new_data;
+                        *status.lock_mut() = ServiceStatus::Active;
+                    }
+                    Err(e) => error!("Failed to refresh network data after reconnect: {}", e),
+                }
             }
         });
     });

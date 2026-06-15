@@ -344,9 +344,20 @@ impl UPowerSubscriber {
         // Spawn the monitoring task
         let sub_for_task = subscriber.clone();
         tokio::spawn(async move {
-            if let Err(e) = sub_for_task.run().await {
-                error!("UPower subscriber error: {}", e);
+            loop {
+                match sub_for_task.run().await {
+                    Err(e) => error!("UPower subscriber error: {}", e),
+                    Ok(()) => warn!("UPower event stream ended, restarting"),
+                }
                 *sub_for_task.status.lock_mut() = ServiceStatus::Error(None);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                match UPowerData::init(&sub_for_task.conn).await {
+                    Ok(new_data) => {
+                        sub_for_task.data.set(new_data);
+                        *sub_for_task.status.lock_mut() = ServiceStatus::Active;
+                    }
+                    Err(e) => error!("Failed to refresh UPower data after reconnect: {}", e),
+                }
             }
         });
 

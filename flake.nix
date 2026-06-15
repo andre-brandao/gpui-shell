@@ -82,7 +82,7 @@
 
       overlays.default = final: prev: {
         gpuishell = mkBuild final;
-        matugen = inputs.matugen.packages.${final.system}.default;
+        matugen = inputs.matugen.packages.${final.stdenv.hostPlatform.system}.default;
       };
     };
 }

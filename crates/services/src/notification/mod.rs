@@ -2,8 +2,6 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use chrono::Utc;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
@@ -42,13 +40,13 @@ pub struct Notification {
     pub timestamp_ms: i64,
     pub actions: Vec<(String, String)>,
     pub read: bool,
+    pub closed: bool,
 }
 
 /// Notification center state.
 #[derive(Debug, Clone, Default)]
 pub struct NotificationData {
     pub notifications: Vec<Notification>,
-    pub popup_ids: Vec<u32>,
     pub dnd: bool,
     pub unread_count: usize,
 }
@@ -56,11 +54,6 @@ pub struct NotificationData {
 impl NotificationData {
     fn recompute_unread(&mut self) {
         self.unread_count = self.notifications.iter().filter(|n| !n.read).count();
-    }
-
-    fn latest_popup(&self) -> Option<Notification> {
-        let id = self.popup_ids.first().copied()?;
-        self.notifications.iter().find(|n| n.id == id).cloned()
     }
 }
 
@@ -89,7 +82,7 @@ impl NotificationSubscriber {
         let conn = zbus::connection::Connection::session().await?;
         let data = Mutable::new(NotificationData::default());
         let status = Mutable::new(ServiceStatus::Initializing);
-        let server = NotificationServer::new(data.clone(), conn.clone());
+        let server = NotificationServer::new(data.clone());
         conn.object_server().at(OBJECT_PATH, server).await?;
 
         let dbus_proxy = DBusProxy::new(&conn).await?;
@@ -134,19 +127,6 @@ impl NotificationSubscriber {
         self.status.get_cloned()
     }
 
-    pub fn latest_popup(&self) -> Option<Notification> {
-        self.data.lock_ref().latest_popup()
-    }
-
-    pub fn popup_notifications(&self, limit: usize) -> Vec<Notification> {
-        let data = self.data.lock_ref();
-        data.popup_ids
-            .iter()
-            .filter_map(|id| data.notifications.iter().find(|n| n.id == *id).cloned())
-            .take(limit)
-            .collect()
-    }
-
     pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
         match command {
             NotificationCommand::Dismiss(id) => {
@@ -170,11 +150,7 @@ impl NotificationSubscriber {
                 }
             }
             NotificationCommand::SetDnd(enabled) => {
-                let mut data = self.data.lock_mut();
-                data.dnd = enabled;
-                if enabled {
-                    data.popup_ids.clear();
-                }
+                self.data.lock_mut().dnd = enabled;
             }
             NotificationCommand::MarkAllRead => {
                 let mut data = self.data.lock_mut();
@@ -204,6 +180,24 @@ impl NotificationSubscriber {
         }
     }
 
+    pub async fn expire_notification(&self, id: u32, timestamp_ms: i64) -> anyhow::Result<bool> {
+        if !close_notification(&self.data, id, Some(timestamp_ms)) {
+            return Ok(false);
+        }
+
+        if let Some(conn) = &self.conn
+            && let Ok(iface) = conn
+                .object_server()
+                .interface::<_, NotificationServer>(OBJECT_PATH)
+                .await
+        {
+            let ctx = iface.signal_emitter();
+            let _ = NotificationServer::notification_closed(ctx, id, 1).await;
+        }
+
+        Ok(true)
+    }
+
     async fn dismiss_by_id(&self, id: u32) -> anyhow::Result<()> {
         if let Some(conn) = &self.conn {
             let proxy = NotificationsProxy::new(conn).await?;
@@ -223,21 +217,12 @@ impl Default for NotificationSubscriber {
 #[derive(Debug)]
 struct NotificationServer {
     data: Mutable<NotificationData>,
-    conn: Connection,
     next_id: u32,
-    next_timer_generation: u64,
-    timer_generations: Arc<Mutex<HashMap<u32, u64>>>,
 }
 
 impl NotificationServer {
-    fn new(data: Mutable<NotificationData>, conn: Connection) -> Self {
-        Self {
-            data,
-            conn,
-            next_id: 1,
-            next_timer_generation: 1,
-            timer_generations: Arc::new(Mutex::new(HashMap::new())),
-        }
+    fn new(data: Mutable<NotificationData>) -> Self {
+        Self { data, next_id: 1 }
     }
 }
 
@@ -350,63 +335,17 @@ impl NotificationServer {
             timestamp_ms: Utc::now().timestamp_millis(),
             actions: parsed_actions,
             read: false,
+            closed: false,
         };
 
         {
             let mut data = self.data.lock_mut();
             data.notifications.retain(|n| n.id != id);
-            data.popup_ids.retain(|n| *n != id);
             data.notifications.insert(0, notification);
             if data.notifications.len() > MAX_NOTIFICATION_HISTORY {
                 data.notifications.truncate(MAX_NOTIFICATION_HISTORY);
             }
-            if !data.dnd {
-                data.popup_ids.insert(0, id);
-            }
             data.recompute_unread();
-        }
-
-        if timeout_ms > 0 {
-            self.next_timer_generation = self.next_timer_generation.saturating_add(1);
-            let generation = self.next_timer_generation;
-            if let Ok(mut timers) = self.timer_generations.lock() {
-                timers.insert(id, generation);
-            }
-
-            let conn = self.conn.clone();
-            let data = self.data.clone();
-            let timer_generations = self.timer_generations.clone();
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(timeout_ms as u64)).await;
-
-                let should_close = timer_generations
-                    .lock()
-                    .ok()
-                    .and_then(|map| map.get(&id).copied())
-                    .map(|current_generation| current_generation == generation)
-                    .unwrap_or(false);
-                if !should_close {
-                    return;
-                }
-
-                if let Ok(mut timers) = timer_generations.lock() {
-                    timers.remove(&id);
-                }
-
-                if !deactivate_notification(&data, id) {
-                    return;
-                }
-
-                // Emit NotificationClosed with reason 1 (expired)
-                if let Ok(iface) = conn
-                    .object_server()
-                    .interface::<_, NotificationServer>(OBJECT_PATH)
-                    .await
-                {
-                    let ctx = iface.signal_emitter();
-                    let _ = NotificationServer::notification_closed(ctx, id, 1).await;
-                }
-            });
         }
 
         id
@@ -418,11 +357,7 @@ impl NotificationServer {
         id: u32,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
-        if let Ok(mut timers) = self.timer_generations.lock() {
-            timers.remove(&id);
-        }
-
-        if deactivate_notification(&self.data, id) {
+        if close_notification(&self.data, id, None) {
             let _ = NotificationServer::notification_closed(&emitter, id, 2).await;
         }
     }
@@ -446,16 +381,32 @@ fn remove_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
     let mut state = data.lock_mut();
     let len_before = state.notifications.len();
     state.notifications.retain(|n| n.id != id);
-    state.popup_ids.retain(|x| *x != id);
     state.recompute_unread();
     len_before != state.notifications.len()
 }
 
-fn deactivate_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
+fn close_notification(
+    data: &Mutable<NotificationData>,
+    id: u32,
+    timestamp_ms: Option<i64>,
+) -> bool {
     let mut state = data.lock_mut();
-    let had_popup = state.popup_ids.contains(&id);
-    state.popup_ids.retain(|x| *x != id);
-    had_popup || state.notifications.iter().any(|n| n.id == id)
+    let Some(notification) = state
+        .notifications
+        .iter_mut()
+        .find(|notification| notification.id == id)
+    else {
+        return false;
+    };
+
+    if timestamp_ms.is_some_and(|timestamp_ms| notification.timestamp_ms != timestamp_ms)
+        || notification.closed
+    {
+        return false;
+    }
+
+    notification.closed = true;
+    true
 }
 
 fn hint_string(hints: &HashMap<String, OwnedValue>, keys: &[&str]) -> Option<String> {
