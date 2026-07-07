@@ -11,4 +11,4 @@ path = "src/assets.rs"
 anyhow.workspace = true
 gpui.workspace = true
 
-rust-embed = "8.5.0"
+rust-embed = { version = "8.11", features = ["include-exclude"] }

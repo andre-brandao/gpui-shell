@@ -16,10 +16,10 @@ niri-ipc.workspace = true
 tokio.workspace = true
 inotify.workspace = true
 
-pipewire = "0.8"
+pipewire = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
-sysinfo = "0.35.1"
+serde-saphyr = "0.0"
+sysinfo = "0.39"
 udev = "0.9"
-libpulse-binding = "2.30.1"
+libpulse-binding = "2.30"

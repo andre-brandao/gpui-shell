@@ -287,7 +287,7 @@ impl BarWidget for ActiveWindow {
             })
             .child(
                 div()
-                    .flex_shrink()
+                    .flex_shrink(1.)
                     .overflow_hidden()
                     .text_ellipsis()
                     .text_size(style::label_size(theme, false))

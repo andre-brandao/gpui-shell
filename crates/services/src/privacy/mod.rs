@@ -159,10 +159,10 @@ fn start_pipewire_listener(data: Mutable<PrivacyData>, pipewire_status: Mutable<
 
 /// Run the PipeWire listener (blocking).
 fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
-    use pipewire::{context::Context, main_loop::MainLoop};
+    use pipewire::{context::ContextBox, main_loop::MainLoopBox};
 
-    let mainloop = MainLoop::new(None)?;
-    let context = Context::new(&mainloop)?;
+    let mainloop = MainLoopBox::new(None)?;
+    let context = ContextBox::new(mainloop.loop_(), None)?;
     let core = context.connect(None)?;
     let registry = core.get_registry()?;
 
