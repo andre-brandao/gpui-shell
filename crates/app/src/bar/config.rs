@@ -54,7 +54,7 @@ pub struct BarConfig {
 }
 
 /// Bar module configurations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModulesConfig {
     pub clock: ClockConfig,
@@ -67,23 +67,6 @@ pub struct ModulesConfig {
     pub keyboard_layout: KeyboardLayoutConfig,
     pub launcher_btn: LauncherBtnConfig,
     pub settings: SettingsConfig,
-}
-
-impl Default for ModulesConfig {
-    fn default() -> Self {
-        Self {
-            clock: ClockConfig::default(),
-            battery: BatteryConfig::default(),
-            workspaces: WorkspacesConfig::default(),
-            tray: TrayConfig::default(),
-            sysinfo: SysInfoConfig::default(),
-            mpris: MprisConfig::default(),
-            active_window: ActiveWindowConfig::default(),
-            keyboard_layout: KeyboardLayoutConfig::default(),
-            launcher_btn: LauncherBtnConfig::default(),
-            settings: SettingsConfig::default(),
-        }
-    }
 }
 
 impl Default for BarConfig {

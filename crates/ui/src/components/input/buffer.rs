@@ -97,12 +97,10 @@ impl InputBuffer {
     }
 
     pub fn move_left(&mut self, select: bool) {
-        if !select {
-            if let Some((start, _end)) = self.selection_range_bytes() {
-                self.cursor = start;
-                self.anchor = None;
-                return;
-            }
+        if !select && let Some((start, _end)) = self.selection_range_bytes() {
+            self.cursor = start;
+            self.anchor = None;
+            return;
         }
         self.prepare_selection(select);
         if let Some((new_cursor, _ch)) = prev_char(&self.text, self.cursor) {
@@ -112,12 +110,10 @@ impl InputBuffer {
     }
 
     pub fn move_right(&mut self, select: bool) {
-        if !select {
-            if let Some((_start, end)) = self.selection_range_bytes() {
-                self.cursor = end;
-                self.anchor = None;
-                return;
-            }
+        if !select && let Some((_start, end)) = self.selection_range_bytes() {
+            self.cursor = end;
+            self.anchor = None;
+            return;
         }
         self.prepare_selection(select);
         if let Some(new_cursor) = next_char_boundary(&self.text, self.cursor) {
@@ -127,12 +123,10 @@ impl InputBuffer {
     }
 
     pub fn move_word_left(&mut self, select: bool) {
-        if !select {
-            if let Some((start, _end)) = self.selection_range_bytes() {
-                self.cursor = start;
-                self.anchor = None;
-                return;
-            }
+        if !select && let Some((start, _end)) = self.selection_range_bytes() {
+            self.cursor = start;
+            self.anchor = None;
+            return;
         }
         self.prepare_selection(select);
 
@@ -154,12 +148,10 @@ impl InputBuffer {
     }
 
     pub fn move_word_right(&mut self, select: bool) {
-        if !select {
-            if let Some((_start, end)) = self.selection_range_bytes() {
-                self.cursor = end;
-                self.anchor = None;
-                return;
-            }
+        if !select && let Some((_start, end)) = self.selection_range_bytes() {
+            self.cursor = end;
+            self.anchor = None;
+            return;
         }
         self.prepare_selection(select);
 

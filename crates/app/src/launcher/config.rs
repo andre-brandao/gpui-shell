@@ -34,7 +34,7 @@ impl Default for LauncherConfig {
 }
 
 /// Configuration for launcher modules/views.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModulesConfig {
     pub apps: AppsConfig,
@@ -45,19 +45,4 @@ pub struct ModulesConfig {
     pub themes: ThemesConfig,
     pub services: ServicesConfig,
     pub help: HelpConfig,
-}
-
-impl Default for ModulesConfig {
-    fn default() -> Self {
-        Self {
-            apps: AppsConfig::default(),
-            shell: ShellConfig::default(),
-            web: WebConfig::default(),
-            workspaces: WorkspacesConfig::default(),
-            wallpaper: WallpaperConfig::default(),
-            themes: ThemesConfig::default(),
-            services: ServicesConfig::default(),
-            help: HelpConfig::default(),
-        }
-    }
 }
