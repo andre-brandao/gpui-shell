@@ -112,6 +112,7 @@ pub enum CompositorBackend {
     #[default]
     Hyprland,
     Niri,
+    Mango,
 }
 
 impl CompositorBackend {
@@ -120,6 +121,7 @@ impl CompositorBackend {
         match self {
             CompositorBackend::Hyprland => "Hyprland",
             CompositorBackend::Niri => "Niri",
+            CompositorBackend::Mango => "Mango",
         }
     }
 }
