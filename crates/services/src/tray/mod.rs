@@ -315,7 +315,7 @@ async fn create_tray_item(conn: &zbus::Connection, name: &str) -> anyhow::Result
                 .max_by_key(|i| (i.width, i.height))
                 .map(|mut i| {
                     // Convert ARGB to RGBA
-                    for pixel in i.bytes.chunks_exact_mut(4) {
+                    for pixel in i.bytes.as_chunks_mut::<4>().0 {
                         pixel.rotate_left(1);
                     }
                     TrayIcon::Pixmap {
@@ -477,7 +477,7 @@ async fn run_listener(data: &Mutable<TrayData>, conn: &zbus::Connection) -> anyh
                                 if let Some(mut icon) =
                                     icons.into_iter().max_by_key(|i| (i.width, i.height))
                                 {
-                                    for pixel in icon.bytes.chunks_exact_mut(4) {
+                                    for pixel in icon.bytes.as_chunks_mut::<4>().0 {
                                         pixel.rotate_left(1);
                                     }
                                     let tray_icon = TrayIcon::Pixmap {

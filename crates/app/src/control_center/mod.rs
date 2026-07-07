@@ -45,6 +45,10 @@ pub use wifi::WifiPasswordState;
 pub const CONTROL_CENTER_PANEL_WIDTH: f32 = 340.0;
 pub const CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED: f32 = 288.0;
 
+type ToggleSectionCallback = Rc<dyn Fn(ExpandedSection, &mut App)>;
+type WifiConnectCallback = Rc<dyn Fn(String, Option<String>, &mut App)>;
+type WifiDisconnectCallback = Rc<dyn Fn(String, &mut App)>;
+
 /// Control Center panel component.
 ///
 /// Provides a unified interface for system settings and quick actions.
@@ -198,7 +202,7 @@ impl Render for ControlCenter {
 
         // Create entity-based callbacks for section toggling
         let entity = cx.entity().clone();
-        let on_toggle_section: Rc<dyn Fn(ExpandedSection, &mut App)> = Rc::new({
+        let on_toggle_section: ToggleSectionCallback = Rc::new({
             let entity = entity.clone();
             move |section: ExpandedSection, cx: &mut App| {
                 entity.update(cx, |this, cx| {
@@ -221,7 +225,7 @@ impl Render for ControlCenter {
 
         // WiFi callbacks
         let wifi_services = network_service.clone();
-        let on_wifi_connect: Rc<dyn Fn(String, Option<String>, &mut App)> = Rc::new({
+        let on_wifi_connect: WifiConnectCallback = Rc::new({
             let entity = entity.clone();
             let services = wifi_services.clone();
             move |ssid: String, password: Option<String>, cx: &mut App| {
@@ -265,7 +269,7 @@ impl Render for ControlCenter {
             }
         });
 
-        let on_wifi_disconnect: Rc<dyn Fn(String, &mut App)> = Rc::new({
+        let on_wifi_disconnect: WifiDisconnectCallback = Rc::new({
             let services = wifi_services.clone();
             move |ssid: String, cx: &mut App| {
                 let s = services.clone();

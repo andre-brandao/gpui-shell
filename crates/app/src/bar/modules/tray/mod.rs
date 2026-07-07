@@ -5,7 +5,7 @@ pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    AnyElement, App, Context, ElementId, MouseButton, RenderImage, Render, SharedString, Size,
+    AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Size,
     Window, div, img, prelude::*, px,
 };
 use image::{Frame, RgbaImage};
@@ -104,7 +104,7 @@ impl Tray {
 
         let icon_element: AnyElement = if let Some((w, h, data)) = item.icon_pixmap() {
             let mut bgra = data.to_vec();
-            for pixel in bgra.chunks_exact_mut(4) {
+            for pixel in bgra.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }
             if let Some(buffer) = RgbaImage::from_raw(w, h, bgra) {
@@ -606,9 +606,7 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 }
 
 fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
-    if hint.contains("chrome") || hint.contains("chromium") {
-        Some("")
-    } else if hint.contains("telegram") {
+    if hint.contains("chrome") || hint.contains("chromium") || hint.contains("telegram") {
         Some("")
     } else if hint.contains("discord") || hint.contains("vesktop") {
         Some("󰙯")

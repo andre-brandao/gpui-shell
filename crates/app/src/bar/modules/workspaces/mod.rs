@@ -98,14 +98,13 @@ impl Workspaces {
         active_workspace_id: Option<i32>,
         theme: &ui::Theme,
         is_vertical: bool,
-        show_numbers: bool,
-        show_icons: bool,
+        config: &WorkspacesConfig,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let workspace_id = ws.id;
         let is_active = active_workspace_id == Some(ws.id);
         let has_windows = ws.windows > 0;
-        let label = Self::workspace_label(ws, is_vertical, show_numbers, show_icons);
+        let label = Self::workspace_label(ws, is_vertical, config.show_numbers, config.show_icons);
 
         div()
             .id(format!("workspace-{}", ws.id))
@@ -198,8 +197,7 @@ impl Workspaces {
                             active_workspace_id,
                             theme,
                             is_vertical,
-                            config.show_numbers,
-                            config.show_icons,
+                            config,
                             cx,
                         )
                     }),
