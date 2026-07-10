@@ -206,8 +206,7 @@ fn start_listener(data: Mutable<SysInfoData>) {
             );
 
             // Only update if changed
-            let current = data.lock_ref().clone();
-            if new_data != current {
+            if *data.lock_ref() != new_data {
                 debug!(
                     "SysInfo updated: CPU {}%, MEM {}%, TEMP {:?}°C",
                     new_data.cpu_usage, new_data.memory_usage, new_data.temperature

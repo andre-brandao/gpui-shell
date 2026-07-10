@@ -98,9 +98,8 @@ impl Tray {
         theme: &ui::Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let item_for_left = item.clone();
-        let item_for_right = item.clone();
-        let item_for_middle = item.clone();
+        let item_name_right = item.name.clone();
+        let item_name_middle = item.name.clone();
 
         let icon_element: AnyElement = if let Some((w, h, data)) = item.icon_pixmap() {
             let mut bgra = data.to_vec();
@@ -149,7 +148,7 @@ impl Tray {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event, window, cx| {
-                    this.on_item_click(&item_for_left, event, window, cx);
+                    this.on_item_click(&item, event, window, cx);
                 }),
             )
             .on_mouse_down(
@@ -157,7 +156,7 @@ impl Tray {
                 cx.listener(move |this, _event, _window, cx| {
                     this.dispatch_command(
                         TrayCommand::ContextMenu {
-                            item_name: item_for_right.name.clone(),
+                            item_name: item_name_right.clone(),
                         },
                         cx,
                     );
@@ -168,7 +167,7 @@ impl Tray {
                 cx.listener(move |this, _event, _window, cx| {
                     this.dispatch_command(
                         TrayCommand::SecondaryActivate {
-                            item_name: item_for_middle.name.clone(),
+                            item_name: item_name_middle.clone(),
                         },
                         cx,
                     );

@@ -25,6 +25,7 @@ const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
 const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 const DEFAULT_TIMEOUT_MS: i32 = 5000;
+const MAX_NOTIFICATION_HISTORY: usize = 200;
 
 /// A single desktop notification.
 #[derive(Debug, Clone, Default)]
@@ -356,6 +357,9 @@ impl NotificationServer {
             data.notifications.retain(|n| n.id != id);
             data.popup_ids.retain(|n| *n != id);
             data.notifications.insert(0, notification);
+            if data.notifications.len() > MAX_NOTIFICATION_HISTORY {
+                data.notifications.truncate(MAX_NOTIFICATION_HISTORY);
+            }
             if !data.dnd {
                 data.popup_ids.insert(0, id);
             }
@@ -372,8 +376,8 @@ impl NotificationServer {
             let conn = self.conn.clone();
             let data = self.data.clone();
             let timer_generations = self.timer_generations.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(timeout_ms as u64));
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(timeout_ms as u64)).await;
 
                 let should_close = timer_generations
                     .lock()
@@ -394,20 +398,14 @@ impl NotificationServer {
                 }
 
                 // Emit NotificationClosed with reason 1 (expired)
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("failed to build tokio runtime for notification timeout");
-                rt.block_on(async move {
-                    if let Ok(iface) = conn
-                        .object_server()
-                        .interface::<_, NotificationServer>(OBJECT_PATH)
-                        .await
-                    {
-                        let ctx = iface.signal_emitter();
-                        let _ = NotificationServer::notification_closed(ctx, id, 1).await;
-                    }
-                });
+                if let Ok(iface) = conn
+                    .object_server()
+                    .interface::<_, NotificationServer>(OBJECT_PATH)
+                    .await
+                {
+                    let ctx = iface.signal_emitter();
+                    let _ = NotificationServer::notification_closed(ctx, id, 1).await;
+                }
             });
         }
 
