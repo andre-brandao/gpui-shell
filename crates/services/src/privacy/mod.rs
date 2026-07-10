@@ -231,22 +231,40 @@ fn run_webcam_watcher(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
     loop {
         let events = inotify.read_events_blocking(&mut buffer)?;
 
+        // Events are only a wake-up signal: counting OPEN/CLOSE naively makes
+        // the state flap when other software probes the device (pipewire and
+        // friends open+close video nodes just to enumerate them). The ground
+        // truth is who actually holds the device open.
+        let mut relevant = false;
         for event in events {
-            debug!("Webcam event: {:?}", event.mask);
-
-            if event.mask.contains(EventMask::OPEN) {
-                data.lock_mut().webcam_access += 1;
-                debug!("Webcam opened: {}", data.lock_ref().webcam_access);
-            } else if event.mask.contains(EventMask::CLOSE_WRITE)
-                || event.mask.contains(EventMask::CLOSE_NOWRITE)
-            {
-                let mut guard = data.lock_mut();
-                guard.webcam_access = i32::max(guard.webcam_access - 1, 0);
-                debug!("Webcam closed: {}", guard.webcam_access);
-            } else if event.mask.contains(EventMask::DELETE_SELF) {
+            if event.mask.contains(EventMask::DELETE_SELF) {
                 warn!("Webcam device was deleted");
                 return Ok(());
             }
+            relevant |= event
+                .mask
+                .intersects(EventMask::OPEN | EventMask::CLOSE_WRITE | EventMask::CLOSE_NOWRITE);
+        }
+        if !relevant {
+            continue;
+        }
+
+        // Let open+close probe bursts settle, then drain what they queued.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if let Ok(pending) = inotify.read_events(&mut buffer) {
+            for event in pending {
+                if event.mask.contains(EventMask::DELETE_SELF) {
+                    warn!("Webcam device was deleted");
+                    return Ok(());
+                }
+            }
+        }
+
+        let current = is_device_in_use(WEBCAM_DEVICE_PATH);
+        let mut guard = data.lock_mut();
+        if guard.webcam_access != current {
+            debug!("Webcam usage changed: {}", current);
+            guard.webcam_access = current;
         }
     }
 }

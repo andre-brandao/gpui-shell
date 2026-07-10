@@ -4,8 +4,8 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, px,
+    App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, px,
 };
 
 use crate::config::{BarPosition, Config};
@@ -265,4 +265,3 @@ pub fn toggle_widget_panel<V: Render + 'static>(
     };
     toggle_panel(panel_id, config, cx, build)
 }
-

@@ -7,10 +7,9 @@ use std::borrow::Cow;
 ///
 /// This assets provides icons svg files for [IconName](https://docs.rs/gpui-component/latest/gpui_component/enum.IconName.html).
 ///
-/// ```
-/// use gpui::*;
+/// ```ignore
 /// use assets::Assets;
-/// let app = Application::new().with_assets(Assets);
+/// let app = gpui_platform::application().with_assets(Assets {});
 /// ```
 #[derive(RustEmbed)]
 #[folder = "icons"]
