@@ -12,7 +12,6 @@ use dbus::BluetoothDbus;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use futures_util::StreamExt;
 use inotify::{Inotify, WatchMask};
-use std::process::Command;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -144,14 +143,18 @@ impl BluetoothSubscriber {
 }
 
 /// Check if Bluetooth is soft-blocked by rfkill.
+///
+/// Reads `/sys/class/rfkill` directly — shelling out to `rfkill` would block
+/// the async runtime on a subprocess for every state fetch.
 fn check_rfkill_soft_block() -> bool {
-    Command::new("rfkill")
-        .args(["list", "bluetooth"])
-        .output()
-        .ok()
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|output| output.contains("Soft blocked: yes"))
-        .unwrap_or(false)
+    let Ok(entries) = std::fs::read_dir("/sys/class/rfkill") else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        std::fs::read_to_string(path.join("type")).is_ok_and(|t| t.trim() == "bluetooth")
+            && std::fs::read_to_string(path.join("soft")).is_ok_and(|s| s.trim() == "1")
+    })
 }
 
 /// Fetch the current Bluetooth data state.

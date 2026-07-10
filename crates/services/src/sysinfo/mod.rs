@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use sysinfo::{Components, Disks, Networks, System};
-use tracing::debug;
+use tracing::trace;
 
 use crate::ServiceStatus;
 
@@ -205,9 +205,10 @@ fn start_listener(data: Mutable<SysInfoData>) {
                 &mut last_transmitted,
             );
 
-            // Only update if changed
+            // Only update if changed. CPU% differs nearly every poll, so this
+            // fires each tick — log at trace to keep debug output readable.
             if *data.lock_ref() != new_data {
-                debug!(
+                trace!(
                     "SysInfo updated: CPU {}%, MEM {}%, TEMP {:?}°C",
                     new_data.cpu_usage, new_data.memory_usage, new_data.temperature
                 );

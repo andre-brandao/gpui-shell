@@ -2,7 +2,7 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*, px, rgba};
+use gpui::{AnyElement, App, div, prelude::*, px};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, radius, spacing};
 
 use self::config::ShellConfig;
@@ -124,7 +124,7 @@ impl LauncherView for ShellView {
                                         .when(has_command && vx.selected_index != 0, move |el| {
                                             el.bg(interactive_hover)
                                         })
-                                        .when(!has_command, |el| el.bg(rgba(0x00000033)))
+                                        .when(!has_command, move |el| el.bg(interactive_default))
                                         .child(if has_command {
                                             Label::new("Run").size(LabelSize::Small)
                                         } else {
@@ -137,7 +137,7 @@ impl LauncherView for ShellView {
                                                 .px(px(4.))
                                                 .py(px(2.))
                                                 .rounded(px(3.))
-                                                .bg(rgba(0x00000044))
+                                                .bg(theme.bg.tertiary)
                                                 .child(if has_command {
                                                     Label::new("Enter")
                                                         .size(LabelSize::XSmall)
@@ -154,7 +154,7 @@ impl LauncherView for ShellView {
                             div()
                                 .w_full()
                                 .p(px(spacing::SM))
-                                .bg(rgba(0x00000066))
+                                .bg(theme.bg.tertiary)
                                 .rounded(px(radius::SM))
                                 .font_family("monospace")
                                 .text_size(theme.font_sizes.base)

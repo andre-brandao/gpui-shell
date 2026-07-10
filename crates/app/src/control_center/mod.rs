@@ -150,10 +150,14 @@ impl ControlCenter {
         let audio_services = AppState::audio(cx).clone();
         cx.subscribe(
             &volume_slider,
-            move |_this, _slider, event: &SliderEvent, _cx| {
+            move |_this, _slider, event: &SliderEvent, cx| {
                 let SliderEvent::Change(value) = event;
                 let target = *value as u8;
-                audio_services.dispatch(AudioCommand::SetSinkVolume(target));
+                let s = audio_services.clone();
+                cx.spawn(async move |_, _| {
+                    let _ = s.dispatch(AudioCommand::SetSinkVolume(target)).await;
+                })
+                .detach();
             },
         )
         .detach();
@@ -252,11 +256,22 @@ impl Render for ControlCenter {
         let entity = cx.entity().clone();
         let on_toggle_section: ToggleSectionCallback = Rc::new({
             let entity = entity.clone();
+            let network = network_service.clone();
             move |section: ExpandedSection, cx: &mut App| {
-                entity.update(cx, |this, cx| {
+                let expanded = entity.update(cx, |this, cx| {
                     this.toggle_section(section);
                     cx.notify();
+                    this.expanded
                 });
+                // Kick off a scan when the WiFi list opens so it shows fresh
+                // results instead of NetworkManager's cached ones.
+                if expanded == ExpandedSection::WiFi {
+                    let network = network.clone();
+                    cx.spawn(async move |_| {
+                        let _ = network.dispatch(NetworkCommand::RequestScan).await;
+                    })
+                    .detach();
+                }
             }
         });
 

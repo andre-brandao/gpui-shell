@@ -330,64 +330,68 @@ fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoEleme
         )
 }
 
-/// Get appropriate icon for device type
-fn get_device_icon(device: &BluetoothDevice) -> &'static str {
-    // Check device class/type from icon or name hints
-    let name_lower = device.name.to_lowercase();
+/// Classify a device from BlueZ's freedesktop icon name, falling back to
+/// name-substring heuristics for devices that don't report a class.
+fn device_kind(device: &BluetoothDevice) -> Option<(&'static str, &'static str)> {
+    if let Some(icon) = device.icon.as_deref() {
+        let kind = match icon {
+            "audio-headset" | "audio-headphones" => Some(("󰋋", "Headphones")),
+            "audio-card" | "audio-speakers" => Some(("󰓃", "Speaker")),
+            "input-mouse" => Some(("󰍽", "Mouse")),
+            "input-keyboard" => Some(("󰌌", "Keyboard")),
+            "input-gaming" => Some(("󰊴", "Gamepad")),
+            "input-tablet" => Some(("󰓶", "Tablet")),
+            "phone" => Some(("󰏲", "Phone")),
+            "computer" => Some(("󰇄", "Computer")),
+            "camera-photo" | "camera-video" => Some(("󰄀", "Camera")),
+            "printer" => Some(("󰐪", "Printer")),
+            _ => None,
+        };
+        if kind.is_some() {
+            return kind;
+        }
+    }
 
+    let name_lower = device.name.to_lowercase();
     if name_lower.contains("airpod")
         || name_lower.contains("headphone")
         || name_lower.contains("buds")
     {
-        "󰋋" // Headphones
+        Some(("󰋋", "Headphones"))
     } else if name_lower.contains("mouse") {
-        "󰍽" // Mouse
+        Some(("󰍽", "Mouse"))
     } else if name_lower.contains("keyboard") {
-        "󰌌" // Keyboard
+        Some(("󰌌", "Keyboard"))
     } else if name_lower.contains("speaker") || name_lower.contains("soundbar") {
-        "󰓃" // Speaker
+        Some(("󰓃", "Speaker"))
     } else if name_lower.contains("phone")
         || name_lower.contains("iphone")
         || name_lower.contains("android")
     {
-        "󰏲" // Phone
+        Some(("󰏲", "Phone"))
     } else if name_lower.contains("watch") {
-        "󰖉" // Watch
+        Some(("󰖉", "Watch"))
     } else if name_lower.contains("controller") || name_lower.contains("gamepad") {
-        "󰊴" // Gamepad
-    } else if device.connected {
-        icons::BLUETOOTH_CONNECTED
+        Some(("󰊴", "Gamepad"))
     } else {
-        icons::BLUETOOTH
+        None
+    }
+}
+
+/// Get appropriate icon for device type
+fn get_device_icon(device: &BluetoothDevice) -> &'static str {
+    match device_kind(device) {
+        Some((icon, _)) => icon,
+        None if device.connected => icons::BLUETOOTH_CONNECTED,
+        None => icons::BLUETOOTH,
     }
 }
 
 /// Get tooltip label for device icon based on device type.
 fn get_device_icon_tooltip(device: &BluetoothDevice) -> &'static str {
-    let name_lower = device.name.to_lowercase();
-
-    if name_lower.contains("airpod")
-        || name_lower.contains("headphone")
-        || name_lower.contains("buds")
-    {
-        "Headphones"
-    } else if name_lower.contains("mouse") {
-        "Mouse"
-    } else if name_lower.contains("keyboard") {
-        "Keyboard"
-    } else if name_lower.contains("speaker") || name_lower.contains("soundbar") {
-        "Speaker"
-    } else if name_lower.contains("phone")
-        || name_lower.contains("iphone")
-        || name_lower.contains("android")
-    {
-        "Phone"
-    } else if name_lower.contains("watch") {
-        "Watch"
-    } else if name_lower.contains("controller") || name_lower.contains("gamepad") {
-        "Gamepad"
-    } else {
-        "Bluetooth device"
+    match device_kind(device) {
+        Some((_, label)) => label,
+        None => "Bluetooth device",
     }
 }
 

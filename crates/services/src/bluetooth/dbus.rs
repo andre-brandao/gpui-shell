@@ -118,6 +118,8 @@ impl BluetoothDbus<'_> {
             let name = device.alias().await?;
             let connected = device.connected().await?;
             let paired = device.paired().await?;
+            // Optional on BlueZ's side; absent for devices that don't report a class.
+            let icon = device.icon().await.ok();
 
             let battery = if connected && has_battery {
                 let battery_proxy = BatteryProxy::builder(self.bluez.inner().connection())
@@ -131,6 +133,7 @@ impl BluetoothDbus<'_> {
 
             devices.push(BluetoothDevice {
                 name,
+                icon,
                 battery,
                 path: device_path,
                 connected,
@@ -239,6 +242,10 @@ pub trait Device {
     /// Device alias (friendly name).
     #[zbus(property)]
     fn alias(&self) -> zbus::Result<String>;
+
+    /// Freedesktop icon name describing the device type (optional property).
+    #[zbus(property)]
+    fn icon(&self) -> zbus::Result<String>;
 
     /// Whether the device is connected.
     #[zbus(property)]

@@ -31,8 +31,12 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
             icon,
             muted,
             cx,
-            move |_cx| {
-                services_toggle.dispatch(AudioCommand::ToggleSinkMute);
+            move |cx| {
+                let s = services_toggle.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.dispatch(AudioCommand::ToggleSinkMute).await;
+                })
+                .detach();
             },
         ))
         // Slider
@@ -43,11 +47,19 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
         .child(render_adjustment_buttons(
             "volume",
             cx,
-            move |_cx| {
-                services_dec.dispatch(AudioCommand::AdjustSinkVolume(-5));
+            move |cx| {
+                let s = services_dec.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.dispatch(AudioCommand::AdjustSinkVolume(-5)).await;
+                })
+                .detach();
             },
-            move |_cx| {
-                services_inc.dispatch(AudioCommand::AdjustSinkVolume(5));
+            move |cx| {
+                let s = services_inc.clone();
+                cx.spawn(async move |_| {
+                    let _ = s.dispatch(AudioCommand::AdjustSinkVolume(5)).await;
+                })
+                .detach();
             },
         ))
 }

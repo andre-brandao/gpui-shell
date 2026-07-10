@@ -5,7 +5,6 @@
 //! and wpctl for commands.
 
 use std::cell::{Cell, RefCell};
-use std::process::Command;
 use std::rc::Rc;
 
 use futures_signals::signal::{Mutable, MutableSignalCloned};
@@ -104,90 +103,72 @@ impl AudioSubscriber {
     }
 
     /// Execute an audio command.
-    pub fn dispatch(&self, command: AudioCommand) {
-        match command {
-            AudioCommand::SetSinkVolume(volume) => {
-                let vol_float = volume.min(100) as f32 / 100.0;
-                let result = Command::new("wpctl")
-                    .args([
-                        "set-volume",
-                        "@DEFAULT_AUDIO_SINK@",
-                        &format!("{:.2}", vol_float),
-                    ])
-                    .output();
-
-                if let Err(e) = result {
-                    error!("Failed to set sink volume: {}", e);
-                }
-            }
-            AudioCommand::SetSourceVolume(volume) => {
-                let vol_float = volume.min(100) as f32 / 100.0;
-                let result = Command::new("wpctl")
-                    .args([
-                        "set-volume",
-                        "@DEFAULT_AUDIO_SOURCE@",
-                        &format!("{:.2}", vol_float),
-                    ])
-                    .output();
-
-                if let Err(e) = result {
-                    error!("Failed to set source volume: {}", e);
-                }
-            }
+    ///
+    /// Async so the `wpctl` subprocess never blocks the caller (dragging the
+    /// volume slider dispatches on every tick from the UI thread).
+    pub async fn dispatch(&self, command: AudioCommand) -> anyhow::Result<()> {
+        let (target, args): (&str, Vec<String>) = match command {
+            AudioCommand::SetSinkVolume(volume) => (
+                "set sink volume",
+                set_volume_args("@DEFAULT_AUDIO_SINK@", volume),
+            ),
+            AudioCommand::SetSourceVolume(volume) => (
+                "set source volume",
+                set_volume_args("@DEFAULT_AUDIO_SOURCE@", volume),
+            ),
             AudioCommand::ToggleSinkMute => {
-                let result = Command::new("wpctl")
-                    .args(["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
-                    .output();
-
-                if let Err(e) = result {
-                    error!("Failed to toggle sink mute: {}", e);
-                }
+                ("toggle sink mute", toggle_mute_args("@DEFAULT_AUDIO_SINK@"))
             }
-            AudioCommand::ToggleSourceMute => {
-                let result = Command::new("wpctl")
-                    .args(["set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
-                    .output();
+            AudioCommand::ToggleSourceMute => (
+                "toggle source mute",
+                toggle_mute_args("@DEFAULT_AUDIO_SOURCE@"),
+            ),
+            AudioCommand::AdjustSinkVolume(delta) => (
+                "adjust sink volume",
+                adjust_volume_args("@DEFAULT_AUDIO_SINK@", delta),
+            ),
+            AudioCommand::AdjustSourceVolume(delta) => (
+                "adjust source volume",
+                adjust_volume_args("@DEFAULT_AUDIO_SOURCE@", delta),
+            ),
+        };
 
-                if let Err(e) = result {
-                    error!("Failed to toggle source mute: {}", e);
-                }
-            }
-            AudioCommand::AdjustSinkVolume(delta) => {
-                let delta_float = (delta as f32).abs() / 100.0;
-                let sign = if delta >= 0 { "+" } else { "-" };
-                let result = Command::new("wpctl")
-                    .args([
-                        "set-volume",
-                        "-l",
-                        "1.0",
-                        "@DEFAULT_AUDIO_SINK@",
-                        &format!("{:.2}{}", delta_float, sign),
-                    ])
-                    .output();
+        let status = tokio::process::Command::new("wpctl")
+            .args(&args)
+            .status()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to {target}: {e}"))?;
 
-                if let Err(e) = result {
-                    error!("Failed to adjust sink volume: {}", e);
-                }
-            }
-            AudioCommand::AdjustSourceVolume(delta) => {
-                let delta_float = (delta as f32).abs() / 100.0;
-                let sign = if delta >= 0 { "+" } else { "-" };
-                let result = Command::new("wpctl")
-                    .args([
-                        "set-volume",
-                        "-l",
-                        "1.0",
-                        "@DEFAULT_AUDIO_SOURCE@",
-                        &format!("{:.2}{}", delta_float, sign),
-                    ])
-                    .output();
-
-                if let Err(e) = result {
-                    error!("Failed to adjust source volume: {}", e);
-                }
-            }
+        if !status.success() {
+            anyhow::bail!("Failed to {target}: wpctl exited with {status}");
         }
+        Ok(())
     }
+}
+
+fn set_volume_args(device: &str, volume: u8) -> Vec<String> {
+    let vol_float = volume.min(100) as f32 / 100.0;
+    vec![
+        "set-volume".into(),
+        device.into(),
+        format!("{:.2}", vol_float),
+    ]
+}
+
+fn toggle_mute_args(device: &str) -> Vec<String> {
+    vec!["set-mute".into(), device.into(), "toggle".into()]
+}
+
+fn adjust_volume_args(device: &str, delta: i8) -> Vec<String> {
+    let delta_float = (delta as f32).abs() / 100.0;
+    let sign = if delta >= 0 { "+" } else { "-" };
+    vec![
+        "set-volume".into(),
+        "-l".into(),
+        "1.0".into(),
+        device.into(),
+        format!("{:.2}{}", delta_float, sign),
+    ]
 }
 
 impl Default for AudioSubscriber {

@@ -3,7 +3,7 @@
 //! Each scheme provides a complete `Theme` with all color groups defined.
 //! Themes are also loaded from Stylix and downloaded from GitHub.
 
-use gpui::Hsla;
+use gpui::{Hsla, SharedString};
 
 use super::Theme;
 
@@ -11,9 +11,9 @@ use super::Theme;
 #[derive(Clone)]
 pub struct ThemeScheme {
     /// Display name.
-    pub name: &'static str,
+    pub name: SharedString,
     /// Short description.
-    pub description: &'static str,
+    pub description: SharedString,
     /// The full theme.
     pub theme: Theme,
 }
@@ -44,8 +44,8 @@ pub fn builtin_schemes() -> Vec<ThemeScheme> {
 
 fn default_scheme() -> ThemeScheme {
     ThemeScheme {
-        name: "Default",
-        description: "Dark theme with blue accents",
+        name: "Default".into(),
+        description: "Dark theme with blue accents".into(),
         theme: Theme::default(),
     }
 }

@@ -10,7 +10,7 @@ assets = { path = "crates/assets" }
 services = { path = "crates/services" }
 
 anyhow = "1.0"
-tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "time", "sync", "process"] }
 futures-util = { version = "0.3", default-features = false }
 futures-signals = "0.3"
 inotify = "0.11"

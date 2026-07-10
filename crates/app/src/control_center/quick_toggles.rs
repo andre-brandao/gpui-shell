@@ -100,8 +100,12 @@ pub fn render_quick_toggles(
                     mic_status,
                     !mic_muted,
                     cx,
-                    move |_cx| {
-                        services_mic.dispatch(AudioCommand::ToggleSourceMute);
+                    move |cx| {
+                        let s = services_mic.clone();
+                        cx.spawn(async move |_| {
+                            let _ = s.dispatch(AudioCommand::ToggleSourceMute).await;
+                        })
+                        .detach();
                     },
                 ))
                 .child(render_status_module(

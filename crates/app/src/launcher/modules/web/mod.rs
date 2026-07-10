@@ -2,7 +2,7 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*, px, rgba};
+use gpui::{AnyElement, App, div, prelude::*, px};
 use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, radius, spacing};
 
 use self::config::{WebConfig, WebProviderConfig};
@@ -149,7 +149,7 @@ impl LauncherView for WebSearchView {
                                         .when(has_query && vx.selected_index != 0, move |el| {
                                             el.bg(interactive_hover)
                                         })
-                                        .when(!has_query, |el| el.bg(rgba(0x00000033)))
+                                        .when(!has_query, move |el| el.bg(interactive_default))
                                         .child(if has_query {
                                             Label::new("Search").size(LabelSize::Small)
                                         } else {
@@ -162,7 +162,7 @@ impl LauncherView for WebSearchView {
                                                 .px(px(4.))
                                                 .py(px(2.))
                                                 .rounded(px(3.))
-                                                .bg(rgba(0x00000044))
+                                                .bg(theme.bg.tertiary)
                                                 .child(if has_query {
                                                     Label::new("Enter")
                                                         .size(LabelSize::XSmall)
@@ -179,7 +179,7 @@ impl LauncherView for WebSearchView {
                             div()
                                 .w_full()
                                 .p(px(spacing::SM))
-                                .bg(rgba(0x00000066))
+                                .bg(theme.bg.tertiary)
                                 .rounded(px(radius::SM))
                                 .text_size(theme.font_sizes.base)
                                 .child(if has_query {

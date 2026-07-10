@@ -125,8 +125,8 @@ fn stylix_scheme() -> Option<ThemeScheme> {
     let colors = Base16Colors::from_hex(&b16.palette.as_array()).ok()?;
 
     Some(ThemeScheme {
-        name: Box::leak(b16.name.into_boxed_str()),
-        description: Box::leak(format!("Stylix — {}", b16.author).into_boxed_str()),
+        name: b16.name.into(),
+        description: format!("Stylix — {}", b16.author).into(),
         theme: colors.to_theme(),
     })
 }
@@ -143,10 +143,8 @@ fn build_schemes() -> Vec<ThemeScheme> {
             };
 
             schemes.push(ThemeScheme {
-                name: Box::leak(b16.name.into_boxed_str()),
-                description: Box::leak(
-                    format!("{} — {}", provider.name, b16.author).into_boxed_str(),
-                ),
+                name: b16.name.into(),
+                description: format!("{} — {}", provider.name, b16.author).into(),
                 theme: colors.to_theme(),
             });
         }
@@ -229,13 +227,13 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                                 .text_size(theme.font_sizes.md)
                                 .text_color(text_primary)
                                 .font_weight(FontWeight::MEDIUM)
-                                .child(scheme.name),
+                                .child(scheme.name.clone()),
                         )
                         .child(
                             div()
                                 .text_size(theme.font_sizes.xs)
                                 .text_color(text_disabled)
-                                .child(scheme.description),
+                                .child(scheme.description.clone()),
                         ),
                 ),
         )
@@ -351,8 +349,8 @@ fn render_theme_card(
     let accent_primary = theme.accent.primary;
 
     let preview_colors = scheme.preview_colors();
-    let name = scheme.name;
-    let description = scheme.description;
+    let name = scheme.name.clone();
+    let description = scheme.description.clone();
     let card_theme = scheme.theme.clone();
 
     div()

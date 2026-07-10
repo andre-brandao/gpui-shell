@@ -1,8 +1,8 @@
 //! Notification center and popup UI.
 
 mod card;
+mod center;
 mod config;
-mod pannel;
 mod popup;
 mod popup_controller;
 mod widget;

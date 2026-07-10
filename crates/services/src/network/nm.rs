@@ -348,9 +348,11 @@ impl<'a> NetworkManager<'a> {
                 .build()
                 .await?;
 
-            // Request a scan (ignore errors)
-            let _ = wireless_device.request_scan(HashMap::new()).await;
-
+            // Pure read of NetworkManager's cached scan results. Requesting a
+            // scan here caused a feedback loop: the LastScan-changed handler
+            // calls this function, and a scan request completes by changing
+            // LastScan again. Scans are triggered explicitly via
+            // `NetworkCommand::RequestScan` instead.
             let access_points = wireless_device.get_access_points().await?;
             let state = device_proxy
                 .cached_state()

@@ -3,7 +3,7 @@
 //! This module provides a configurable shell bar for any screen edge.
 
 use gpui::{
-    AnyElement, App, Bounds, Context, DisplayId, FontWeight, Size, Window,
+    AnyElement, App, Bounds, Context, DisplayId, FontWeight, Pixels, Size, Window,
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     point, prelude::*, px,
 };
@@ -164,17 +164,20 @@ impl Render for Bar {
     }
 }
 
+/// Fallback used when no display can be enumerated yet. Only a hint: the
+/// layer-shell anchors stretch the bar to the real output size.
+const FALLBACK_DISPLAY_SIZE: Size<Pixels> = Size {
+    width: px(1920.),
+    height: px(1080.),
+};
+
 /// Returns window options for the bar.
-pub fn window_options(
-    // config: &BarConfig,
-    display_id: Option<DisplayId>,
-    cx: &App,
-) -> WindowOptions {
+pub fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
     let display_size = display_id
         .and_then(|id| cx.find_display(id))
         .or_else(|| cx.primary_display())
         .map(|display| display.bounds().size)
-        .unwrap_or_else(|| Size::new(px(1920.), px(1080.)));
+        .unwrap_or(FALLBACK_DISPLAY_SIZE);
     let config = cx.config();
     let (window_size, anchor) = match config.bar.position {
         BarPosition::Left => (
@@ -234,19 +237,7 @@ pub fn init(cx: &mut App) {
         tracing::info!("Bar opened");
 
         cx.update(|cx: &mut App| {
-            let displays = cx.displays();
-
-            if displays.is_empty() {
-                // No displays enumerated yet, open on default display
-                tracing::info!("No displays found, opening bar on default display");
-                open_with_config(None, cx);
-            } else {
-                tracing::info!("Opening bar on {} displays", displays.len());
-                for d in displays {
-                    tracing::info!("Opening bar on display {:?}", d.id());
-                    open_with_config(Some(d.id()), cx);
-                }
-            }
+            open_all_bar_windows(cx);
         })
     })
     .detach();

@@ -25,14 +25,13 @@ pub use components::{
     SliderEvent,
     Switch,
     SwitchSize,
-    h_flex,
     render_input_line,
     render_masked_input_line,
-    v_flex,
 };
 
-// Re-export traits
-pub use traits::styled_ext::StyledExt;
+// Layout helpers are used by this crate's own components; the app styles
+// with plain gpui builders, so they stay crate-internal.
+pub(crate) use components::{h_flex, v_flex};
 
 // Re-export theme system
 pub use theme::{

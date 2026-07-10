@@ -19,6 +19,8 @@ pub enum BluetoothState {
 pub struct BluetoothDevice {
     /// Device name (alias).
     pub name: String,
+    /// Freedesktop icon name from BlueZ (e.g. "audio-headset"), if reported.
+    pub icon: Option<String>,
     /// Battery percentage if available.
     pub battery: Option<u8>,
     /// D-Bus object path for this device.
