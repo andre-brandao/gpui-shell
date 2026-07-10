@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
+use tokio::sync::broadcast;
 use tracing::warn;
 use zbus::{
     Connection,
@@ -160,11 +161,16 @@ pub enum NotificationCommand {
     InvokeAction(u32, String),
 }
 
+/// Capacity of the notification event channel. Events are discrete (added,
+/// closed, removed, ...) so they go through a broadcast channel rather than a
+/// `Mutable`, which would collapse rapid events into the latest one.
+const EVENT_CHANNEL_CAPACITY: usize = 64;
+
 /// Event-driven notification service.
 #[derive(Debug, Clone)]
 pub struct NotificationSubscriber {
     data: Mutable<NotificationData>,
-    events: Mutable<Option<NotificationEvent>>,
+    events: broadcast::Sender<NotificationEvent>,
     status: Mutable<ServiceStatus>,
     conn: Option<Connection>,
 }
@@ -174,7 +180,7 @@ impl NotificationSubscriber {
     pub async fn new() -> anyhow::Result<Self> {
         let conn = zbus::connection::Connection::session().await?;
         let data = Mutable::new(NotificationData::default());
-        let events = Mutable::new(None);
+        let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let status = Mutable::new(ServiceStatus::Initializing);
         let server = NotificationServer::new(data.clone(), events.clone());
         conn.object_server().at(OBJECT_PATH, server).await?;
@@ -203,9 +209,10 @@ impl NotificationSubscriber {
 
     /// Fallback subscriber when D-Bus notification name is unavailable.
     pub fn disabled() -> Self {
+        let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
             data: Mutable::new(NotificationData::default()),
-            events: Mutable::new(None),
+            events,
             status: Mutable::new(ServiceStatus::Unavailable),
             conn: None,
         }
@@ -215,8 +222,8 @@ impl NotificationSubscriber {
         self.data.signal_cloned()
     }
 
-    pub fn subscribe_events(&self) -> MutableSignalCloned<Option<NotificationEvent>> {
-        self.events.signal_cloned()
+    pub fn subscribe_events(&self) -> broadcast::Receiver<NotificationEvent> {
+        self.events.subscribe()
     }
 
     pub fn get(&self) -> NotificationData {
@@ -340,7 +347,8 @@ impl NotificationSubscriber {
     }
 
     fn publish_event(&self, event: NotificationEvent) {
-        self.events.set(Some(event));
+        // Only fails when there are no receivers, which is fine.
+        let _ = self.events.send(event);
     }
 
     async fn close_by_id(&self, id: u32, reason: NotificationCloseReason) -> anyhow::Result<bool> {
@@ -380,13 +388,13 @@ impl Default for NotificationSubscriber {
 #[derive(Debug)]
 struct NotificationServer {
     data: Mutable<NotificationData>,
-    events: Mutable<Option<NotificationEvent>>,
+    events: broadcast::Sender<NotificationEvent>,
     next_id: u32,
     next_revision: u64,
 }
 
 impl NotificationServer {
-    fn new(data: Mutable<NotificationData>, events: Mutable<Option<NotificationEvent>>) -> Self {
+    fn new(data: Mutable<NotificationData>, events: broadcast::Sender<NotificationEvent>) -> Self {
         Self {
             data,
             events,
@@ -396,7 +404,8 @@ impl NotificationServer {
     }
 
     fn publish_event(&self, event: NotificationEvent) {
-        self.events.set(Some(event));
+        // Only fails when there are no receivers, which is fine.
+        let _ = self.events.send(event);
     }
 }
 
@@ -725,5 +734,28 @@ mod tests {
             normalize_path("file:///tmp/My%20%C3%A9.png"),
             PathBuf::from("/tmp/My é.png"),
         );
+    }
+
+    /// Rapid events must all reach subscribers — a `Mutable` would collapse
+    /// them into the latest value (the bug this guards against).
+    #[tokio::test]
+    async fn rapid_events_are_not_dropped() {
+        let subscriber = NotificationSubscriber::disabled();
+        let mut events = subscriber.subscribe_events();
+
+        const N: usize = 10;
+        for i in 0..N {
+            subscriber
+                .dispatch(NotificationCommand::SetDnd(i % 2 == 0))
+                .await
+                .unwrap();
+        }
+
+        for i in 0..N {
+            match events.try_recv() {
+                Ok(NotificationEvent::DndChanged(enabled)) => assert_eq!(enabled, i % 2 == 0),
+                other => panic!("expected DndChanged event #{i}, got {other:?}"),
+            }
+        }
     }
 }

@@ -14,15 +14,13 @@ ui.workspace = true
 assets.workspace = true
 services.workspace = true
 zbus.workspace = true
-futures.workspace = true
 anyhow.workspace = true
 futures-util.workspace = true
 futures-signals.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 chrono.workspace = true
-hyprland.workspace = true
 tokio.workspace = true
-serde = { version = "1.0", features = ["derive"] }
+serde.workspace = true
 toml = "1.1"
 image.workspace = true

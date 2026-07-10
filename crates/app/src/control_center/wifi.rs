@@ -9,6 +9,10 @@ use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_masked_input_line, 
 
 use crate::state::AppState;
 
+use super::section::{
+    row_action_button, section_empty_state, section_header, section_list, section_scan_button,
+    sort_ranked,
+};
 use super::{icons, tooltip::control_center_tooltip};
 
 /// State for WiFi password input
@@ -57,8 +61,6 @@ pub fn render_wifi_section(
 ) -> impl IntoElement {
     let theme = cx.theme();
     let network = AppState::network(cx).get();
-    let list_bg = theme.bg.primary;
-    let list_border = theme.border.subtle;
 
     // Get current connected WiFi SSID
     let connected_name = network.active_connections.iter().find_map(|c| {
@@ -72,15 +74,12 @@ pub fn render_wifi_section(
 
     // Sort access points: connected first, then by signal strength
     let mut aps: Vec<AccessPoint> = network.wireless_access_points.clone();
-    aps.sort_by(|a, b| {
-        let a_connected = connected_name.as_ref() == Some(&a.ssid);
-        let b_connected = connected_name.as_ref() == Some(&b.ssid);
-        match (a_connected, b_connected) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => b.strength.cmp(&a.strength),
-        }
-    });
+    let connected_for_sort = connected_name.clone();
+    sort_ranked(
+        &mut aps,
+        move |ap| u8::from(connected_for_sort.as_ref() != Some(&ap.ssid)),
+        |a, b| b.strength.cmp(&a.strength),
+    );
 
     div()
         .w_full()
@@ -88,25 +87,7 @@ pub fn render_wifi_section(
         .flex_col()
         .gap(px(spacing::SM))
         .child(
-            // Section header
-            div()
-                .flex()
-                .items_center()
-                .gap(px(spacing::SM))
-                .child(
-                    div()
-                        .text_size(px(icon_size::SM))
-                        .text_color(theme.text.muted)
-                        .child(icons::WIFI),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(theme.font_sizes.sm)
-                        .text_color(theme.text.secondary)
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .child("WiFi"),
-                )
+            section_header(icons::WIFI, "WiFi", cx)
                 .when_some(connected_name.clone(), |el, name| {
                     el.child(
                         div()
@@ -118,105 +99,79 @@ pub fn render_wifi_section(
                 .child(render_refresh_button(cx)),
         )
         .when(!wifi_enabled, |el| {
-            el.child(
-                div()
-                    .py(px(spacing::MD))
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(theme.text.muted)
-                    .text_center()
-                    .child("WiFi is off"),
-            )
+            el.child(section_empty_state("WiFi is off", cx))
         })
         .when(wifi_enabled && aps.is_empty(), |el| {
-            el.child(
-                div()
-                    .py(px(spacing::MD))
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(theme.text.muted)
-                    .text_center()
-                    .child("No networks found"),
-            )
+            el.child(section_empty_state("No networks found", cx))
         })
         .when(wifi_enabled && !aps.is_empty(), |el| {
-            el.child(
-                div()
-                    .id("wifi-networks-list")
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .max_h(px(240.))
-                    .overflow_y_scroll()
-                    .bg(list_bg)
-                    .border_1()
-                    .border_color(list_border)
-                    .rounded(px(radius::SM))
-                    .py(px(spacing::XS))
-                    .children(aps.into_iter().enumerate().map(|(idx, ap)| {
-                        let is_connected = connected_name.as_ref() == Some(&ap.ssid);
-                        let is_entering_password = password_state.is_entering_for(&ap.ssid);
-                        let ssid = ap.ssid.clone();
-                        let ssid_for_display = ssid.clone();
-                        let ssid_for_callback = ssid.clone();
-                        let is_secured = !ap.public;
-                        let is_known = ap.known;
-                        let on_connect = on_connect.clone();
-                        let on_disconnect = on_disconnect.clone();
-                        let on_cancel = on_cancel_password.clone();
-                        let current_password = password_state.input.clone();
-                        let is_connecting = password_state.connecting;
-                        let disconnect_ssid = connected_name.clone();
+            el.child(section_list("wifi-networks-list", cx).children(
+                aps.into_iter().enumerate().map(|(idx, ap)| {
+                    let is_connected = connected_name.as_ref() == Some(&ap.ssid);
+                    let is_entering_password = password_state.is_entering_for(&ap.ssid);
+                    let ssid = ap.ssid.clone();
+                    let ssid_for_display = ssid.clone();
+                    let ssid_for_callback = ssid.clone();
+                    let is_secured = !ap.public;
+                    let is_known = ap.known;
+                    let on_connect = on_connect.clone();
+                    let on_disconnect = on_disconnect.clone();
+                    let on_cancel = on_cancel_password.clone();
+                    let current_password = password_state.input.clone();
+                    let is_connecting = password_state.connecting;
+                    let disconnect_ssid = connected_name.clone();
 
-                        if is_entering_password {
-                            let ssid_submit = ssid.clone();
-                            render_password_input(
-                                idx,
-                                &ssid_for_display,
-                                &current_password,
-                                is_connecting,
-                                password_state.error.as_deref(),
-                                move |password, cx| {
-                                    let ssid = ssid_submit.clone();
-                                    on_connect(ssid, Some(password), cx);
-                                },
-                                on_cancel,
-                                cx,
-                            )
-                            .into_any_element()
-                        } else {
-                            render_network_item(
-                                idx,
-                                &ssid_for_display,
-                                ap.strength,
-                                is_secured,
-                                is_known,
-                                is_connected,
-                                disconnect_ssid.clone(),
-                                move |cx| {
-                                    if is_connected {
-                                        // Already connected, do nothing or disconnect
-                                        return;
-                                    }
+                    if is_entering_password {
+                        let ssid_submit = ssid.clone();
+                        render_password_input(
+                            idx,
+                            &ssid_for_display,
+                            &current_password,
+                            is_connecting,
+                            password_state.error.as_deref(),
+                            move |password, cx| {
+                                let ssid = ssid_submit.clone();
+                                on_connect(ssid, Some(password), cx);
+                            },
+                            on_cancel,
+                            cx,
+                        )
+                        .into_any_element()
+                    } else {
+                        render_network_item(
+                            idx,
+                            &ssid_for_display,
+                            ap.strength,
+                            is_secured,
+                            is_known,
+                            is_connected,
+                            disconnect_ssid.clone(),
+                            move |cx| {
+                                if is_connected {
+                                    // Already connected, do nothing or disconnect
+                                    return;
+                                }
 
-                                    let ssid = ssid_for_callback.clone();
+                                let ssid = ssid_for_callback.clone();
 
-                                    if is_secured && !is_known {
-                                        // Need password - this will be handled by the parent
-                                        on_connect(ssid, None, cx);
-                                    } else {
-                                        // Open network or known network - connect directly
-                                        // For known networks, NM will use saved credentials
-                                        on_connect(ssid, Some(String::new()), cx);
-                                    }
-                                },
-                                move |path, cx| {
-                                    on_disconnect(path, cx);
-                                },
-                                cx,
-                            )
-                            .into_any_element()
-                        }
-                    })),
-            )
+                                if is_secured && !is_known {
+                                    // Need password - this will be handled by the parent
+                                    on_connect(ssid, None, cx);
+                                } else {
+                                    // Open network or known network - connect directly
+                                    // For known networks, NM will use saved credentials
+                                    on_connect(ssid, Some(String::new()), cx);
+                                }
+                            },
+                            move |path, cx| {
+                                on_disconnect(path, cx);
+                            },
+                            cx,
+                        )
+                        .into_any_element()
+                    }
+                }),
+            ))
         })
 }
 
@@ -328,33 +283,18 @@ fn render_network_item(
         })
         .when(connected, move |el| {
             let disconnect_ssid = disconnect_ssid.clone();
-            el.child(
-                div()
-                    .id(ElementId::Name(SharedString::from(format!(
-                        "wifi-disconnect-{}",
-                        index
-                    ))))
-                    .w(px(22.))
-                    .h(px(22.))
-                    .rounded(px(radius::SM))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(move |s| s.bg(interactive_hover))
-                    .tooltip(control_center_tooltip("Disconnect"))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        if let Some(ssid) = disconnect_ssid.clone() {
-                            on_disconnect(ssid, cx);
-                        }
-                    })
-                    .child(
-                        div()
-                            .text_size(px(icon_size::SM))
-                            .text_color(status_success)
-                            .child(icons::CLOSE),
-                    ),
-            )
+            el.child(row_action_button(
+                format!("wifi-disconnect-{}", index),
+                icons::CLOSE,
+                status_success,
+                interactive_hover,
+                "Disconnect",
+                move |cx| {
+                    if let Some(ssid) = disconnect_ssid.clone() {
+                        on_disconnect(ssid, cx);
+                    }
+                },
+            ))
         })
 }
 
@@ -497,37 +437,18 @@ fn render_password_input(
 }
 
 /// Render a refresh button for rescanning networks
-pub fn render_refresh_button(cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
+fn render_refresh_button(cx: &App) -> impl IntoElement {
     let services = AppState::network(cx).clone();
-
-    // Pre-compute colors for closures
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let text_muted = theme.text.muted;
-
-    div()
-        .id("wifi-refresh")
-        .flex()
-        .items_center()
-        .justify_center()
-        .w(px(24.))
-        .h(px(24.))
-        .rounded(px(radius::SM))
-        .cursor_pointer()
-        .bg(interactive_default)
-        .hover(move |s| s.bg(interactive_hover))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+    section_scan_button(
+        "wifi-refresh",
+        false,
+        move |cx| {
             let s = services.clone();
             cx.spawn(async move |_| {
                 let _ = s.dispatch(NetworkCommand::RequestScan).await;
             })
             .detach();
-        })
-        .child(
-            div()
-                .text_size(px(icon_size::SM))
-                .text_color(text_muted)
-                .child(icons::REFRESH),
-        )
+        },
+        cx,
+    )
 }

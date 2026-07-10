@@ -1,8 +1,8 @@
-use anyhow::anyhow;
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use ui::{
-    AccentColors, BgColors, BorderColors, FontSizes, InteractiveColors, StatusColors, TextColors,
-    Theme,
+    AccentColors, BgColors, BorderColors, Colorize as _, FontSizes, InteractiveColors,
+    StatusColors, TextColors, Theme,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,143 +152,10 @@ impl StoredTheme {
 }
 
 fn hsla_to_hex(color: gpui::Hsla) -> String {
-    let (r, g, b, a) = hsla_to_rgba8(color);
-    if a == 255 {
-        format!("#{r:02X}{g:02X}{b:02X}")
-    } else {
-        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
-    }
+    color.to_hex()
 }
 
 fn hex_to_hsla(hex: &str) -> anyhow::Result<gpui::Hsla> {
-    let trimmed = hex.trim();
-    let raw = trimmed.strip_prefix('#').unwrap_or(trimmed);
-
-    let (r, g, b, a) = match raw.len() {
-        6 => (
-            u8::from_str_radix(&raw[0..2], 16)?,
-            u8::from_str_radix(&raw[2..4], 16)?,
-            u8::from_str_radix(&raw[4..6], 16)?,
-            255,
-        ),
-        8 => (
-            u8::from_str_radix(&raw[0..2], 16)?,
-            u8::from_str_radix(&raw[2..4], 16)?,
-            u8::from_str_radix(&raw[4..6], 16)?,
-            u8::from_str_radix(&raw[6..8], 16)?,
-        ),
-        _ => {
-            return Err(anyhow!(
-                "Invalid color '{}': expected #RRGGBB or #RRGGBBAA",
-                hex
-            ));
-        }
-    };
-
-    Ok(rgba8_to_hsla(r, g, b, a))
-}
-
-fn hsla_to_rgba8(color: gpui::Hsla) -> (u8, u8, u8, u8) {
-    let h = wrap01(color.h);
-    let s = clamp01(color.s);
-    let l = clamp01(color.l);
-    let a = clamp01(color.a);
-
-    let (r, g, b) = if s == 0.0 {
-        (l, l, l)
-    } else {
-        let q = if l < 0.5 {
-            l * (1.0 + s)
-        } else {
-            l + s - (l * s)
-        };
-        let p = 2.0 * l - q;
-        (
-            hue_to_rgb(p, q, h + 1.0 / 3.0),
-            hue_to_rgb(p, q, h),
-            hue_to_rgb(p, q, h - 1.0 / 3.0),
-        )
-    };
-
-    (
-        float01_to_u8(r),
-        float01_to_u8(g),
-        float01_to_u8(b),
-        float01_to_u8(a),
-    )
-}
-
-fn rgba8_to_hsla(r: u8, g: u8, b: u8, a: u8) -> gpui::Hsla {
-    let rf = r as f32 / 255.0;
-    let gf = g as f32 / 255.0;
-    let bf = b as f32 / 255.0;
-    let af = a as f32 / 255.0;
-
-    let max = rf.max(gf.max(bf));
-    let min = rf.min(gf.min(bf));
-    let mut h = 0.0;
-    let l = (max + min) / 2.0;
-
-    let d = max - min;
-    let s = if d == 0.0 {
-        0.0
-    } else {
-        d / (1.0 - (2.0 * l - 1.0).abs())
-    };
-
-    if d != 0.0 {
-        if max == rf {
-            h = ((gf - bf) / d) % 6.0;
-        } else if max == gf {
-            h = ((bf - rf) / d) + 2.0;
-        } else {
-            h = ((rf - gf) / d) + 4.0;
-        }
-        h /= 6.0;
-        if h < 0.0 {
-            h += 1.0;
-        }
-    }
-
-    gpui::Hsla {
-        h,
-        s: clamp01(s),
-        l: clamp01(l),
-        a: clamp01(af),
-    }
-}
-
-fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
-    if t < 0.0 {
-        t += 1.0;
-    }
-    if t > 1.0 {
-        t -= 1.0;
-    }
-
-    if t < 1.0 / 6.0 {
-        p + (q - p) * 6.0 * t
-    } else if t < 1.0 / 2.0 {
-        q
-    } else if t < 2.0 / 3.0 {
-        p + (q - p) * (2.0 / 3.0 - t) * 6.0
-    } else {
-        p
-    }
-}
-
-fn clamp01(value: f32) -> f32 {
-    value.clamp(0.0, 1.0)
-}
-
-fn wrap01(value: f32) -> f32 {
-    let mut v = value % 1.0;
-    if v < 0.0 {
-        v += 1.0;
-    }
-    v
-}
-
-fn float01_to_u8(value: f32) -> u8 {
-    (clamp01(value) * 255.0).round() as u8
+    gpui::Hsla::parse_hex(hex.trim())
+        .with_context(|| format!("Invalid color '{hex}': expected #RRGGBB or #RRGGBBAA"))
 }

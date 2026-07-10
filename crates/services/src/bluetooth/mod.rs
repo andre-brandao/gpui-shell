@@ -178,34 +178,25 @@ async fn fetch_bluetooth_data(conn: &zbus::Connection) -> anyhow::Result<Bluetoo
     })
 }
 
-/// Start the D-Bus listener in a dedicated thread.
+/// Start the D-Bus listener on the shared runtime, restarting on failure.
 fn start_listener(
     data: Mutable<BluetoothData>,
     status: Mutable<ServiceStatus>,
     conn: zbus::Connection,
 ) {
-    thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!(
-                    "Failed to create Tokio runtime for Bluetooth listener: {}",
-                    e
-                );
-                *status.lock_mut() = ServiceStatus::Error(None);
-                return;
-            }
-        };
-
-        rt.block_on(async move {
-            if let Err(e) = run_listener(data, conn).await {
-                error!("Bluetooth listener error: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
-            }
-        });
+    let run_status = status.clone();
+    crate::listener::spawn_listener("bluetooth", status, move || {
+        let data = data.clone();
+        let status = run_status.clone();
+        let conn = conn.clone();
+        async move {
+            // Resync state after (re)connecting so restarts don't leave the
+            // widget stale.
+            let fresh = fetch_bluetooth_data(&conn).await?;
+            *data.lock_mut() = fresh;
+            *status.lock_mut() = ServiceStatus::Active;
+            run_listener(data, conn).await
+        }
     });
 }
 

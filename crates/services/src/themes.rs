@@ -46,6 +46,30 @@ pub struct Base16Palette {
     pub base0f: String,
 }
 
+impl Base16Palette {
+    /// All 16 colors in base00..base0f order, for hex-array consumers.
+    pub fn as_array(&self) -> [&str; 16] {
+        [
+            &self.base00,
+            &self.base01,
+            &self.base02,
+            &self.base03,
+            &self.base04,
+            &self.base05,
+            &self.base06,
+            &self.base07,
+            &self.base08,
+            &self.base09,
+            &self.base0a,
+            &self.base0b,
+            &self.base0c,
+            &self.base0d,
+            &self.base0e,
+            &self.base0f,
+        ]
+    }
+}
+
 // Serde types for YAML parsing
 #[derive(Deserialize)]
 struct Base16Yaml {

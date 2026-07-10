@@ -341,23 +341,17 @@ impl UPowerSubscriber {
             conn: conn.clone(),
         };
 
-        // Spawn the monitoring task
+        // Spawn the monitoring task, restarting on failure.
         let sub_for_task = subscriber.clone();
-        tokio::spawn(async move {
-            loop {
-                match sub_for_task.run().await {
-                    Err(e) => error!("UPower subscriber error: {}", e),
-                    Ok(()) => warn!("UPower event stream ended, restarting"),
-                }
-                *sub_for_task.status.lock_mut() = ServiceStatus::Error(None);
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                match UPowerData::init(&sub_for_task.conn).await {
-                    Ok(new_data) => {
-                        sub_for_task.data.set(new_data);
-                        *sub_for_task.status.lock_mut() = ServiceStatus::Active;
-                    }
-                    Err(e) => error!("Failed to refresh UPower data after reconnect: {}", e),
-                }
+        crate::listener::spawn_listener("upower", status.clone(), move || {
+            let sub = sub_for_task.clone();
+            async move {
+                // Resync state after (re)connecting so restarts don't leave
+                // the widget stale.
+                let fresh = UPowerData::init(&sub.conn).await?;
+                sub.data.set(fresh);
+                *sub.status.lock_mut() = ServiceStatus::Active;
+                sub.run().await
             }
         });
 

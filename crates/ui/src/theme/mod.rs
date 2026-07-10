@@ -149,8 +149,12 @@ impl Theme {
     ///
     /// Call this to swap themes at runtime. The theme service will use this
     /// when loading Base16 schemes or switching themes.
+    ///
+    /// Repaints all windows so every view picks up the new colors immediately,
+    /// without relying on the config file watcher.
     pub fn set(theme: Theme, cx: &mut App) {
         *cx.global_mut::<Theme>() = theme;
+        cx.refresh_windows();
     }
 }
 

@@ -1,10 +1,10 @@
-use gpui::{AnyElement, App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, Context, MouseButton, Render, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
 use ui::ActiveTheme;
 
 use crate::bar::modules::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
+use crate::panel::toggle_widget_panel;
 use crate::state::{AppState, watch};
 
 use super::dispatch_notification_command;
@@ -31,27 +31,20 @@ impl NotificationWidget {
 
     fn toggle_center(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
         let config = Config::global(cx);
-        let notification_config = &config.notification;
-        let panel_size = Size::new(
-            px(notification_config.center_width),
-            px(notification_config.center_height),
-        );
-        let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+        let center_width = config.notification.center_width;
+        let center_height = config.notification.center_height;
         let subscriber = self.subscriber.clone();
-        dispatch_notification_command(subscriber.clone(), NotificationCommand::MarkAllRead);
+        dispatch_notification_command(subscriber.clone(), NotificationCommand::MarkAllRead, cx);
 
-        let panel_config = PanelConfig {
-            width: notification_config.center_width,
-            height: notification_config.center_height,
-            anchor,
-            margin,
-            namespace: "notification-center".to_string(),
-        };
-
-        toggle_panel("notification-center", panel_config, cx, move |cx| {
-            NotificationCenter::new(subscriber, cx)
-        });
+        toggle_widget_panel(
+            "notification-center",
+            gpui::Size::new(center_width, center_height),
+            "notification-center",
+            event,
+            window,
+            cx,
+            move |cx| NotificationCenter::new(subscriber, cx),
+        );
     }
 
     fn render_widget_content(

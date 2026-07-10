@@ -5,11 +5,10 @@
 
 use std::fs;
 use std::path::Path;
-use std::thread;
 
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use inotify::{EventMask, Inotify, WatchMask};
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 use crate::ServiceStatus;
 
@@ -149,11 +148,8 @@ impl Default for PrivacySubscriber {
 
 /// Start the PipeWire listener thread for media stream tracking.
 fn start_pipewire_listener(data: Mutable<PrivacyData>, pipewire_status: Mutable<ServiceStatus>) {
-    thread::spawn(move || {
-        if let Err(e) = run_pipewire_listener(data) {
-            error!("PipeWire listener error: {}", e);
-            *pipewire_status.lock_mut() = ServiceStatus::Error(None);
-        }
+    crate::listener::spawn_blocking_listener("privacy-pipewire", pipewire_status, move || {
+        run_pipewire_listener(data.clone())
     });
 }
 
@@ -206,11 +202,8 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
 
 /// Start the webcam watcher thread.
 fn start_webcam_watcher(data: Mutable<PrivacyData>, webcam_status: Mutable<ServiceStatus>) {
-    thread::spawn(move || {
-        if let Err(e) = run_webcam_watcher(data) {
-            warn!("Webcam watcher error: {}", e);
-            *webcam_status.lock_mut() = ServiceStatus::Error(None);
-        }
+    crate::listener::spawn_blocking_listener("privacy-webcam", webcam_status, move || {
+        run_webcam_watcher(data.clone())
     });
 }
 

@@ -19,6 +19,7 @@ pub mod config;
 pub mod icons;
 mod power;
 mod quick_toggles;
+mod section;
 mod sliders;
 mod tooltip;
 mod wifi;
@@ -29,7 +30,7 @@ use gpui::{
     App, AvailableSpace, Context, Entity, FocusHandle, Focusable, MouseButton, Size, Window, div,
     prelude::*, px,
 };
-use services::{AudioCommand, BrightnessCommand, NetworkCommand, UPowerCommand};
+use services::{AudioCommand, BrightnessCommand, NetworkCommand, NetworkSubscriber, UPowerCommand};
 use std::rc::Rc;
 use ui::{ActiveTheme, Slider, SliderEvent, icon_size, radius, spacing};
 
@@ -37,7 +38,7 @@ use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
     SelectRight, SelectWordLeft, SelectWordRight, WordLeft, WordRight,
 };
-use crate::state::{AppState, watch};
+use crate::state::{AppState, watch, watch_notify};
 
 pub use quick_toggles::ExpandedSection;
 pub use wifi::WifiPasswordState;
@@ -48,6 +49,61 @@ pub const CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED: f32 = 288.0;
 type ToggleSectionCallback = Rc<dyn Fn(ExpandedSection, &mut App)>;
 type WifiConnectCallback = Rc<dyn Fn(String, Option<String>, &mut App)>;
 type WifiDisconnectCallback = Rc<dyn Fn(String, &mut App)>;
+
+/// Build an `on_action` listener that edits the WiFi password prompt.
+///
+/// All text-editing actions on the password input share the same shape:
+/// only act while the prompt is open (`ssid` set), then re-render.
+fn password_action<A: 'static>(
+    entity: &Entity<ControlCenter>,
+    edit: impl Fn(&mut WifiPasswordState) + 'static,
+) -> impl Fn(&A, &mut Window, &mut App) + 'static {
+    let entity = entity.clone();
+    move |_, _window, cx| {
+        entity.update(cx, |this, cx| {
+            if this.wifi_password.ssid.is_some() {
+                edit(&mut this.wifi_password);
+                cx.notify();
+            }
+        });
+    }
+}
+
+/// Kick off a WiFi connect attempt, tracking progress in the password prompt
+/// state. Shared by the section connect callback and the Confirm action.
+fn spawn_wifi_connect(
+    entity: &Entity<ControlCenter>,
+    services: &NetworkSubscriber,
+    ssid: String,
+    password: Option<String>,
+    cx: &mut App,
+) {
+    let services = services.clone();
+    entity.update(cx, |this, cx| {
+        this.wifi_password.connecting = true;
+        cx.notify();
+    });
+
+    cx.spawn({
+        let entity = entity.clone();
+        async move |cx| {
+            let result = services
+                .dispatch(NetworkCommand::Connect { ssid, password })
+                .await;
+
+            entity.update(cx, |this, cx| {
+                this.wifi_password.connecting = false;
+                if result.is_ok() {
+                    this.wifi_password.clear();
+                } else {
+                    this.wifi_password.error = Some("Connection failed".to_string());
+                }
+                cx.notify();
+            });
+        }
+    })
+    .detach();
+}
 
 /// Control Center panel component.
 ///
@@ -145,9 +201,7 @@ impl ControlCenter {
         );
 
         // Bluetooth
-        watch(cx, AppState::bluetooth(cx).subscribe(), |_, _, cx| {
-            cx.notify();
-        });
+        watch_notify(cx, AppState::bluetooth(cx).subscribe());
 
         // Brightness - sync brightness slider
         watch(
@@ -163,19 +217,13 @@ impl ControlCenter {
         );
 
         // Network
-        watch(cx, AppState::network(cx).subscribe(), |_, _, cx| {
-            cx.notify();
-        });
+        watch_notify(cx, AppState::network(cx).subscribe());
 
         // Privacy
-        watch(cx, AppState::privacy(cx).subscribe(), |_, _, cx| {
-            cx.notify();
-        });
+        watch_notify(cx, AppState::privacy(cx).subscribe());
 
         // UPower
-        watch(cx, AppState::upower(cx).subscribe(), |_, _, cx| {
-            cx.notify();
-        });
+        watch_notify(cx, AppState::upower(cx).subscribe());
     }
 
     /// Toggle a section's expanded state
@@ -229,36 +277,9 @@ impl Render for ControlCenter {
             let entity = entity.clone();
             let services = wifi_services.clone();
             move |ssid: String, password: Option<String>, cx: &mut App| {
-                let entity = entity.clone();
-                let services = services.clone();
                 if let Some(pwd) = password {
                     let password = if pwd.is_empty() { None } else { Some(pwd) };
-
-                    entity.update(cx, |this, cx| {
-                        this.wifi_password.connecting = true;
-                        cx.notify();
-                    });
-
-                    cx.spawn({
-                        let entity = entity.clone();
-                        async move |cx| {
-                            let result = services
-                                .dispatch(NetworkCommand::Connect { ssid, password })
-                                .await;
-
-                            entity.update(cx, |this, cx| {
-                                this.wifi_password.connecting = false;
-                                if result.is_ok() {
-                                    this.wifi_password.clear();
-                                } else {
-                                    this.wifi_password.error =
-                                        Some("Connection failed".to_string());
-                                }
-                                cx.notify();
-                            });
-                        }
-                    })
-                    .detach();
+                    spawn_wifi_connect(&entity, &services, ssid, password, cx);
                 } else {
                     // Need password - prompt for one
                     entity.update(cx, |this, cx| {
@@ -405,178 +426,53 @@ impl Render for ControlCenter {
                 .flex_col()
                 .gap(px(spacing::MD))
                 // Keyboard event handling for password input
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &Backspace, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.backspace();
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &DeleteWordBack, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.delete_word_back();
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &CursorLeft, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_left(false);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &CursorRight, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_right(false);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &WordLeft, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_word_left(false);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &WordRight, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_word_right(false);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &SelectWordLeft, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_word_left(true);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &SelectWordRight, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_word_right(true);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &SelectLeft, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_left(true);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &SelectRight, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.move_right(true);
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &SelectAll, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.input.select_all();
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
-                .on_action({
-                    let entity = entity.clone();
-                    move |_: &Cancel, _window, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.wifi_password.ssid.is_some() {
-                                this.wifi_password.clear();
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
+                .on_action(password_action::<Backspace>(&entity, |p| {
+                    p.input.backspace()
+                }))
+                .on_action(password_action::<DeleteWordBack>(&entity, |p| {
+                    p.input.delete_word_back()
+                }))
+                .on_action(password_action::<CursorLeft>(&entity, |p| {
+                    p.input.move_left(false)
+                }))
+                .on_action(password_action::<CursorRight>(&entity, |p| {
+                    p.input.move_right(false)
+                }))
+                .on_action(password_action::<WordLeft>(&entity, |p| {
+                    p.input.move_word_left(false)
+                }))
+                .on_action(password_action::<WordRight>(&entity, |p| {
+                    p.input.move_word_right(false)
+                }))
+                .on_action(password_action::<SelectWordLeft>(&entity, |p| {
+                    p.input.move_word_left(true)
+                }))
+                .on_action(password_action::<SelectWordRight>(&entity, |p| {
+                    p.input.move_word_right(true)
+                }))
+                .on_action(password_action::<SelectLeft>(&entity, |p| {
+                    p.input.move_left(true)
+                }))
+                .on_action(password_action::<SelectRight>(&entity, |p| {
+                    p.input.move_right(true)
+                }))
+                .on_action(password_action::<SelectAll>(&entity, |p| {
+                    p.input.select_all()
+                }))
+                .on_action(password_action::<Cancel>(&entity, |p| p.clear()))
                 .on_action({
                     let entity = entity.clone();
                     let services = network_service.clone();
                     move |_: &Confirm, _window, cx| {
-                        let entity = entity.clone();
-                        let services = services.clone();
-                        entity.update(cx, |this, cx| {
-                            if let Some(ssid) = this.wifi_password.ssid.clone() {
+                        let params = entity.update(cx, |this, _| {
+                            this.wifi_password.ssid.clone().map(|ssid| {
                                 let password = this.wifi_password.input.text().to_string();
-                                let password = if password.is_empty() {
-                                    None
-                                } else {
-                                    Some(password)
-                                };
-
-                                this.wifi_password.connecting = true;
-                                cx.notify();
-
-                                cx.spawn({
-                                    let entity = cx.entity().clone();
-                                    async move |_, cx| {
-                                        let result = services
-                                            .dispatch(NetworkCommand::Connect { ssid, password })
-                                            .await;
-
-                                        entity.update(cx, |this, cx| {
-                                            this.wifi_password.connecting = false;
-                                            if result.is_ok() {
-                                                this.wifi_password.clear();
-                                            } else {
-                                                this.wifi_password.error =
-                                                    Some("Connection failed".to_string());
-                                            }
-                                            cx.notify();
-                                        });
-                                    }
-                                })
-                                .detach();
-                            }
+                                (ssid, (!password.is_empty()).then_some(password))
+                            })
                         });
+                        if let Some((ssid, password)) = params {
+                            spawn_wifi_connect(&entity, &services, ssid, password, cx);
+                        }
                     }
                 })
                 .on_key_down({

@@ -13,8 +13,8 @@ pub mod view;
 
 use gpui::{
     App, Bounds, Context, FocusHandle, Focusable, Point, ScrollHandle, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div,
-    layer_shell::*, prelude::*, px,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
+    prelude::*, px,
 };
 use modules::{HelpView, all_views};
 use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_input_line, spacing};
@@ -26,7 +26,8 @@ use crate::keybinds::{
     PageDown, PageUp, SelectAll, SelectLeft, SelectRight, SelectWordLeft, SelectWordRight,
     WordLeft, WordRight,
 };
-use crate::state::{AppState, watch};
+use crate::state::{AppState, watch_notify};
+use crate::windows::WindowRegistry;
 
 /// Number of items to jump when using Page Up/Down.
 const ITEMS_PER_PAGE: usize = 7;
@@ -51,17 +52,9 @@ impl Launcher {
         let scroll_handle = ScrollHandle::new();
 
         // Subscribe to service updates for reactive rendering
-        watch(cx, compositor.subscribe(), |_, _, cx| {
-            cx.notify();
-        });
-
-        watch(cx, sysinfo.subscribe(), |_, _, cx| {
-            cx.notify();
-        });
-
-        watch(cx, upower.subscribe(), |_, _, cx| {
-            cx.notify();
-        });
+        watch_notify(cx, compositor.subscribe());
+        watch_notify(cx, sysinfo.subscribe());
+        watch_notify(cx, upower.subscribe());
 
         let launcher_config = Config::global(cx).launcher.clone();
         let views = all_views(&launcher_config);
@@ -377,8 +370,8 @@ impl Render for Launcher {
             .key_context("Launcher")
             .on_action(cx.listener(|this, _: &Cancel, window, cx| {
                 if this.input.is_empty() {
-                    // Clear the static handle before removing window
-                    *LAUNCHER_WINDOW.lock().unwrap() = None;
+                    // Drop registry tracking before removing the window
+                    WindowRegistry::window_closed(LAUNCHER_WINDOW_ID, cx);
                     window.remove_window();
                 } else {
                     // First Esc clears input; second Esc closes.
@@ -390,8 +383,8 @@ impl Render for Launcher {
             }))
             .on_action(cx.listener(|this, _: &Confirm, window, cx| {
                 if this.handle_input(ViewInput::Enter, cx) {
-                    // Clear the static handle before removing window
-                    *LAUNCHER_WINDOW.lock().unwrap() = None;
+                    // Drop registry tracking before removing the window
+                    WindowRegistry::window_closed(LAUNCHER_WINDOW_ID, cx);
                     window.remove_window();
                 }
                 cx.notify();
@@ -580,86 +573,71 @@ impl Render for Launcher {
     }
 }
 
-/// Global state to track the launcher window.
-static LAUNCHER_WINDOW: std::sync::Mutex<Option<WindowHandle<Launcher>>> =
-    std::sync::Mutex::new(None);
+/// Registry ID for the launcher's exclusive window.
+const LAUNCHER_WINDOW_ID: &str = "launcher";
 
 pub fn init(_cx: &mut App) {}
 
 /// Toggle the launcher window with optional prefilled input.
 ///
 /// Behavior:
-/// - If launcher is closed: opens it (with optional input).
+/// - If launcher is closed: opens it (with optional input), closing any open
+///   panel — the launcher participates in [`WindowRegistry`] exclusivity.
 /// - If launcher is open and `input` is `Some`: updates the input.
 /// - If launcher is open and `input` is `None`: closes it.
 pub fn toggle(input: Option<String>, cx: &mut App) {
     let start = std::time::Instant::now();
     tracing::debug!("launcher::toggle: start");
 
-    let mut guard = LAUNCHER_WINDOW.lock().unwrap();
-    tracing::debug!("launcher::toggle: acquired lock {:?}", start.elapsed());
-
-    if let Some(handle) = guard.take() {
-        // If input is provided, update existing launcher instead of closing
-        if let Some(input_text) = input {
-            let update_result = handle.update(cx, |launcher, _, cx| {
+    // If the launcher is already open and input is provided, update in place.
+    if let Some(input_text) = input.clone()
+        && let Some(handle) = WindowRegistry::active_handle::<Launcher>(LAUNCHER_WINDOW_ID, cx)
+        && handle
+            .update(cx, |launcher, _, cx| {
                 launcher.set_input(input_text);
                 cx.notify();
-            });
-            if update_result.is_ok() {
-                *guard = Some(handle);
-                return;
-            }
-        }
-        // No input or update failed, close the window
-        let _ = handle.update(cx, |_, window, _| {
-            window.remove_window();
-        });
-        tracing::debug!("launcher::toggle: closed window {:?}", start.elapsed());
-    } else {
-        tracing::debug!("launcher::toggle: opening new window {:?}", start.elapsed());
-        let cfg = Config::global(cx).launcher.clone();
-        if let Ok(handle) = cx.open_window(
-            WindowOptions {
-                titlebar: None,
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point::new(px(0.), px(0.)),
-                    size: Size::new(px(cfg.width), px(cfg.height)),
-                })),
-                app_id: Some("gpuishell-launcher".to_string()),
-                window_background: WindowBackgroundAppearance::Transparent,
-                kind: WindowKind::LayerShell(LayerShellOptions {
-                    namespace: "launcher".to_string(),
-                    layer: Layer::Overlay,
-                    anchor: Anchor::TOP,
-                    exclusive_zone: None,
-                    margin: Some((
-                        px(cfg.margin_top),
-                        px(cfg.margin_right),
-                        px(cfg.margin_bottom),
-                        px(cfg.margin_left),
-                    )),
-                    keyboard_interactivity: KeyboardInteractivity::Exclusive,
-                    ..Default::default()
-                }),
-                focus: true,
-                ..Default::default()
-            },
-            move |_, cx| {
-                cx.new(|cx| {
-                    let new_start = std::time::Instant::now();
-                    let launcher = Launcher::new(input.clone(), cx);
-                    tracing::debug!(
-                        "launcher::toggle: Launcher::new took {:?}",
-                        new_start.elapsed()
-                    );
-                    launcher
-                })
-            },
-        ) {
-            *guard = Some(handle);
-            tracing::debug!("launcher::toggle: window opened {:?}", start.elapsed());
-        }
+            })
+            .is_ok()
+    {
+        tracing::debug!("launcher::toggle: updated input {:?}", start.elapsed());
+        return;
     }
+
+    let cfg = Config::global(cx).launcher.clone();
+    let options = WindowOptions {
+        titlebar: None,
+        window_bounds: Some(WindowBounds::Windowed(Bounds {
+            origin: Point::new(px(0.), px(0.)),
+            size: Size::new(px(cfg.width), px(cfg.height)),
+        })),
+        app_id: Some("gpuishell-launcher".to_string()),
+        window_background: WindowBackgroundAppearance::Transparent,
+        kind: WindowKind::LayerShell(LayerShellOptions {
+            namespace: "launcher".to_string(),
+            layer: Layer::Overlay,
+            anchor: Anchor::TOP,
+            exclusive_zone: None,
+            margin: Some((
+                px(cfg.margin_top),
+                px(cfg.margin_right),
+                px(cfg.margin_bottom),
+                px(cfg.margin_left),
+            )),
+            keyboard_interactivity: KeyboardInteractivity::Exclusive,
+            ..Default::default()
+        }),
+        focus: true,
+        ..Default::default()
+    };
+
+    WindowRegistry::toggle(LAUNCHER_WINDOW_ID, options, cx, move |cx| {
+        let new_start = std::time::Instant::now();
+        let launcher = Launcher::new(input.clone(), cx);
+        tracing::debug!(
+            "launcher::toggle: Launcher::new took {:?}",
+            new_start.elapsed()
+        );
+        launcher
+    });
     tracing::debug!("launcher::toggle: done {:?}", start.elapsed());
 }

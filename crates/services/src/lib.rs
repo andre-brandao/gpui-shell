@@ -8,6 +8,7 @@ pub mod audio;
 pub mod bluetooth;
 pub mod brightness;
 pub mod compositor;
+mod listener;
 pub mod mpris;
 pub mod network;
 #[allow(clippy::too_many_arguments)]

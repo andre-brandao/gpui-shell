@@ -3,10 +3,10 @@
 mod config;
 pub use config::TrayConfig;
 
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
+use crate::panel::toggle_widget_panel;
 use gpui::{
-    AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Size,
-    Window, div, img, prelude::*, px,
+    AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Window,
+    div, img, prelude::*, px,
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
@@ -14,7 +14,7 @@ use std::sync::Arc;
 use ui::{ActiveTheme, radius, spacing};
 
 use super::{BarWidget, BarWidgetShell, style};
-use crate::config::{ActiveConfig, Config};
+use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
 
@@ -52,22 +52,15 @@ impl Tray {
             let panel_id = format!("systray-{}", item.name);
             let subscriber = self.subscriber.clone();
             let item_name = item.name.clone();
-            let config = Config::global(cx);
-            let panel_size = Size::new(px(250.0), px(400.0));
-            let (anchor, margin) =
-                panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
-
-            let config = PanelConfig {
-                width: 250.0,
-                height: 400.0,
-                anchor,
-                margin,
-                namespace: "systray-menu".to_string(),
-            };
-
-            toggle_panel(&panel_id, config, cx, move |cx| {
-                TrayMenuPanel::new(menu, item_name, subscriber, cx)
-            });
+            toggle_widget_panel(
+                &panel_id,
+                gpui::Size::new(250.0, 400.0),
+                "systray-menu",
+                event,
+                window,
+                cx,
+                move |cx| TrayMenuPanel::new(menu, item_name, subscriber, cx),
+            );
         } else {
             // No menu — activate the item directly (e.g. show window)
             let subscriber = self.subscriber.clone();

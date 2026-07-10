@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
-use futures_signals::signal::SignalExt;
-use futures_util::StreamExt;
 use gpui::{
     AnyWindowHandle, App, Bounds, Context, DisplayId, Entity, MouseButton, Point, Render, Size,
     Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div,
     layer_shell::*, prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationSubscriber};
+use tokio::sync::broadcast;
 use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::ActiveConfig;
@@ -84,10 +83,11 @@ impl Render for NotificationPopupStack {
                                     .text_color(theme.text.muted)
                                     .on_mouse_down(
                                         MouseButton::Left,
-                                        cx.listener(move |_, _, _, _cx| {
+                                        cx.listener(move |_, _, _, cx| {
                                             dispatch_notification_command(
                                                 dismiss_subscriber.clone(),
                                                 NotificationCommand::Close(id),
+                                                cx,
                                             );
                                         }),
                                     )
@@ -243,15 +243,19 @@ fn sync_popup(
 pub fn init(cx: &mut App) {
     let subscriber = AppState::notification(cx).clone();
     cx.spawn({
-        let mut events = subscriber.subscribe_events().to_stream();
+        let mut events = subscriber.subscribe_events();
         let service = subscriber.clone();
         let mut controller = PopupController::default();
         let mut windows = HashMap::new();
         async move |cx| {
-            let _ = events.next().await;
-            while let Some(event) = events.next().await {
-                let Some(event) = event else {
-                    continue;
+            loop {
+                let event = match events.recv().await {
+                    Ok(event) => event,
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        tracing::warn!("Notification popup missed {skipped} events");
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
                 };
                 let data = service.get();
                 cx.update(|cx| {

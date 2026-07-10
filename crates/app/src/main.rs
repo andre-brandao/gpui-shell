@@ -23,6 +23,7 @@ pub mod notification;
 pub mod osd;
 mod panel;
 pub mod state;
+mod windows;
 
 #[tokio::main]
 async fn main() {
@@ -44,15 +45,20 @@ async fn main() {
     };
 
     // Initialize services (requires async)
-    let services = state::init_services()
-        .await
-        .expect("Failed to initialize services");
+    let services = match state::init_services().await {
+        Ok(services) => services,
+        Err(err) => {
+            tracing::error!("Failed to initialize services: {err:#}");
+            return;
+        }
+    };
 
     // Create and run the GPUI application
     let app = application().with_assets(Assets {});
     app.run(move |cx| {
         config::Config::init(cx);
         state::AppState::init(services, cx);
+        windows::WindowRegistry::init(cx);
 
         // Register keybindings
         keybinds::register(cx);

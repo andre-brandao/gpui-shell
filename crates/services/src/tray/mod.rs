@@ -8,7 +8,6 @@ mod dbus;
 pub use dbus::{MenuLayout, MenuLayoutProps};
 
 use std::sync::Arc;
-use std::thread;
 
 use dbus::{
     DBusMenuProxy, StatusNotifierItemProxy, StatusNotifierWatcher, StatusNotifierWatcherProxy,
@@ -200,11 +199,19 @@ impl TraySubscriber {
     pub async fn dispatch(&self, command: TrayCommand) -> anyhow::Result<()> {
         match command {
             TrayCommand::MenuItemClicked { item_name, menu_id } => {
-                let data = self.data.lock_ref();
-                if let Some(item) = data.items.iter().find(|i| i.name == item_name) {
+                // Copy what we need out of the lock: awaiting D-Bus calls while
+                // holding the guard would block the listener's writes.
+                let target = {
+                    let data = self.data.lock_ref();
+                    data.items
+                        .iter()
+                        .find(|i| i.name == item_name)
+                        .map(|i| (i.dest.clone(), i.menu_path.clone()))
+                };
+                if let Some((dest, menu_path)) = target {
                     let menu_proxy = DBusMenuProxy::builder(&self.conn)
-                        .destination(item.dest.clone())?
-                        .path(item.menu_path.clone())?
+                        .destination(dest)?
+                        .path(menu_path)?
                         .build()
                         .await?;
 
@@ -217,7 +224,6 @@ impl TraySubscriber {
                         .await?;
 
                     // Refresh menu layout after click
-                    drop(data);
                     if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
                         let mut data = self.data.lock_mut();
                         if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name) {
@@ -245,28 +251,31 @@ impl TraySubscriber {
                 }
             }
             TrayCommand::AboutToShow { item_name, menu_id } => {
-                let data = self.data.lock_ref();
-                if let Some(item) = data.items.iter().find(|i| i.name == item_name)
-                    && !item.menu_path.is_empty()
-                    && item.menu_path != "/"
-                {
+                // Copy what we need out of the lock before awaiting (see above).
+                let target = {
+                    let data = self.data.lock_ref();
+                    data.items
+                        .iter()
+                        .find(|i| i.name == item_name)
+                        .filter(|i| !i.menu_path.is_empty() && i.menu_path != "/")
+                        .map(|i| (i.dest.clone(), i.menu_path.clone()))
+                };
+                if let Some((dest, menu_path)) = target {
                     let menu_proxy = DBusMenuProxy::builder(&self.conn)
-                        .destination(item.dest.clone())?
-                        .path(item.menu_path.clone())?
+                        .destination(dest)?
+                        .path(menu_path)?
                         .build()
                         .await?;
 
                     debug!("about_to_show({}) for {}", menu_id, item_name);
                     let needs_update = menu_proxy.about_to_show(menu_id).await.unwrap_or(false);
 
-                    if needs_update {
-                        drop(data);
-                        if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
-                            let mut data = self.data.lock_mut();
-                            if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name)
-                            {
-                                item.menu = Some(new_layout);
-                            }
+                    if needs_update
+                        && let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await
+                    {
+                        let mut data = self.data.lock_mut();
+                        if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name) {
+                            item.menu = Some(new_layout);
                         }
                     }
                 }
@@ -363,193 +372,206 @@ async fn create_tray_item(conn: &zbus::Connection, name: &str) -> anyhow::Result
     })
 }
 
-/// Start the D-Bus listener in a dedicated thread.
+/// Start the D-Bus listener on the shared runtime, restarting on failure.
 fn start_listener(data: Mutable<TrayData>, status: Mutable<ServiceStatus>, conn: zbus::Connection) {
-    thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!("Failed to create Tokio runtime for Tray listener: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
-                return;
-            }
-        };
-
-        rt.block_on(async move {
-            loop {
-                if let Err(e) = run_listener(&data, &conn).await {
-                    error!("Tray listener error: {}", e);
-                    *status.lock_mut() = ServiceStatus::Error(None);
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                }
-            }
-        });
+    let run_status = status.clone();
+    crate::listener::spawn_listener("tray", status, move || {
+        let data = data.clone();
+        let status = run_status.clone();
+        let conn = conn.clone();
+        async move { run_listener(&data, &conn, &status).await }
     });
 }
 
+/// Whether a tray event changed the set of registered items (requiring the
+/// per-item streams to be rebuilt) or only an existing item's contents.
+#[derive(Clone, Copy)]
+enum TrayStreamEvent {
+    Topology,
+    Refresh,
+}
+
 /// Run the tray event listener.
-async fn run_listener(data: &Mutable<TrayData>, conn: &zbus::Connection) -> anyhow::Result<()> {
+///
+/// Per-item icon/menu streams are built from the current item snapshot, so a
+/// registration/unregistration breaks the inner loop to rebuild all streams —
+/// otherwise items registered after startup would never receive updates.
+async fn run_listener(
+    data: &Mutable<TrayData>,
+    conn: &zbus::Connection,
+    status: &Mutable<ServiceStatus>,
+) -> anyhow::Result<()> {
     let watcher = StatusNotifierWatcherProxy::new(conn).await?;
 
-    // Stream for item registered
-    let data_reg = data.clone();
-    let conn_reg = conn.clone();
-    let registered = watcher
-        .receive_status_notifier_item_registered()
-        .await?
-        .filter_map(move |e| {
-            let data = data_reg.clone();
-            let conn = conn_reg.clone();
-            async move {
-                if let Ok(args) = e.args() {
-                    let name = args.service.to_string();
-                    debug!("Tray item registered: {}", name);
+    loop {
+        // Stream for item registered
+        let data_reg = data.clone();
+        let conn_reg = conn.clone();
+        let registered = watcher
+            .receive_status_notifier_item_registered()
+            .await?
+            .filter_map(move |e| {
+                let data = data_reg.clone();
+                let conn = conn_reg.clone();
+                async move {
+                    if let Ok(args) = e.args() {
+                        let name = args.service.to_string();
+                        debug!("Tray item registered: {}", name);
 
-                    if let Ok(item) = create_tray_item(&conn, &name).await {
-                        let mut guard = data.lock_mut();
-                        // Update or add
-                        if let Some(existing) = guard.items.iter_mut().find(|i| i.name == name) {
-                            *existing = item;
-                        } else {
-                            guard.items.push(item);
-                        }
-                    }
-                }
-                Some(())
-            }
-        })
-        .boxed();
-
-    // Stream for item unregistered
-    let data_unreg = data.clone();
-    let unregistered = watcher
-        .receive_status_notifier_item_unregistered()
-        .await?
-        .filter_map(move |e| {
-            let data = data_unreg.clone();
-            async move {
-                if let Ok(args) = e.args() {
-                    let name = args.service.to_string();
-                    debug!("Tray item unregistered: {}", name);
-                    data.lock_mut().items.retain(|item| item.name != name);
-                }
-                Some(())
-            }
-        })
-        .boxed();
-
-    // Set up icon and menu change streams for existing items
-    let items = data.lock_ref().items.clone();
-    let mut icon_streams = Vec::with_capacity(items.len());
-    let mut menu_streams = Vec::with_capacity(items.len());
-
-    for item in &items {
-        let (dest, path) = if let Some(idx) = item.name.find('/') {
-            (&item.name[..idx], &item.name[idx..])
-        } else {
-            (item.name.as_str(), "/StatusNotifierItem")
-        };
-
-        // Icon pixmap changes
-        let item_proxy_result = StatusNotifierItemProxy::builder(conn)
-            .destination(dest.to_owned())
-            .and_then(|b| b.path(path.to_owned()));
-
-        if let Ok(builder) = item_proxy_result
-            && let Ok(proxy) = builder.build().await
-        {
-            // Icon pixmap changes
-            let name = item.name.clone();
-            let data_icon = data.clone();
-            icon_streams.push(
-                proxy
-                    .receive_icon_pixmap_changed()
-                    .await
-                    .filter_map(move |icon_change| {
-                        let name = name.clone();
-                        let data = data_icon.clone();
-                        async move {
-                            if let Ok(icons) = icon_change.get().await {
-                                let icons: Vec<dbus::IconPixmap> = icons;
-                                if let Some(mut icon) =
-                                    icons.into_iter().max_by_key(|i| (i.width, i.height))
-                                {
-                                    for pixel in icon.bytes.as_chunks_mut::<4>().0 {
-                                        pixel.rotate_left(1);
-                                    }
-                                    let tray_icon = TrayIcon::Pixmap {
-                                        width: icon.width as u32,
-                                        height: icon.height as u32,
-                                        data: Arc::new(icon.bytes),
-                                    };
-
-                                    let mut guard = data.lock_mut();
-                                    if let Some(item) =
-                                        guard.items.iter_mut().find(|i| i.name == name)
-                                    {
-                                        item.icon = Some(tray_icon);
-                                    }
-                                }
+                        if let Ok(item) = create_tray_item(&conn, &name).await {
+                            let mut guard = data.lock_mut();
+                            // Update or add
+                            if let Some(existing) = guard.items.iter_mut().find(|i| i.name == name)
+                            {
+                                *existing = item;
+                            } else {
+                                guard.items.push(item);
                             }
-                            Some(())
                         }
-                    })
-                    .boxed(),
-            );
-        }
+                        return Some(TrayStreamEvent::Topology);
+                    }
+                    Some(TrayStreamEvent::Refresh)
+                }
+            })
+            .boxed();
 
-        // Menu layout changes
-        if !item.menu_path.is_empty() && item.menu_path != "/" {
-            let menu_proxy_result = DBusMenuProxy::builder(conn)
-                .destination(item.dest.clone())
-                .and_then(|b| b.path(item.menu_path.clone()));
+        // Stream for item unregistered
+        let data_unreg = data.clone();
+        let unregistered = watcher
+            .receive_status_notifier_item_unregistered()
+            .await?
+            .filter_map(move |e| {
+                let data = data_unreg.clone();
+                async move {
+                    if let Ok(args) = e.args() {
+                        let name = args.service.to_string();
+                        debug!("Tray item unregistered: {}", name);
+                        data.lock_mut().items.retain(|item| item.name != name);
+                        return Some(TrayStreamEvent::Topology);
+                    }
+                    Some(TrayStreamEvent::Refresh)
+                }
+            })
+            .boxed();
 
-            if let Ok(builder) = menu_proxy_result
+        // Set up icon and menu change streams for existing items
+        let items = data.lock_ref().items.clone();
+        let mut icon_streams = Vec::with_capacity(items.len());
+        let mut menu_streams = Vec::with_capacity(items.len());
+
+        for item in &items {
+            let (dest, path) = if let Some(idx) = item.name.find('/') {
+                (&item.name[..idx], &item.name[idx..])
+            } else {
+                (item.name.as_str(), "/StatusNotifierItem")
+            };
+
+            // Icon pixmap changes
+            let item_proxy_result = StatusNotifierItemProxy::builder(conn)
+                .destination(dest.to_owned())
+                .and_then(|b| b.path(path.to_owned()));
+
+            if let Ok(builder) = item_proxy_result
                 && let Ok(proxy) = builder.build().await
-                && let Ok(layout_stream) = proxy.receive_layout_updated().await
             {
+                // Icon pixmap changes
                 let name = item.name.clone();
-                let data_menu = data.clone();
-                let proxy_clone = proxy.clone();
-
-                menu_streams.push(
-                    layout_stream
-                        .filter_map(move |_| {
+                let data_icon = data.clone();
+                icon_streams.push(
+                    proxy
+                        .receive_icon_pixmap_changed()
+                        .await
+                        .filter_map(move |icon_change| {
                             let name = name.clone();
-                            let data = data_menu.clone();
-                            let proxy = proxy_clone.clone();
+                            let data = data_icon.clone();
                             async move {
-                                if let Ok((_, layout)) = proxy.get_layout(0, -1, &[]).await {
-                                    let mut guard = data.lock_mut();
-                                    if let Some(item) =
-                                        guard.items.iter_mut().find(|i| i.name == name)
+                                if let Ok(icons) = icon_change.get().await {
+                                    let icons: Vec<dbus::IconPixmap> = icons;
+                                    if let Some(mut icon) =
+                                        icons.into_iter().max_by_key(|i| (i.width, i.height))
                                     {
-                                        item.menu = Some(layout);
+                                        for pixel in icon.bytes.as_chunks_mut::<4>().0 {
+                                            pixel.rotate_left(1);
+                                        }
+                                        let tray_icon = TrayIcon::Pixmap {
+                                            width: icon.width as u32,
+                                            height: icon.height as u32,
+                                            data: Arc::new(icon.bytes),
+                                        };
+
+                                        let mut guard = data.lock_mut();
+                                        if let Some(item) =
+                                            guard.items.iter_mut().find(|i| i.name == name)
+                                        {
+                                            item.icon = Some(tray_icon);
+                                        }
                                     }
                                 }
-                                Some(())
+                                Some(TrayStreamEvent::Refresh)
                             }
                         })
                         .boxed(),
                 );
             }
+
+            // Menu layout changes
+            if !item.menu_path.is_empty() && item.menu_path != "/" {
+                let menu_proxy_result = DBusMenuProxy::builder(conn)
+                    .destination(item.dest.clone())
+                    .and_then(|b| b.path(item.menu_path.clone()));
+
+                if let Ok(builder) = menu_proxy_result
+                    && let Ok(proxy) = builder.build().await
+                    && let Ok(layout_stream) = proxy.receive_layout_updated().await
+                {
+                    let name = item.name.clone();
+                    let data_menu = data.clone();
+                    let proxy_clone = proxy.clone();
+
+                    menu_streams.push(
+                        layout_stream
+                            .filter_map(move |_| {
+                                let name = name.clone();
+                                let data = data_menu.clone();
+                                let proxy = proxy_clone.clone();
+                                async move {
+                                    if let Ok((_, layout)) = proxy.get_layout(0, -1, &[]).await {
+                                        let mut guard = data.lock_mut();
+                                        if let Some(item) =
+                                            guard.items.iter_mut().find(|i| i.name == name)
+                                        {
+                                            item.menu = Some(layout);
+                                        }
+                                    }
+                                    Some(TrayStreamEvent::Refresh)
+                                }
+                            })
+                            .boxed(),
+                    );
+                }
+            }
+        }
+
+        // Combine all streams
+        let mut events = select_all(vec![registered, unregistered]);
+        for stream in icon_streams {
+            events.push(stream);
+        }
+        for stream in menu_streams {
+            events.push(stream);
+        }
+
+        // Streams are wired for the current snapshot; report the service healthy
+        // (also recovers from a previous Error status after a reconnect).
+        *status.lock_mut() = ServiceStatus::Active;
+
+        // Process events until the item set changes, then rebuild all streams.
+        loop {
+            match events.next().await {
+                Some(TrayStreamEvent::Topology) => break,
+                Some(TrayStreamEvent::Refresh) => {}
+                None => return Ok(()),
+            }
         }
     }
-
-    // Combine all streams
-    let mut events = select_all(vec![registered, unregistered]);
-    for stream in icon_streams {
-        events.push(stream);
-    }
-    for stream in menu_streams {
-        events.push(stream);
-    }
-
-    // Process events until stream ends (which shouldn't happen normally)
-    while (events.next().await).is_some() {}
-
-    Ok(())
 }

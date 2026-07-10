@@ -171,21 +171,23 @@ impl Colorize for Hsla {
 
     fn to_hex(&self) -> String {
         let rgb = self.to_rgb();
+        // Round (don't truncate) so parse_hex -> to_hex round-trips exactly.
+        let channel = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
 
         if self.a < 1.0 {
             format!(
                 "#{:02X}{:02X}{:02X}{:02X}",
-                (rgb.r * 255.0) as u32,
-                (rgb.g * 255.0) as u32,
-                (rgb.b * 255.0) as u32,
-                (self.a * 255.0) as u32
+                channel(rgb.r),
+                channel(rgb.g),
+                channel(rgb.b),
+                channel(self.a)
             )
         } else {
             format!(
                 "#{:02X}{:02X}{:02X}",
-                (rgb.r * 255.0) as u32,
-                (rgb.g * 255.0) as u32,
-                (rgb.b * 255.0) as u32
+                channel(rgb.r),
+                channel(rgb.g),
+                channel(rgb.b)
             )
         }
     }
@@ -252,5 +254,20 @@ mod tests {
         assert!((rgb.r - 1.0).abs() < 0.01);
         assert!(rgb.g < 0.01);
         assert!(rgb.b < 0.01);
+    }
+
+    #[test]
+    fn test_hex_roundtrip_exact() {
+        // Mid-range values like 0x80 are where truncation used to drift by 1.
+        for hex in ["#808080", "#1E1E2E", "#FFFFFF", "#000000", "#CBA6F7"] {
+            let parsed = Hsla::parse_hex(hex).unwrap();
+            assert_eq!(parsed.to_hex(), hex, "round-trip changed {hex}");
+        }
+    }
+
+    #[test]
+    fn test_hex_roundtrip_exact_with_alpha() {
+        let parsed = Hsla::parse_hex("#80808080").unwrap();
+        assert_eq!(parsed.to_hex(), "#80808080");
     }
 }

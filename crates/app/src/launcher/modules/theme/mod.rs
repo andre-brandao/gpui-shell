@@ -122,12 +122,7 @@ impl LauncherView for ThemeView {
 
 fn stylix_scheme() -> Option<ThemeScheme> {
     let b16 = load_stylix_scheme()?;
-    let p = &b16.palette;
-    let colors = Base16Colors::from_hex(&[
-        &p.base00, &p.base01, &p.base02, &p.base03, &p.base04, &p.base05, &p.base06, &p.base07,
-        &p.base08, &p.base09, &p.base0a, &p.base0b, &p.base0c, &p.base0d, &p.base0e, &p.base0f,
-    ])
-    .ok()?;
+    let colors = Base16Colors::from_hex(&b16.palette.as_array()).ok()?;
 
     Some(ThemeScheme {
         name: Box::leak(b16.name.into_boxed_str()),
@@ -142,12 +137,7 @@ fn build_schemes() -> Vec<ThemeScheme> {
     for provider in THEME_PROVIDERS {
         let repo = ThemeRepository::new(provider);
         for b16 in repo.load_cached() {
-            let p = &b16.palette;
-            let colors = match Base16Colors::from_hex(&[
-                &p.base00, &p.base01, &p.base02, &p.base03, &p.base04, &p.base05, &p.base06,
-                &p.base07, &p.base08, &p.base09, &p.base0a, &p.base0b, &p.base0c, &p.base0d,
-                &p.base0e, &p.base0f,
-            ]) {
+            let colors = match Base16Colors::from_hex(&b16.palette.as_array()) {
                 Ok(c) => c,
                 Err(_) => continue,
             };

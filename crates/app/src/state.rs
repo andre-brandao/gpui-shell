@@ -87,7 +87,10 @@ pub(crate) async fn init_services() -> anyhow::Result<Services> {
     let brightness =
         init_async_service("brightness", services::BrightnessSubscriber::new()).await?;
     let compositor =
-        init_async_service("compositor", services::CompositorSubscriber::new()).await?;
+        init_optional_service("compositor", services::CompositorSubscriber::new(), async {
+            Ok(services::CompositorSubscriber::unavailable())
+        })
+        .await?;
     let mpris = init_optional_service(
         "mpris",
         services::MprisSubscriber::new(),
@@ -161,6 +164,16 @@ where
         }
     })
     .detach();
+}
+
+/// Watch a signal purely to re-render the component on every change.
+pub(crate) fn watch_notify<C, S, T>(cx: &mut Context<C>, signal: S)
+where
+    C: 'static,
+    S: Signal<Item = T> + Unpin + 'static,
+    T: Clone + 'static,
+{
+    watch(cx, signal, |_, _, cx| cx.notify());
 }
 
 /// Global runtime state shared across views/widgets.

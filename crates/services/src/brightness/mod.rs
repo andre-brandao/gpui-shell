@@ -230,66 +230,81 @@ fn read_brightness(device_path: &Path) -> Result<BrightnessData> {
     Ok(BrightnessData { current, max })
 }
 
-/// Start the udev listener task for brightness changes.
+/// Start the udev listener for brightness changes.
+///
+/// The udev socket is `!Send`, so this runs on a dedicated thread with its own
+/// single-thread runtime. Crucially it must NOT borrow the main runtime
+/// (`Handle::current().block_on`): that made the listener error out mid-await
+/// when the main runtime shut down before the thread at process exit.
 fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
-    tokio::task::spawn_blocking(move || {
-        let socket = match udev::MonitorBuilder::new()
-            .and_then(|b| b.match_subsystem("backlight"))
-            .and_then(|b| b.listen())
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
         {
-            Ok(s) => s,
+            Ok(rt) => rt,
             Err(e) => {
-                error!("Failed to create udev monitor: {}", e);
+                error!("Failed to create runtime for brightness listener: {}", e);
                 return;
             }
         };
+        rt.block_on(run_udev_loop(data, device_path));
+    });
+}
 
-        // Wrap the socket in AsyncFd for tokio async I/O
-        let async_socket = match AsyncFd::new(socket) {
-            Ok(s) => s,
+async fn run_udev_loop(data: Mutable<BrightnessData>, device_path: PathBuf) {
+    let socket = match udev::MonitorBuilder::new()
+        .and_then(|b| b.match_subsystem("backlight"))
+        .and_then(|b| b.listen())
+    {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Failed to create udev monitor: {}", e);
+            return;
+        }
+    };
+
+    // Wrap the socket in AsyncFd for tokio async I/O
+    let async_socket = match AsyncFd::new(socket) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Failed to create async fd: {}", e);
+            return;
+        }
+    };
+
+    let mut current_value = data.lock_ref().current;
+
+    loop {
+        // Wait asynchronously until the socket is readable
+        let mut guard = match async_socket.readable().await {
+            Ok(g) => g,
             Err(e) => {
-                error!("Failed to create async fd: {}", e);
-                return;
+                error!("Failed to wait for readable: {}", e);
+                break;
             }
         };
 
-        let mut current_value = data.lock_ref().current;
-
-        // Use tokio's block_on to run async code in blocking context
-        let runtime = tokio::runtime::Handle::current();
-        runtime.block_on(async {
-            loop {
-                // Wait asynchronously until the socket is readable
-                let mut guard = match async_socket.readable().await {
-                    Ok(g) => g,
-                    Err(e) => {
-                        error!("Failed to wait for readable: {}", e);
-                        break;
-                    }
-                };
-
-                // Try to read events
-                match guard.try_io(|inner| {
-                    // Drain all pending events
-                    for event in inner.get_ref().iter() {
-                        if event.event_type() == udev::EventType::Change
-                            && let Ok(new_data) = read_brightness(&device_path)
-                            && new_data.current != current_value
-                        {
-                            current_value = new_data.current;
-                            data.lock_mut().current = new_data.current;
-                            debug!("Brightness changed: {}", new_data.current);
-                        }
-                    }
-                    Ok::<(), std::io::Error>(())
-                }) {
-                    Ok(_) => {}
-                    Err(_would_block) => {
-                        // False alarm, socket not actually readable yet
-                        continue;
-                    }
+        // Try to read events
+        match guard.try_io(|inner| {
+            // Drain all pending events
+            for event in inner.get_ref().iter() {
+                if event.event_type() == udev::EventType::Change
+                    && let Ok(new_data) = read_brightness(&device_path)
+                    && new_data.current != current_value
+                {
+                    current_value = new_data.current;
+                    data.lock_mut().current = new_data.current;
+                    debug!("Brightness changed: {}", new_data.current);
                 }
             }
-        });
-    });
+            Ok::<(), std::io::Error>(())
+        }) {
+            Ok(_) => {}
+            Err(_would_block) => {
+                // False alarm, socket not actually readable yet
+                continue;
+            }
+        }
+    }
 }

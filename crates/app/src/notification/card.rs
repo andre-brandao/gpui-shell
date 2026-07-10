@@ -195,13 +195,14 @@ pub(super) fn notification_card_body<V>(
                                         el.bg(theme.interactive.hover)
                                             .text_color(theme.text.primary)
                                     })
-                                    .on_mouse_down(MouseButton::Left, move |_, _, _| {
+                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                                         dispatch_notification_command(
                                             sub.clone(),
                                             NotificationCommand::InvokeAction(
                                                 notification_id,
                                                 key.clone(),
                                             ),
+                                            cx,
                                         );
                                     })
                                     .child(action.label)

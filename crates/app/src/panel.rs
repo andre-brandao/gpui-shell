@@ -4,13 +4,12 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, layer_shell::*, point,
-    prelude::*, px,
+    App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, px,
 };
-use std::sync::Mutex;
 
-use crate::config::BarPosition;
+use crate::config::{BarPosition, Config};
+use crate::windows::WindowRegistry;
 
 /// Panel configuration for positioning and sizing.
 #[derive(Clone)]
@@ -200,12 +199,10 @@ fn clamp_f32(value: f32, min: f32, max: f32) -> f32 {
     }
 }
 
-/// Global panel manager to ensure only one panel is open at a time.
-static ACTIVE_PANEL: Mutex<Option<(String, AnyWindowHandle)>> = Mutex::new(None);
-
 /// Open a panel with the given ID and content.
 /// If a panel with the same ID is already open, it will be closed.
-/// If a different panel is open, it will be closed first.
+/// If any other exclusive window (panel or launcher) is open, it is closed
+/// first — exclusivity is enforced by [`WindowRegistry`].
 /// Returns true if the panel was opened, false if it was closed (toggled off).
 pub fn toggle_panel<V: Render + 'static>(
     panel_id: &str,
@@ -213,22 +210,6 @@ pub fn toggle_panel<V: Render + 'static>(
     cx: &mut App,
     build: impl FnOnce(&mut gpui::Context<V>) -> V + 'static,
 ) -> bool {
-    let mut guard = ACTIVE_PANEL.lock().unwrap();
-
-    // Check if any panel is open
-    if let Some((open_id, handle)) = guard.take() {
-        // Close the existing panel
-        let _ = cx.update_window(handle, |_, window, _cx| {
-            window.remove_window();
-        });
-
-        // If it was the same panel, just close it (toggle off)
-        if open_id == panel_id {
-            return false;
-        }
-    }
-
-    // Open new panel
     let window_options = WindowOptions {
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
@@ -255,44 +236,33 @@ pub fn toggle_panel<V: Render + 'static>(
         ..Default::default()
     };
 
-    if let Ok(handle) = cx.open_window(window_options, move |_, cx| cx.new(build)) {
-        *guard = Some((panel_id.to_string(), handle.into()));
-        true
-    } else {
-        false
-    }
+    WindowRegistry::toggle(panel_id, window_options, cx, build)
 }
 
-/// Close any open panel.
-#[allow(dead_code)]
-pub fn close_panel(cx: &mut App) {
-    let mut guard = ACTIVE_PANEL.lock().unwrap();
-    if let Some((_, handle)) = guard.take() {
-        let _ = cx.update_window(handle, |_, window, _cx| {
-            window.remove_window();
-        });
-    }
+/// Toggle a bar-widget panel placed next to the triggering click.
+///
+/// Wraps the placement + [`PanelConfig`] boilerplate shared by all bar
+/// widgets that open a panel: resolves anchor/margin from the click and the
+/// configured bar position, then delegates to [`toggle_panel`].
+pub fn toggle_widget_panel<V: Render + 'static>(
+    panel_id: &str,
+    size: Size<f32>,
+    namespace: &str,
+    event: &MouseDownEvent,
+    window: &Window,
+    cx: &mut App,
+    build: impl FnOnce(&mut gpui::Context<V>) -> V + 'static,
+) -> bool {
+    let bar_position = Config::global(cx).bar.position;
+    let panel_size = Size::new(px(size.width), px(size.height));
+    let (anchor, margin) = panel_placement_from_event(bar_position, event, window, cx, panel_size);
+    let config = PanelConfig {
+        width: size.width,
+        height: size.height,
+        anchor,
+        margin,
+        namespace: namespace.to_string(),
+    };
+    toggle_panel(panel_id, config, cx, build)
 }
 
-/// Check if a specific panel is open.
-#[allow(dead_code)]
-pub fn is_panel_open(panel_id: &str) -> bool {
-    ACTIVE_PANEL
-        .lock()
-        .map(|guard| {
-            guard
-                .as_ref()
-                .map(|(id, _)| id == panel_id)
-                .unwrap_or(false)
-        })
-        .unwrap_or(false)
-}
-
-/// Get the ID of the currently open panel, if any.
-#[allow(dead_code)]
-pub fn active_panel_id() -> Option<String> {
-    ACTIVE_PANEL
-        .lock()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(|(id, _)| id.clone()))
-}

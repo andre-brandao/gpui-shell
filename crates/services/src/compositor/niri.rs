@@ -9,7 +9,6 @@ use std::{
     env,
     io::{BufRead, BufReader, Write as _},
     os::unix::net::UnixStream,
-    thread,
 };
 
 use anyhow::{Context, Result, anyhow};
@@ -19,7 +18,7 @@ use niri_ipc::{
     Action, Event, Reply, Request, WorkspaceReferenceArg,
     state::{EventStreamState, EventStreamStatePart},
 };
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use super::types::{ActiveWindow, CompositorCommand, CompositorState, Monitor, Workspace};
 
@@ -129,15 +128,16 @@ pub fn fetch_full_state() -> Result<CompositorState> {
     Ok(map_state(&internal_state))
 }
 
-/// Start the Niri event listener in a dedicated thread.
+/// Start the Niri event listener in a dedicated thread, restarting on failure.
 ///
-/// Spawns a thread that connects to the niri event stream and continuously
-/// updates the shared `Mutable<CompositorState>` as events arrive.
-pub fn start_listener(data: Mutable<CompositorState>) {
-    thread::spawn(move || {
-        if let Err(e) = run_listener(data) {
-            error!("Niri event listener error: {}", e);
-        }
+/// Connects to the niri event stream and continuously updates the shared
+/// `Mutable<CompositorState>` as events arrive. The stream replays full state
+/// on connect, so no explicit resync is needed after a restart.
+pub fn start_listener(data: Mutable<CompositorState>, status: Mutable<crate::ServiceStatus>) {
+    let run_status = status.clone();
+    crate::listener::spawn_blocking_listener("niri", status, move || {
+        *run_status.lock_mut() = crate::ServiceStatus::Active;
+        run_listener(data.clone())
     });
 }
 

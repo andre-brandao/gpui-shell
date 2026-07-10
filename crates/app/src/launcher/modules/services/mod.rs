@@ -44,6 +44,11 @@ impl ServicesView {
                 status: AppState::audio(cx).status(),
             },
             ServiceInfo {
+                name: "Compositor",
+                icon: "󰍹",
+                status: AppState::compositor(cx).status(),
+            },
+            ServiceInfo {
                 name: "Network",
                 icon: "󰖟",
                 status: AppState::network(cx).status(),

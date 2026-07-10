@@ -19,6 +19,8 @@ pub use types::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Workspace,
 };
 
+use crate::ServiceStatus;
+
 /// Event-driven compositor subscriber.
 ///
 /// This subscriber monitors compositor state (workspaces, monitors, windows)
@@ -29,7 +31,8 @@ pub use types::{
 #[derive(Debug, Clone)]
 pub struct CompositorSubscriber {
     data: Mutable<CompositorState>,
-    backend: CompositorBackend,
+    status: Mutable<ServiceStatus>,
+    backend: Option<CompositorBackend>,
 }
 
 impl CompositorSubscriber {
@@ -52,15 +55,31 @@ impl CompositorSubscriber {
         };
 
         let data = Mutable::new(initial_state);
+        let status = Mutable::new(ServiceStatus::Active);
 
         // Start the event listener (runs in a dedicated thread with sync handlers)
         match backend {
-            CompositorBackend::Hyprland => hyprland::start_listener(data.clone()),
-            CompositorBackend::Niri => niri::start_listener(data.clone()),
-            CompositorBackend::Mango => mango::start_listener(data.clone()),
+            CompositorBackend::Hyprland => hyprland::start_listener(data.clone(), status.clone()),
+            CompositorBackend::Niri => niri::start_listener(data.clone(), status.clone()),
+            CompositorBackend::Mango => mango::start_listener(data.clone(), status.clone()),
         }
 
-        Ok(Self { data, backend })
+        Ok(Self {
+            data,
+            status,
+            backend: Some(backend),
+        })
+    }
+
+    /// Create a subscriber for when no supported compositor is detected.
+    ///
+    /// State stays empty and commands fail, but the app can still run.
+    pub fn unavailable() -> Self {
+        Self {
+            data: Mutable::new(CompositorState::default()),
+            status: Mutable::new(ServiceStatus::Unavailable),
+            backend: None,
+        }
     }
 
     /// Get a signal that emits when compositor state changes.
@@ -73,14 +92,19 @@ impl CompositorSubscriber {
         self.data.get_cloned()
     }
 
-    /// Get the detected compositor backend.
-    pub fn backend(&self) -> CompositorBackend {
+    /// Get the current service status.
+    pub fn status(&self) -> ServiceStatus {
+        self.status.get_cloned()
+    }
+
+    /// Get the detected compositor backend, if any.
+    pub fn backend(&self) -> Option<CompositorBackend> {
         self.backend
     }
 
     /// Execute a compositor command.
     pub fn dispatch(&self, command: CompositorCommand) -> Result<()> {
-        match self.backend {
+        match self.require_backend()? {
             CompositorBackend::Hyprland => hyprland::execute_command(command),
             CompositorBackend::Niri => niri::execute_command(command),
             CompositorBackend::Mango => mango::execute_command(command),
@@ -92,13 +116,18 @@ impl CompositorSubscriber {
     /// Normally not needed as incremental updates keep state in sync,
     /// but can be useful if state gets out of sync for some reason.
     pub fn refresh(&self) -> Result<()> {
-        let new_state = match self.backend {
+        let new_state = match self.require_backend()? {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
             CompositorBackend::Niri => niri::fetch_full_state()?,
             CompositorBackend::Mango => mango::fetch_full_state()?,
         };
         self.data.set(new_state);
         Ok(())
+    }
+
+    fn require_backend(&self) -> Result<CompositorBackend> {
+        self.backend
+            .ok_or_else(|| anyhow::anyhow!("No compositor backend available"))
     }
 }
 

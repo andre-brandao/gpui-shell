@@ -10,7 +10,7 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{AnyElement, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
@@ -21,11 +21,11 @@ mod config;
 pub use config::SettingsConfig;
 
 use super::{BarWidget, style};
-use crate::config::{ActiveConfig, Config};
+use crate::config::ActiveConfig;
 use crate::control_center::{
     CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH, ControlCenter,
 };
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
+use crate::panel::toggle_widget_panel;
 use crate::state::{AppState, watch};
 
 /// Nerd Font icons for status display.
@@ -123,24 +123,18 @@ impl Settings {
 
     /// Toggle the control center panel.
     fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut gpui::App) {
-        let config = Config::global(cx);
-        let panel_size = Size::new(
-            px(CONTROL_CENTER_PANEL_WIDTH),
-            px(CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED),
+        toggle_widget_panel(
+            "control-center",
+            gpui::Size::new(
+                CONTROL_CENTER_PANEL_WIDTH,
+                CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
+            ),
+            "control-center",
+            event,
+            window,
+            cx,
+            ControlCenter::new,
         );
-        let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
-        let config = PanelConfig {
-            width: CONTROL_CENTER_PANEL_WIDTH,
-            height: CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
-            anchor,
-            margin,
-            namespace: "control-center".to_string(),
-        };
-
-        toggle_panel("control-center", config, cx, move |cx| {
-            ControlCenter::new(cx)
-        });
     }
 
     /// Get privacy indicator icons (only when active).

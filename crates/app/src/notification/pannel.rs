@@ -65,10 +65,11 @@ impl Render for NotificationCenter {
                                 .text_color(theme.text.muted)
                                 .on_mouse_down(
                                     MouseButton::Left,
-                                    cx.listener(move |_, _, _, _cx| {
+                                    cx.listener(move |_, _, _, cx| {
                                         dispatch_notification_command(
                                             dismiss_subscriber.clone(),
                                             NotificationCommand::Remove(id),
+                                            cx,
                                         );
                                     }),
                                 )
@@ -124,10 +125,11 @@ impl Render for NotificationCenter {
                                     })
                                     .on_mouse_down(
                                         MouseButton::Left,
-                                        cx.listener(move |_, _, _, _cx| {
+                                        cx.listener(move |_, _, _, cx| {
                                             dispatch_notification_command(
                                                 dnd_subscriber.clone(),
                                                 NotificationCommand::SetDnd(!dnd_enabled),
+                                                cx,
                                             );
                                         }),
                                     )
@@ -140,10 +142,11 @@ impl Render for NotificationCenter {
                                     .text_color(theme.text.secondary)
                                     .on_mouse_down(
                                         MouseButton::Left,
-                                        cx.listener(move |_, _, _, _cx| {
+                                        cx.listener(move |_, _, _, cx| {
                                             dispatch_notification_command(
                                                 clear_subscriber.clone(),
                                                 NotificationCommand::ClearHistory,
+                                                cx,
                                             );
                                         }),
                                     )

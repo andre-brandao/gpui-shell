@@ -15,13 +15,12 @@ use std::{
     env,
     io::{BufRead, BufReader, Write as _},
     os::unix::net::UnixStream,
-    thread,
 };
 
 use anyhow::{Context, Result, anyhow};
 use futures_signals::signal::Mutable;
 use serde_json::Value;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use super::types::{ActiveWindow, CompositorCommand, CompositorState, Monitor, Workspace};
 
@@ -220,47 +219,64 @@ pub fn fetch_full_state() -> Result<CompositorState> {
 ///
 /// Mango's `watch` protocol only streams one kind of update per connection,
 /// so we open one persistent connection per state category we care about.
-pub fn start_listener(data: Mutable<CompositorState>) {
-    spawn_watch_thread(data.clone(), "watch all-monitors", |data, json| {
-        if let Some(monitors) = json["monitors"].as_array() {
-            let (workspaces, monitors, active_workspace_id) = build_monitors(monitors);
-            let mut state = data.lock_mut();
-            state.workspaces = workspaces;
-            state.monitors = monitors;
-            state.active_workspace_id = active_workspace_id;
-        }
-    });
+pub fn start_listener(data: Mutable<CompositorState>, status: Mutable<crate::ServiceStatus>) {
+    spawn_watch_thread(
+        data.clone(),
+        status.clone(),
+        "watch all-monitors",
+        |data, json| {
+            if let Some(monitors) = json["monitors"].as_array() {
+                let (workspaces, monitors, active_workspace_id) = build_monitors(monitors);
+                let mut state = data.lock_mut();
+                state.workspaces = workspaces;
+                state.monitors = monitors;
+                state.active_workspace_id = active_workspace_id;
+            }
+        },
+    );
 
-    spawn_watch_thread(data.clone(), "watch focusing-client", |data, json| {
-        let mut state = data.lock_mut();
-        state.active_window = map_active_window(&json);
-    });
-
-    spawn_watch_thread(data.clone(), "watch keymode", |data, json| {
-        if let Some(keymode) = json["keymode"].as_str() {
+    spawn_watch_thread(
+        data.clone(),
+        status.clone(),
+        "watch focusing-client",
+        |data, json| {
             let mut state = data.lock_mut();
-            state.submap = keymode_to_submap(keymode);
-        }
-    });
+            state.active_window = map_active_window(&json);
+        },
+    );
 
-    spawn_watch_thread(data.clone(), "watch keyboardlayout", |data, json| {
-        if let Some(layout) = json["layout"].as_str() {
-            let mut state = data.lock_mut();
-            state.keyboard_layout = layout.to_string();
-        }
-    });
+    spawn_watch_thread(
+        data.clone(),
+        status.clone(),
+        "watch keymode",
+        |data, json| {
+            if let Some(keymode) = json["keymode"].as_str() {
+                let mut state = data.lock_mut();
+                state.submap = keymode_to_submap(keymode);
+            }
+        },
+    );
+
+    spawn_watch_thread(
+        data.clone(),
+        status,
+        "watch keyboardlayout",
+        |data, json| {
+            if let Some(layout) = json["layout"].as_str() {
+                let mut state = data.lock_mut();
+                state.keyboard_layout = layout.to_string();
+            }
+        },
+    );
 }
 
 fn spawn_watch_thread(
     data: Mutable<CompositorState>,
+    status: Mutable<crate::ServiceStatus>,
     cmd: &'static str,
     handler: impl Fn(&Mutable<CompositorState>, Value) + Send + 'static,
 ) {
-    thread::spawn(move || {
-        if let Err(e) = run_watch(cmd, &data, &handler) {
-            error!("Mango '{}' listener error: {}", cmd, e);
-        }
-    });
+    crate::listener::spawn_blocking_listener(cmd, status, move || run_watch(cmd, &data, &handler));
 }
 
 /// Run a single blocking watch connection, invoking `handler` for each JSON update.

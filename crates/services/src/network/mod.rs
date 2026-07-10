@@ -12,9 +12,7 @@ pub use types::*;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use futures_util::StreamExt;
 use futures_util::stream::select_all;
-use std::thread;
-use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use zbus::Connection;
 
 use self::dbus::access_point::AccessPointProxy;
@@ -143,38 +141,21 @@ async fn fetch_network_data(conn: &Connection) -> anyhow::Result<NetworkData> {
     })
 }
 
-/// Start the D-Bus listener in a dedicated thread.
+/// Start the D-Bus listener on the shared runtime, restarting on failure.
 fn start_listener(data: Mutable<NetworkData>, status: Mutable<ServiceStatus>, conn: Connection) {
-    thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!("Failed to create Tokio runtime for Network listener: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
-                return;
-            }
-        };
-
-        rt.block_on(async move {
-            loop {
-                match run_listener(data.clone(), conn.clone()).await {
-                    Err(e) => error!("Network listener error: {}", e),
-                    Ok(()) => warn!("Network listener stream exhausted, restarting"),
-                }
-                *status.lock_mut() = ServiceStatus::Error(None);
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                match fetch_network_data(&conn).await {
-                    Ok(new_data) => {
-                        *data.lock_mut() = new_data;
-                        *status.lock_mut() = ServiceStatus::Active;
-                    }
-                    Err(e) => error!("Failed to refresh network data after reconnect: {}", e),
-                }
-            }
-        });
+    let run_status = status.clone();
+    crate::listener::spawn_listener("network", status, move || {
+        let data = data.clone();
+        let status = run_status.clone();
+        let conn = conn.clone();
+        async move {
+            // Resync state after (re)connecting so restarts don't leave the
+            // widget stale.
+            let fresh = fetch_network_data(&conn).await?;
+            *data.lock_mut() = fresh;
+            *status.lock_mut() = ServiceStatus::Active;
+            run_listener(data, conn).await
+        }
     });
 }
 

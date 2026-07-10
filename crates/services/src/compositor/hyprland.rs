@@ -12,8 +12,7 @@ use hyprland::{
     prelude::*,
 };
 use itertools::Itertools;
-use std::thread;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use super::types::{ActiveWindow, CompositorCommand, CompositorState, Monitor, Workspace};
 
@@ -120,13 +119,16 @@ pub fn fetch_full_state() -> Result<CompositorState> {
     })
 }
 
-/// Start the Hyprland event listener in a dedicated thread.
-/// Uses sync EventListener with direct Mutable mutation for efficiency.
-pub fn start_listener(data: Mutable<CompositorState>) {
-    thread::spawn(move || {
-        if let Err(e) = run_listener(data) {
-            error!("Hyprland event listener error: {}", e);
-        }
+/// Start the Hyprland event listener in a dedicated thread, restarting on
+/// failure. Uses sync EventListener with direct Mutable mutation for
+/// efficiency.
+pub fn start_listener(data: Mutable<CompositorState>, status: Mutable<crate::ServiceStatus>) {
+    let run_status = status.clone();
+    crate::listener::spawn_blocking_listener("hyprland", status, move || {
+        // Resync state after (re)connecting so restarts don't leave it stale.
+        data.set(fetch_full_state()?);
+        *run_status.lock_mut() = crate::ServiceStatus::Active;
+        run_listener(data.clone())
     });
 }
 

@@ -4,7 +4,6 @@ mod dbus;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::thread;
 
 use dbus::MprisPlayerProxy;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
@@ -281,26 +280,11 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
     Ok(MprisData { players })
 }
 
-/// Start the MPRIS listener in a dedicated thread.
+/// Start the MPRIS listener on the shared runtime, restarting on failure.
 fn start_listener(data: Mutable<MprisData>, status: Mutable<ServiceStatus>, conn: Connection) {
-    thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!("Failed to create Tokio runtime for MPRIS listener: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
-                return;
-            }
-        };
-
-        rt.block_on(async move {
-            if let Err(e) = run_listener(data, status, conn).await {
-                error!("MPRIS listener error: {}", e);
-            }
-        });
+    let run_status = status.clone();
+    crate::listener::spawn_listener("mpris", status, move || {
+        run_listener(data.clone(), run_status.clone(), conn.clone())
     });
 }
 
