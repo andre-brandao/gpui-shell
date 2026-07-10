@@ -126,7 +126,7 @@ impl RenderOnce for ListItem {
                     })
                     .child(
                         h_flex()
-                            .flex_grow()
+                            .flex_grow(1.)
                             .flex_shrink_0()
                             .gap(px(spacing::SM))
                             .overflow_hidden()
@@ -135,7 +135,7 @@ impl RenderOnce for ListItem {
                     )
                     .when_some(self.end_slot, |this, end_slot| {
                         this.justify_between()
-                            .child(h_flex().flex_shrink().overflow_hidden().child(end_slot))
+                            .child(h_flex().flex_shrink(1.).overflow_hidden().child(end_slot))
                     }),
             )
     }

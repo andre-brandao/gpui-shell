@@ -84,7 +84,7 @@ impl WallpaperView {
                     .spawn(async move {
                         Base16Colors::generate_from_wallpaper(
                             &path,
-                            &mode,
+                            mode,
                             &scheme_type,
                             source_index,
                         )
@@ -95,7 +95,7 @@ impl WallpaperView {
                     Ok(theme) => {
                         tracing::debug!("Matugen theme generated for: {}", path_display);
                         // Apply the generated theme
-                        let _ = cx.update(|cx| {
+                        cx.update(|cx| {
                             Theme::set(theme, cx);
                         });
                     }

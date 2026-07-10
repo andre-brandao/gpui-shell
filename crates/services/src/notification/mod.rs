@@ -527,12 +527,18 @@ mod tests {
 
     #[test]
     fn plain_path_unchanged() {
-        assert_eq!(normalize_path("/home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+        assert_eq!(
+            normalize_path("/home/user/pic.png"),
+            PathBuf::from("/home/user/pic.png")
+        );
     }
 
     #[test]
     fn strips_file_scheme() {
-        assert_eq!(normalize_path("file:///home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+        assert_eq!(
+            normalize_path("file:///home/user/pic.png"),
+            PathBuf::from("/home/user/pic.png")
+        );
     }
 
     #[test]
@@ -545,7 +551,10 @@ mod tests {
 
     #[test]
     fn decodes_utf8_sequence() {
-        assert_eq!(normalize_path("/tmp/%C3%A9.png"), PathBuf::from("/tmp/é.png"));
+        assert_eq!(
+            normalize_path("/tmp/%C3%A9.png"),
+            PathBuf::from("/tmp/é.png")
+        );
     }
 
     #[test]

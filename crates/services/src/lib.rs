@@ -10,6 +10,8 @@ pub mod brightness;
 pub mod compositor;
 pub mod mpris;
 pub mod network;
+#[allow(clippy::too_many_arguments)]
+// zbus's `#[interface(proxy(..))]` expands `notify` into a generated proxy method clippy flags
 pub mod notification;
 pub mod privacy;
 pub mod status;

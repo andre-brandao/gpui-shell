@@ -1,5 +1,5 @@
-mod bar;
 pub mod config;
 pub mod modules;
+mod view;
 
-pub use bar::*;
+pub use view::*;

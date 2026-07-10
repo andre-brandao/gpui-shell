@@ -319,7 +319,7 @@ fn base_cache_directory() -> PathBuf {
 
 fn parse_scheme_file(path: &std::path::Path) -> Result<Base16Scheme> {
     let content = fs::read_to_string(path)?;
-    let yaml: Base16Yaml = serde_yaml::from_str(&content)?;
+    let yaml: Base16Yaml = serde_saphyr::from_str(&content)?;
 
     let slug = path
         .file_stem()

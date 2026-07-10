@@ -2,11 +2,12 @@
 //!
 //! This module provides an event-driven subscriber for monitoring compositor state
 //! (workspaces, monitors, active window, keyboard layout) and executing commands.
-//! It supports multiple compositor backends (Hyprland, Niri).
+//! It supports multiple compositor backends (Hyprland, Niri, Mango).
 //!
 //! Uses incremental updates with direct Mutable mutation for efficiency.
 
 pub mod hyprland;
+pub mod mango;
 pub mod niri;
 pub mod types;
 
@@ -38,7 +39,7 @@ impl CompositorSubscriber {
     /// Returns an error if no supported compositor is detected.
     pub async fn new() -> Result<Self> {
         let backend = detect_backend().ok_or_else(|| {
-            anyhow::anyhow!("No supported compositor detected (Hyprland or Niri)")
+            anyhow::anyhow!("No supported compositor detected (Hyprland, Niri or Mango)")
         })?;
 
         info!("Detected compositor backend: {}", backend.name());
@@ -47,6 +48,7 @@ impl CompositorSubscriber {
         let initial_state = match backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
             CompositorBackend::Niri => niri::fetch_full_state()?,
+            CompositorBackend::Mango => mango::fetch_full_state()?,
         };
 
         let data = Mutable::new(initial_state);
@@ -55,6 +57,7 @@ impl CompositorSubscriber {
         match backend {
             CompositorBackend::Hyprland => hyprland::start_listener(data.clone()),
             CompositorBackend::Niri => niri::start_listener(data.clone()),
+            CompositorBackend::Mango => mango::start_listener(data.clone()),
         }
 
         Ok(Self { data, backend })
@@ -80,6 +83,7 @@ impl CompositorSubscriber {
         match self.backend {
             CompositorBackend::Hyprland => hyprland::execute_command(command),
             CompositorBackend::Niri => niri::execute_command(command),
+            CompositorBackend::Mango => mango::execute_command(command),
         }
     }
 
@@ -91,6 +95,7 @@ impl CompositorSubscriber {
         let new_state = match self.backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
             CompositorBackend::Niri => niri::fetch_full_state()?,
+            CompositorBackend::Mango => mango::fetch_full_state()?,
         };
         self.data.set(new_state);
         Ok(())
@@ -103,6 +108,8 @@ fn detect_backend() -> Option<CompositorBackend> {
         Some(CompositorBackend::Hyprland)
     } else if niri::is_available() {
         Some(CompositorBackend::Niri)
+    } else if mango::is_available() {
+        Some(CompositorBackend::Mango)
     } else {
         None
     }

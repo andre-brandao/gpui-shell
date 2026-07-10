@@ -97,9 +97,7 @@ impl InputBuffer {
     }
 
     pub fn move_left(&mut self, select: bool) {
-        if !select
-            && let Some((start, _end)) = self.selection_range_bytes()
-        {
+        if !select && let Some((start, _end)) = self.selection_range_bytes() {
             self.cursor = start;
             self.anchor = None;
             return;
@@ -112,9 +110,7 @@ impl InputBuffer {
     }
 
     pub fn move_right(&mut self, select: bool) {
-        if !select
-            && let Some((_start, end)) = self.selection_range_bytes()
-        {
+        if !select && let Some((_start, end)) = self.selection_range_bytes() {
             self.cursor = end;
             self.anchor = None;
             return;
@@ -127,9 +123,7 @@ impl InputBuffer {
     }
 
     pub fn move_word_left(&mut self, select: bool) {
-        if !select
-            && let Some((start, _end)) = self.selection_range_bytes()
-        {
+        if !select && let Some((start, _end)) = self.selection_range_bytes() {
             self.cursor = start;
             self.anchor = None;
             return;
@@ -154,9 +148,7 @@ impl InputBuffer {
     }
 
     pub fn move_word_right(&mut self, select: bool) {
-        if !select
-            && let Some((_start, end)) = self.selection_range_bytes()
-        {
+        if !select && let Some((_start, end)) = self.selection_range_bytes() {
             self.cursor = end;
             self.anchor = None;
             return;

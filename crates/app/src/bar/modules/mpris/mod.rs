@@ -132,7 +132,7 @@ impl Mpris {
             .when_some(label, |el, label| {
                 el.child(
                     div()
-                        .flex_shrink()
+                        .flex_shrink(1.)
                         .overflow_hidden()
                         .text_ellipsis()
                         .text_size(style::label_size(theme, is_vertical))

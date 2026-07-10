@@ -111,26 +111,18 @@ pub fn compact_percent(value: u32, is_vertical: bool) -> String {
 }
 
 #[inline(always)]
-pub fn widget_background(theme: &Theme, bar: &BarConfig, is_vertical: bool) -> Hsla {
+pub fn widget_background(theme: &Theme, bar: &BarConfig) -> Hsla {
     if bar.widget_background {
-        if is_vertical {
-            theme.bg.secondary
-        } else {
-            theme.bg.secondary
-        }
+        theme.bg.secondary
     } else {
         theme.transparent
     }
 }
 
 #[inline(always)]
-pub fn group_background(theme: &Theme, bar: &BarConfig, is_vertical: bool) -> Hsla {
+pub fn group_background(theme: &Theme, bar: &BarConfig) -> Hsla {
     if bar.widget_background {
-        if is_vertical {
-            theme.bg.secondary
-        } else {
-            theme.bg.secondary
-        }
+        theme.bg.secondary
     } else {
         theme.transparent
     }
@@ -158,11 +150,7 @@ pub fn bar_widget_shell(
     content: impl IntoElement,
 ) -> AnyElement {
     let hover_bg = if bar.widget_background {
-        if is_vertical {
-            theme.bg.tertiary
-        } else {
-            theme.bg.tertiary
-        }
+        theme.bg.tertiary
     } else {
         theme.interactive.hover
     };
@@ -177,7 +165,7 @@ pub fn bar_widget_shell(
         .py(px(shell_padding_y(is_vertical)))
         .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
         .rounded(px(shell_radius(is_vertical)))
-        .bg(widget_background(theme, bar, is_vertical))
+        .bg(widget_background(theme, bar))
         .when(bar.widget_border, |el| {
             el.border_1()
                 .border_color(widget_border(theme, bar, is_vertical))
@@ -218,11 +206,7 @@ pub fn bar_group_shell(
     content: impl IntoElement,
 ) -> AnyElement {
     let hover_bg = if bar.widget_background {
-        if is_vertical {
-            theme.bg.tertiary
-        } else {
-            theme.bg.tertiary
-        }
+        theme.bg.tertiary
     } else {
         theme.interactive.hover
     };
@@ -237,7 +221,7 @@ pub fn bar_group_shell(
         .py(px(shell_padding_y(is_vertical)))
         .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
         .rounded(px(shell_radius(is_vertical)))
-        .bg(group_background(theme, bar, is_vertical))
+        .bg(group_background(theme, bar))
         .when(bar.widget_border, |el| {
             el.border_1()
                 .border_color(widget_border(theme, bar, is_vertical))
@@ -273,14 +257,14 @@ pub fn bar_stat(
         .child(if is_vertical {
             vertical_text_line(
                 div()
-                    .flex_shrink()
+                    .flex_shrink(1.)
                     .text_size(label_size(theme, is_vertical))
                     .text_color(color)
                     .child(value_text),
             )
         } else {
             div()
-                .flex_shrink()
+                .flex_shrink(1.)
                 .text_size(label_size(theme, is_vertical))
                 .text_color(color)
                 .child(value_text)

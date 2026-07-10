@@ -22,16 +22,8 @@ impl Default for PowerActionsConfig {
 }
 
 /// Control Center configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ControlCenterConfig {
     pub power_actions: PowerActionsConfig,
-}
-
-impl Default for ControlCenterConfig {
-    fn default() -> Self {
-        Self {
-            power_actions: PowerActionsConfig::default(),
-        }
-    }
 }
