@@ -303,14 +303,20 @@ impl NotificationServer {
             .get("urgency")
             .and_then(|v| u8::try_from(v.clone()).ok())
             .unwrap_or(1);
-        let image_path =
-            hint_string(&hints, &["image-path", "image_path"]).map(|p| normalize_path(&p));
+        // Some senders (e.g. Chromium) write the icon/image to a temp file and
+        // unlink it shortly after sending the notification, so only keep paths
+        // that still exist by the time we parse the hints - otherwise gpui's
+        // asset cache logs a load error for a file that's already gone.
+        let image_path = hint_string(&hints, &["image-path", "image_path"])
+            .map(|p| normalize_path(&p))
+            .filter(|p| p.exists());
         let app_icon_path = if is_image_source(app_icon) {
-            Some(normalize_path(app_icon))
+            Some(normalize_path(app_icon)).filter(|p| p.exists())
         } else {
             hint_string(&hints, &["app_icon", "icon-path", "icon_path"])
                 .filter(|value| is_image_source(value))
                 .map(|p| normalize_path(&p))
+                .filter(|p| p.exists())
         };
         // Fallback: resolve named icon via XDG icon theme lookup
         let app_icon_path = app_icon_path.or_else(|| {
