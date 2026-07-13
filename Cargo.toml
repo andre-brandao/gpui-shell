@@ -24,6 +24,7 @@ hyprland = "0.4.0-beta.3"
 niri-ipc = "26.4"
 serde_json = "1.0"
 image = { version = "0.25", default-features = false }
+uuid = { version = "1", features = ["v5"] }
 
 [profile.release]
 codegen-units = 1

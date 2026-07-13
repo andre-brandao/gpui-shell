@@ -26,3 +26,4 @@ tokio.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 image.workspace = true
+uuid.workspace = true

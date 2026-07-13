@@ -43,6 +43,36 @@ impl Workspaces {
         }
     }
 
+    /// Resolve the compositor monitor name for the display this widget's
+    /// window is on, so we only show that monitor's workspaces.
+    ///
+    /// Neither `Window::display()` nor display bounds/position nor ordinal
+    /// list position are reliable here: gpui_linux derives `Window::display()`
+    /// from `primary_output_scale()` (whichever output has the highest scale
+    /// factor, unrelated to which output this layer-shell window is actually
+    /// anchored to); every display's `bounds().origin` comes back as (0, 0)
+    /// regardless of its real position; and `cx.displays()` isn't guaranteed
+    /// to enumerate outputs in the same order as the compositor's own monitor
+    /// list (confirmed to differ on at least one real setup, which silently
+    /// swapped which bar controlled which monitor). Instead we match by
+    /// identity: gpui_linux's `PlatformDisplay::uuid()` is a deterministic
+    /// hash of the Wayland output's name (`Uuid::new_v5(NAMESPACE_DNS,
+    /// name)`), so we look up the `DisplayId` this bar window was opened
+    /// with (`crate::bar::display_id_for_window`), and compare its uuid
+    /// against the same hash computed from each compositor monitor's name.
+    fn current_monitor_name(&self, window: &Window, cx: &gpui::App) -> Option<String> {
+        let display_id = crate::bar::display_id_for_window(window)?;
+        let display_uuid = cx.find_display(display_id)?.uuid().ok()?;
+
+        self.state
+            .monitors
+            .iter()
+            .find(|m| {
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, m.name.as_bytes()) == display_uuid
+            })
+            .map(|m| m.name.clone())
+    }
+
     /// Handle scrolling to switch workspaces.
     fn scroll_workspace(&self, direction: i32) {
         if let Err(e) = self
@@ -166,10 +196,24 @@ impl Workspaces {
         &self,
         theme: &ui::Theme,
         is_vertical: bool,
-        active_workspace_id: Option<i32>,
         config: &WorkspacesConfig,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let monitor_name = self.current_monitor_name(window, cx);
+
+        // Prefer this monitor's own active tag over the compositor-wide
+        // `active_workspace_id`, which only ever reflects whichever monitor
+        // currently has focus - on multi-monitor setups that's a different
+        // monitor from this bar's as soon as focus moves elsewhere, which
+        // would otherwise make this bar lose (or misreport) its highlight.
+        let active_workspace_id = monitor_name
+            .as_deref()
+            .and_then(|name| self.state.monitors.iter().find(|m| m.name == name))
+            .map(|m| m.active_workspace_id)
+            .filter(|&id| id >= 0)
+            .or(self.state.active_workspace_id);
+
         div()
             .id("workspaces")
             .flex()
@@ -191,6 +235,11 @@ impl Workspaces {
                     .workspaces
                     .iter()
                     .filter(|ws| !ws.is_special)
+                    .filter(|ws| {
+                        monitor_name
+                            .as_deref()
+                            .is_none_or(|name| ws.monitor == name)
+                    })
                     .map(|ws| {
                         self.render_workspace_pill(
                             ws,
@@ -211,16 +260,16 @@ impl BarWidget for Workspaces {
         BarWidgetShell::Group
     }
 
-    fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_vertical(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let config = cx.config().bar.modules.workspaces.clone();
-        self.render_workspace_strip(&theme, true, self.state.active_workspace_id, &config, cx)
+        self.render_workspace_strip(&theme, true, &config, window, cx)
     }
 
-    fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_horizontal(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let config = cx.config().bar.modules.workspaces.clone();
-        self.render_workspace_strip(&theme, false, self.state.active_workspace_id, &config, cx)
+        self.render_workspace_strip(&theme, false, &config, window, cx)
     }
 }
 
