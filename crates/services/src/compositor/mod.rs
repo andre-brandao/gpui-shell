@@ -16,7 +16,8 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use tracing::info;
 
 pub use types::{
-    ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Workspace,
+    ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Window,
+    WindowGeometry, Workspace,
 };
 
 /// Event-driven compositor subscriber.
