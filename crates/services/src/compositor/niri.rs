@@ -59,6 +59,12 @@ pub fn execute_command(cmd: CompositorCommand) -> Result<()> {
         CompositorCommand::NextKeyboardLayout => Action::SwitchLayout {
             layout: niri_ipc::LayoutSwitchTarget::Next,
         },
+        CompositorCommand::FocusWindow(id) => {
+            let id: u64 = id
+                .parse()
+                .map_err(|_| anyhow!("Invalid window id '{}' for Niri backend", id))?;
+            Action::FocusWindow { id }
+        }
         CompositorCommand::Custom(action, args) => {
             if action == "spawn" {
                 Action::Spawn {
@@ -317,11 +323,32 @@ fn map_state(niri: &EventStreamState) -> CompositorState {
         },
     );
 
+    let windows: Vec<super::types::Window> = niri
+        .windows
+        .windows
+        .values()
+        .map(|w| super::types::Window {
+            id: w.id.to_string(),
+            app_id: w.app_id.clone().unwrap_or_default(),
+            title: w.title.clone().unwrap_or_default(),
+            monitor: w
+                .workspace_id
+                .and_then(|ws_id| niri.workspaces.workspaces.get(&ws_id))
+                .and_then(|ws| ws.output.clone())
+                .unwrap_or_default(),
+            workspace_id: w.workspace_id.unwrap_or(0) as i32,
+            is_focused: w.is_focused,
+            is_minimized: false,
+            geometry: None,
+        })
+        .collect();
+
     CompositorState {
         workspaces,
         monitors,
         active_workspace_id,
         active_window,
+        windows,
         keyboard_layout,
         submap: None,
     }
