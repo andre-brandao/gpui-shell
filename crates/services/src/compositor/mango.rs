@@ -92,7 +92,9 @@ pub fn execute_command(cmd: CompositorCommand) -> Result<()> {
             }
         }
         CompositorCommand::NextKeyboardLayout => {
-            anyhow::bail!("Cycling to the next keyboard layout is not supported in Mango backend");
+            // With no index argument, mango's switch_keyboard_layout falls back
+            // to `(current + 1) % num_layouts`, i.e. cycling to the next layout.
+            "dispatch switch_keyboard_layout".to_string()
         }
         CompositorCommand::Custom(action, args) => {
             if args.is_empty() {
