@@ -257,7 +257,8 @@ fn parse_desktop_file(path: &PathBuf) -> Option<Application> {
 ///
 /// Tries an exact (case-insensitive) `StartupWMClass` match first, then
 /// falls back to comparing against the `Exec` command's first whitespace-
-/// separated token (its binary name), also case-insensitive.
+/// separated token (its binary name), also case-insensitive. Finally, it
+/// compares against the desktop-file filename and stem.
 pub fn match_app_id<'a>(apps: &'a [Application], app_id: &str) -> Option<&'a Application> {
     let app_id_lower = app_id.to_lowercase();
 
@@ -274,6 +275,18 @@ pub fn match_app_id<'a>(apps: &'a [Application], app_id: &str) -> Option<&'a App
                     .next()
                     .map(|bin| bin.to_lowercase() == app_id_lower)
                     .unwrap_or(false)
+            })
+        })
+        .or_else(|| {
+            apps.iter().find(|a| {
+                a.desktop_file
+                    .file_name()
+                    .and_then(|filename| filename.to_str())
+                    .is_some_and(|filename| filename.to_lowercase() == app_id_lower)
+                    || a.desktop_file
+                        .file_stem()
+                        .and_then(|stem| stem.to_str())
+                        .is_some_and(|stem| stem.to_lowercase() == app_id_lower)
             })
         })
 }
@@ -313,6 +326,15 @@ mod tests {
         let apps = vec![app("Kitty", "kitty", None)];
         let matched = match_app_id(&apps, "kitty").unwrap();
         assert_eq!(matched.name, "Kitty");
+    }
+
+    #[test]
+    fn falls_back_to_desktop_filename_when_other_identifiers_do_not_match() {
+        let mut helium = app("Helium Browser", "helium-browser --new-window", None);
+        helium.desktop_file = PathBuf::from("/usr/share/applications/helium.desktop");
+        let apps = vec![helium];
+        let matched = match_app_id(&apps, "HELIUM").unwrap();
+        assert_eq!(matched.name, "Helium Browser");
     }
 
     #[test]
