@@ -61,7 +61,13 @@ fn dock_window_size(
 ) -> Size<gpui::Pixels> {
     let item_count = item_count.max(1) as f32;
     let primary_extent = item_count * (icon_size + spacing::SM) + spacing::SM;
-    let cross_extent = icon_size + INDICATOR_ROW_HEIGHT + spacing::SM * 2.0;
+    let cross_extent = icon_size
+        + if position.is_vertical() {
+            0.0
+        } else {
+            INDICATOR_ROW_HEIGHT
+        }
+        + spacing::SM * 2.0;
     let magnify_reserve = match hover_effect {
         config::DockHoverEffect::Magnify | config::DockHoverEffect::MagnifyLift => icon_size * 0.3,
         _ => 0.0,
@@ -490,10 +496,10 @@ mod tests {
     }
 
     #[test]
-    fn dock_window_size_reserves_indicator_space_for_vertical_items() {
+    fn dock_window_size_reserves_indicator_space_in_vertical_primary_axis() {
         let size = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::None);
 
-        assert_eq!(size, Size::new(px(61.0), px(114.0)));
+        assert_eq!(size, Size::new(px(56.0), px(114.0)));
     }
 
     #[test]
@@ -502,7 +508,7 @@ mod tests {
         let vertical = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::Lift);
 
         assert_eq!(horizontal, Size::new(px(104.0), px(69.0)));
-        assert_eq!(vertical, Size::new(px(61.0), px(122.0)));
+        assert_eq!(vertical, Size::new(px(56.0), px(122.0)));
     }
 
     #[test]
@@ -512,6 +518,6 @@ mod tests {
         let vertical = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::MagnifyLift);
 
         assert_eq!(horizontal, Size::new(px(116.0), px(81.0)));
-        assert_eq!(vertical, Size::new(px(73.0), px(134.0)));
+        assert_eq!(vertical, Size::new(px(68.0), px(134.0)));
     }
 }
