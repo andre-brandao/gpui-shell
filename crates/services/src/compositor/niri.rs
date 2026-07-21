@@ -21,7 +21,7 @@ use niri_ipc::{
 };
 use tracing::{debug, error, info};
 
-use super::types::{ActiveWindow, CompositorCommand, CompositorState, Monitor, Workspace};
+use super::types::{ActiveWindow, CompositorCommand, CompositorState, Monitor, Window, Workspace};
 
 /// Check if Niri is available (running).
 pub fn is_available() -> bool {
@@ -323,11 +323,11 @@ fn map_state(niri: &EventStreamState) -> CompositorState {
         },
     );
 
-    let windows: Vec<super::types::Window> = niri
+    let windows: Vec<Window> = niri
         .windows
         .windows
         .values()
-        .map(|w| super::types::Window {
+        .map(|w| Window {
             id: w.id.to_string(),
             app_id: w.app_id.clone().unwrap_or_default(),
             title: w.title.clone().unwrap_or_default(),
