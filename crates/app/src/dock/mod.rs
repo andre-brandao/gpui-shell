@@ -22,6 +22,7 @@ use item::{DockItem, build_dock_items};
 
 const INDICATOR_ROW_HEIGHT: f32 = 5.0;
 pub(super) const DOCK_CONTEXT_MENU_WIDTH: f32 = 160.0;
+const DOCK_APP_PICKER_WIDTH: f32 = 240.0;
 pub(super) const DOCK_CONTEXT_MENU_ROW_HEIGHT: f32 = 40.0;
 pub(super) const DOCK_CONTEXT_MENU_VERTICAL_PADDING: f32 = spacing::XS;
 pub(super) const DOCK_CONTEXT_MENU_GAP: f32 = 2.0;
@@ -46,23 +47,23 @@ fn dock_context_menu_size(action_count: usize) -> Size<gpui::Pixels> {
     )
 }
 
-struct DockContextMenuPlacement {
+struct DockPanelPlacement {
     anchor: Anchor,
     margin: (f32, f32, f32, f32),
 }
 
-/// Position a dock context menu beside a dock-local click while keeping the
-/// complete menu within the output's usable area. Layer-shell windows do not
-/// reliably expose their global position, so this derives it from the dock's
-/// known edge and centered layout instead.
-fn dock_context_menu_placement_from_dock_click(
+/// Position a dock panel beside a dock-local click while keeping the complete
+/// panel within the output's usable area. Layer-shell windows do not reliably
+/// expose their global position, so this derives it from the dock's known edge
+/// and centered layout instead.
+fn dock_panel_placement_from_dock_click(
     dock_position: crate::bar::config::BarPosition,
     dock_click: gpui::Point<gpui::Pixels>,
     dock_size: Size<gpui::Pixels>,
     menu_size: Size<gpui::Pixels>,
     display_bounds: Bounds<gpui::Pixels>,
     usable_bounds: Bounds<gpui::Pixels>,
-) -> DockContextMenuPlacement {
+) -> DockPanelPlacement {
     let display_width: f32 = display_bounds.size.width.into();
     let display_height: f32 = display_bounds.size.height.into();
     let dock_width: f32 = dock_size.width.into();
@@ -112,7 +113,7 @@ fn dock_context_menu_placement_from_dock_click(
         }
     };
 
-    DockContextMenuPlacement {
+    DockPanelPlacement {
         anchor: Anchor::TOP | Anchor::LEFT,
         margin: (
             clamp_dock_menu_origin(origin_y, min_y, max_y),
@@ -123,14 +124,14 @@ fn dock_context_menu_placement_from_dock_click(
     }
 }
 
-fn dock_context_menu_placement_from_event(
+fn dock_panel_placement_from_event(
     dock_position: crate::bar::config::BarPosition,
     event: &MouseDownEvent,
     window: &Window,
     cx: &App,
     dock_size: Size<gpui::Pixels>,
     menu_size: Size<gpui::Pixels>,
-) -> DockContextMenuPlacement {
+) -> DockPanelPlacement {
     let (display_bounds, usable_bounds) = display_id_for_window(window)
         .and_then(|display_id| cx.find_display(display_id))
         .map(|display| (display.bounds(), display.visible_bounds()))
@@ -139,7 +140,7 @@ fn dock_context_menu_placement_from_event(
             (bounds, bounds)
         });
 
-    dock_context_menu_placement_from_dock_click(
+    dock_panel_placement_from_dock_click(
         dock_position,
         event.position,
         dock_size,
@@ -437,7 +438,7 @@ impl Dock {
                     let action_count = 1 + usize::from(item.exec.is_some());
                     let panel_height = dock_context_menu_height(action_count);
                     let panel_size = dock_context_menu_size(action_count);
-                    let placement = dock_context_menu_placement_from_event(
+                    let placement = dock_panel_placement_from_event(
                         config.position,
                         event,
                         window,
@@ -541,25 +542,29 @@ impl Render for Dock {
                         gpui::MouseButton::Left,
                         cx.listener(|_this, event, window, cx| {
                             let config = cx.config().dock.clone();
-                            let panel_size =
-                                gpui::Size::new(px(240.0), px(picker::DOCK_APP_PICKER_HEIGHT));
-                            let (anchor, margin) = crate::panel::panel_placement_from_event(
+                            let panel_size = gpui::Size::new(
+                                px(DOCK_APP_PICKER_WIDTH),
+                                px(picker::DOCK_APP_PICKER_HEIGHT),
+                            );
+                            let placement = dock_panel_placement_from_event(
                                 config.position,
                                 event,
                                 window,
                                 cx,
+                                window.viewport_size(),
                                 panel_size,
                             );
                             let panel_config = crate::panel::PanelConfig {
-                                width: 240.0,
+                                width: DOCK_APP_PICKER_WIDTH,
                                 height: picker::DOCK_APP_PICKER_HEIGHT,
-                                anchor,
-                                margin,
+                                anchor: placement.anchor,
+                                margin: placement.margin,
                                 namespace: "dock-app-picker".to_string(),
                             };
-                            crate::panel::toggle_panel(
+                            crate::panel::toggle_panel_on_display(
                                 "dock-app-picker",
                                 panel_config,
+                                display_id_for_window(window),
                                 cx,
                                 picker::DockAppPicker::new,
                             );
@@ -718,9 +723,10 @@ pub fn init(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
+    use super::picker;
     use super::{
-        DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect, dock_context_menu_height,
-        dock_context_menu_placement_from_dock_click, dock_context_menu_size, dock_item_count,
+        DOCK_APP_PICKER_WIDTH, DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect, dock_context_menu_height,
+        dock_context_menu_size, dock_item_count, dock_panel_placement_from_dock_click,
         dock_window_size, next_cycle_index, toggled_pins, windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
@@ -853,7 +859,7 @@ mod tests {
 
     #[test]
     fn dock_context_menu_bottom_uses_the_dock_local_click_position() {
-        let placement = dock_context_menu_placement_from_dock_click(
+        let placement = dock_panel_placement_from_dock_click(
             BarPosition::Bottom,
             point(px(78.0), px(28.0)),
             Size::new(px(104.0), px(61.0)),
@@ -868,7 +874,7 @@ mod tests {
 
     #[test]
     fn dock_context_menu_top_opens_below_the_clicked_icon() {
-        let placement = dock_context_menu_placement_from_dock_click(
+        let placement = dock_panel_placement_from_dock_click(
             BarPosition::Top,
             point(px(26.0), px(28.0)),
             Size::new(px(104.0), px(61.0)),
@@ -882,7 +888,7 @@ mod tests {
 
     #[test]
     fn dock_context_menu_left_opens_to_the_right_of_the_clicked_icon() {
-        let placement = dock_context_menu_placement_from_dock_click(
+        let placement = dock_panel_placement_from_dock_click(
             BarPosition::Left,
             point(px(25.0), px(90.0)),
             Size::new(px(56.0), px(114.0)),
@@ -896,7 +902,7 @@ mod tests {
 
     #[test]
     fn dock_context_menu_right_opens_to_the_left_of_the_clicked_icon() {
-        let placement = dock_context_menu_placement_from_dock_click(
+        let placement = dock_panel_placement_from_dock_click(
             BarPosition::Right,
             point(px(20.0), px(30.0)),
             Size::new(px(56.0), px(114.0)),
@@ -910,7 +916,7 @@ mod tests {
 
     #[test]
     fn dock_context_menu_clamps_the_dock_local_position_to_usable_bounds() {
-        let placement = dock_context_menu_placement_from_dock_click(
+        let placement = dock_panel_placement_from_dock_click(
             BarPosition::Bottom,
             point(px(130.0), px(28.0)),
             Size::new(px(104.0), px(61.0)),
@@ -920,5 +926,77 @@ mod tests {
         );
 
         assert_eq!(placement.margin, (27.0, 0.0, 0.0, 120.0));
+    }
+
+    #[test]
+    fn dock_app_picker_bottom_opens_above_the_add_control() {
+        let placement = dock_panel_placement_from_dock_click(
+            BarPosition::Bottom,
+            point(px(78.0), px(28.0)),
+            Size::new(px(104.0), px(61.0)),
+            Size::new(
+                px(DOCK_APP_PICKER_WIDTH),
+                px(picker::DOCK_APP_PICKER_HEIGHT),
+            ),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+        );
+
+        assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
+        assert_eq!(placement.margin, (451.0, 0.0, 0.0, 406.0));
+    }
+
+    #[test]
+    fn dock_app_picker_top_opens_below_the_add_control() {
+        let placement = dock_panel_placement_from_dock_click(
+            BarPosition::Top,
+            point(px(26.0), px(28.0)),
+            Size::new(px(104.0), px(61.0)),
+            Size::new(
+                px(DOCK_APP_PICKER_WIDTH),
+                px(picker::DOCK_APP_PICKER_HEIGHT),
+            ),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+        );
+
+        assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
+        assert_eq!(placement.margin, (69.0, 0.0, 0.0, 354.0));
+    }
+
+    #[test]
+    fn dock_app_picker_left_opens_to_the_right_of_the_add_control() {
+        let placement = dock_panel_placement_from_dock_click(
+            BarPosition::Left,
+            point(px(25.0), px(90.0)),
+            Size::new(px(56.0), px(114.0)),
+            Size::new(
+                px(DOCK_APP_PICKER_WIDTH),
+                px(picker::DOCK_APP_PICKER_HEIGHT),
+            ),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+        );
+
+        assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
+        assert_eq!(placement.margin, (293.0, 0.0, 0.0, 64.0));
+    }
+
+    #[test]
+    fn dock_app_picker_right_opens_to_the_left_of_the_add_control() {
+        let placement = dock_panel_placement_from_dock_click(
+            BarPosition::Right,
+            point(px(20.0), px(30.0)),
+            Size::new(px(56.0), px(114.0)),
+            Size::new(
+                px(DOCK_APP_PICKER_WIDTH),
+                px(picker::DOCK_APP_PICKER_HEIGHT),
+            ),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+        );
+
+        assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
+        assert_eq!(placement.margin, (233.0, 0.0, 0.0, 696.0));
     }
 }
