@@ -10,6 +10,7 @@ use gpui::{
     AnyElement, App, Bounds, Context, DisplayId, Render, Size, Window, WindowBackgroundAppearance,
     WindowBounds, WindowKind, WindowOptions, div, img, layer_shell::*, point, prelude::*, px,
 };
+use std::collections::HashMap;
 use ui::{ActiveTheme, radius, spacing};
 
 use crate::config::{ActiveConfig, Config};
@@ -51,6 +52,10 @@ fn dock_item_count(
     monitor_name: Option<&str>,
 ) -> usize {
     dock_items(windows, apps, pinned, monitor_name).len().max(1)
+}
+
+fn next_cycle_index(previous: Option<usize>, window_count: usize) -> Option<usize> {
+    (window_count > 0).then(|| previous.map_or(0, |index| (index + 1) % window_count))
 }
 
 fn dock_window_size(
@@ -128,8 +133,9 @@ fn monitor_name_for_display(
 
 /// The dock's own view, rendered in a standalone layer-shell window.
 struct Dock {
-    _compositor: services::CompositorSubscriber,
+    compositor: services::CompositorSubscriber,
     state: services::CompositorState,
+    cycle_index: HashMap<String, usize>,
 }
 
 impl Dock {
@@ -143,8 +149,9 @@ impl Dock {
         });
 
         Self {
-            _compositor: compositor,
+            compositor,
             state,
+            cycle_index: HashMap::new(),
         }
     }
 
@@ -162,7 +169,40 @@ impl Dock {
         )
     }
 
-    fn render_item(&self, item: &DockItem, cx: &Context<Self>) -> AnyElement {
+    /// Launch a pinned app, focus a single window, or cycle a window group.
+    fn activate(&mut self, item: &DockItem, _cx: &mut Context<Self>) {
+        if item.windows.is_empty() {
+            if let Some(exec) = &item.exec {
+                services::Application {
+                    name: item.name.clone(),
+                    exec: exec.clone(),
+                    icon: None,
+                    icon_path: item.icon_path.clone(),
+                    description: None,
+                    desktop_file: std::path::PathBuf::from(&item.key),
+                    startup_wm_class: None,
+                }
+                .launch();
+            }
+            return;
+        }
+
+        let index = next_cycle_index(self.cycle_index.get(&item.key).copied(), item.windows.len())
+            .expect("non-empty dock items have a selectable window");
+        if item.windows.len() > 1 {
+            self.cycle_index.insert(item.key.clone(), index);
+        }
+
+        let window_id = item.windows[index].id.clone();
+        if let Err(error) = self
+            .compositor
+            .dispatch(services::CompositorCommand::FocusWindow(window_id))
+        {
+            tracing::error!("Failed to focus window for '{}': {error}", item.name);
+        }
+    }
+
+    fn render_item(&self, item: &DockItem, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme();
         let config = &cx.config().dock;
         let icon_size = config.icon_size;
@@ -170,7 +210,6 @@ impl Dock {
         let accent = theme.accent.primary;
 
         let mut element = div()
-            .id(item.key.clone())
             .relative()
             .size(px(icon_size))
             .flex()
@@ -229,11 +268,26 @@ impl Dock {
                 )
             });
 
+        let item_key = item.key.clone();
         div()
+            .id(item.key.clone())
+            .cursor_pointer()
             .flex()
             .flex_col()
             .items_center()
             .gap(px(2.0))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, _event, window, cx| {
+                    if let Some(item) = this
+                        .items(window, cx)
+                        .into_iter()
+                        .find(|item| item.key == item_key)
+                    {
+                        this.activate(&item, cx);
+                    }
+                }),
+            )
             .child(icon_element)
             .when(item.is_running(), |element| {
                 element.child(
@@ -250,7 +304,8 @@ impl Dock {
 
 impl Render for Dock {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let background = cx.theme().bg.primary;
+        let border = cx.theme().border.subtle;
         let is_vertical = cx.config().dock.position.is_vertical();
         let items = self.items(window, cx);
         let target_size = dock_window_size(
@@ -277,9 +332,9 @@ impl Render for Dock {
             .px(px(spacing::SM))
             .py(px(spacing::SM))
             .rounded(px(radius::LG))
-            .bg(theme.bg.primary)
+            .bg(background)
             .border_1()
-            .border_color(theme.border.subtle)
+            .border_color(border)
             .children(elements)
     }
 }
@@ -424,7 +479,9 @@ pub fn init(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{DockHoverEffect, dock_item_count, dock_window_size, windows_for_monitor};
+    use super::{
+        DockHoverEffect, dock_item_count, dock_window_size, next_cycle_index, windows_for_monitor,
+    };
     use crate::bar::config::BarPosition;
     use gpui::{Size, px};
     use std::path::PathBuf;
@@ -519,5 +576,12 @@ mod tests {
 
         assert_eq!(horizontal, Size::new(px(116.0), px(81.0)));
         assert_eq!(vertical, Size::new(px(68.0), px(134.0)));
+    }
+
+    #[test]
+    fn next_cycle_index_advances_and_wraps_grouped_windows() {
+        assert_eq!(next_cycle_index(None, 2), Some(0));
+        assert_eq!(next_cycle_index(Some(0), 2), Some(1));
+        assert_eq!(next_cycle_index(Some(1), 2), Some(0));
     }
 }
