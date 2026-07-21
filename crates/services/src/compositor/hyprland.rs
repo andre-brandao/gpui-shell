@@ -29,7 +29,7 @@ pub fn is_available() -> bool {
 fn map_client(c: Client, monitors: &[super::types::Monitor]) -> super::types::Window {
     let monitor = c
         .monitor
-        .and_then(|id| monitors.iter().find(|m| m.id == id as i128))
+        .and_then(|id| monitors.iter().find(|m| m.id == id))
         .map(|m| m.name.clone())
         .unwrap_or_default();
 
