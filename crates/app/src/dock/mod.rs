@@ -30,6 +30,8 @@ pub(super) const DOCK_CONTEXT_MENU_BORDER_WIDTH: f32 = 1.0;
 // GPUI can reserve more vertical space than the nominal row height while it
 // lays out text, particularly in layer-shell windows.
 const DOCK_CONTEXT_MENU_TEXT_LAYOUT_HEADROOM: f32 = 12.0;
+const DOCK_HIDDEN_STRIP_SIZE: f32 = 6.0;
+const DOCK_REVEAL_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(750);
 
 fn dock_context_menu_height(action_count: usize) -> f32 {
     let gaps = action_count.saturating_sub(1) as f32 * DOCK_CONTEXT_MENU_GAP;
@@ -301,12 +303,86 @@ fn geometry_overlaps_dock(
         && window_bottom > dock_top
 }
 
+fn dock_bounds_in_compositor_space(
+    position: crate::bar::config::BarPosition,
+    dock_size: Size<gpui::Pixels>,
+    monitor: &services::Monitor,
+) -> Bounds<gpui::Pixels> {
+    let monitor_width = monitor.width as f32;
+    let monitor_height = monitor.height as f32;
+    let dock_width: f32 = dock_size.width.into();
+    let dock_height: f32 = dock_size.height.into();
+    let (x, y) = match position {
+        crate::bar::config::BarPosition::Top => (
+            monitor.x as f32 + (monitor_width - dock_width).max(0.0) / 2.0,
+            monitor.y as f32 + spacing::SM,
+        ),
+        crate::bar::config::BarPosition::Bottom => (
+            monitor.x as f32 + (monitor_width - dock_width).max(0.0) / 2.0,
+            monitor.y as f32 + monitor_height - dock_height - spacing::SM,
+        ),
+        crate::bar::config::BarPosition::Left => (
+            monitor.x as f32 + spacing::SM,
+            monitor.y as f32 + (monitor_height - dock_height).max(0.0) / 2.0,
+        ),
+        crate::bar::config::BarPosition::Right => (
+            monitor.x as f32 + monitor_width - dock_width - spacing::SM,
+            monitor.y as f32 + (monitor_height - dock_height).max(0.0) / 2.0,
+        ),
+    };
+
+    Bounds::new(point(px(x), px(y)), dock_size)
+}
+
+fn hidden_strip_size(
+    position: crate::bar::config::BarPosition,
+    dock_size: Size<gpui::Pixels>,
+) -> Size<gpui::Pixels> {
+    if position.is_vertical() {
+        Size::new(px(DOCK_HIDDEN_STRIP_SIZE), dock_size.height)
+    } else {
+        Size::new(dock_size.width, px(DOCK_HIDDEN_STRIP_SIZE))
+    }
+}
+
+fn revealed_after_visibility_update(
+    was_hidden_by_rule: bool,
+    was_revealed: bool,
+    is_hidden_by_rule: bool,
+) -> bool {
+    if !is_hidden_by_rule {
+        true
+    } else if !was_hidden_by_rule {
+        false
+    } else {
+        was_revealed
+    }
+}
+
+fn dodge_windows_should_hide(
+    focused_window: Option<&services::Window>,
+    monitor_name: Option<&str>,
+    dock_bounds: Option<Bounds<gpui::Pixels>>,
+) -> bool {
+    let intelligent_hide = focused_window_is_on_other_monitor(focused_window, monitor_name);
+    let Some(geometry) = focused_window.and_then(|window| window.geometry) else {
+        return intelligent_hide;
+    };
+    let Some(dock_bounds) = dock_bounds else {
+        return intelligent_hide;
+    };
+
+    geometry_overlaps_dock(geometry, dock_bounds)
+}
+
 /// The dock's own view, rendered in a standalone layer-shell window.
 struct Dock {
     compositor: services::CompositorSubscriber,
     state: services::CompositorState,
     cycle_index: HashMap<String, usize>,
     revealed: bool,
+    hidden_by_rule: bool,
+    reveal_generation: u64,
 }
 
 impl Dock {
@@ -324,6 +400,8 @@ impl Dock {
             state,
             cycle_index: HashMap::new(),
             revealed: true,
+            hidden_by_rule: false,
+            reveal_generation: 0,
         }
     }
 
@@ -344,25 +422,48 @@ impl Dock {
     /// Whether the dock should be hidden for the configured visibility mode.
     /// `DodgeWindows` uses the intelligent-hide behavior when the compositor
     /// cannot report window geometry, as with Niri.
-    fn should_hide(&self, window: &Window, cx: &App) -> bool {
+    fn should_hide(&self, window: &Window, dock_size: Size<gpui::Pixels>, cx: &App) -> bool {
         let monitor_name = self.current_monitor_name(window, cx);
+        let focused_window = self.focused_window();
         let intelligent_hide =
-            || focused_window_is_on_other_monitor(self.focused_window(), monitor_name.as_deref());
+            || focused_window_is_on_other_monitor(focused_window, monitor_name.as_deref());
 
         match cx.config().dock.visibility {
             config::DockVisibility::AlwaysVisible => false,
             config::DockVisibility::IntelligentHide => intelligent_hide(),
-            config::DockVisibility::DodgeWindows => {
-                let Some(focused_window) = self.focused_window() else {
-                    return false;
-                };
-                let Some(geometry) = focused_window.geometry else {
-                    return intelligent_hide();
-                };
-
-                geometry_overlaps_dock(geometry, window.bounds())
-            }
+            config::DockVisibility::DodgeWindows => dodge_windows_should_hide(
+                focused_window,
+                monitor_name.as_deref(),
+                monitor_name.as_deref().and_then(|monitor_name| {
+                    self.state
+                        .monitors
+                        .iter()
+                        .find(|monitor| monitor.name == monitor_name)
+                        .map(|monitor| {
+                            dock_bounds_in_compositor_space(
+                                cx.config().dock.position,
+                                dock_size,
+                                monitor,
+                            )
+                        })
+                }),
+            ),
         }
+    }
+
+    fn schedule_rehide(&mut self, cx: &mut Context<Self>) {
+        self.reveal_generation += 1;
+        let generation = self.reveal_generation;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(DOCK_REVEAL_TIMEOUT).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.hidden_by_rule && this.reveal_generation == generation {
+                    this.revealed = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     fn items(&self, window: &Window, cx: &App) -> Vec<DockItem> {
@@ -559,16 +660,33 @@ impl Dock {
 impl Render for Dock {
     #[allow(refining_impl_trait)]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        if cx.config().dock.visibility != config::DockVisibility::AlwaysVisible {
-            self.revealed = !self.should_hide(window, cx);
-        }
+        let position = cx.config().dock.position;
+        let items = self.items(window, cx);
+        let dock_size = dock_window_size(
+            position,
+            cx.config().dock.icon_size,
+            items.len() + 1,
+            cx.config().dock.hover_effect,
+        );
+        let is_hidden_by_rule = cx.config().dock.visibility
+            != config::DockVisibility::AlwaysVisible
+            && self.should_hide(window, dock_size, cx);
+        self.revealed =
+            revealed_after_visibility_update(self.hidden_by_rule, self.revealed, is_hidden_by_rule);
+        self.hidden_by_rule = is_hidden_by_rule;
 
         if !self.revealed {
+            let strip_size = hidden_strip_size(position, dock_size);
+            if window.viewport_size() != strip_size {
+                window.resize(strip_size);
+            }
             return div()
                 .id("dock-hidden-strip")
-                .size(px(6.0))
+                .w(strip_size.width)
+                .h(strip_size.height)
                 .on_mouse_move(cx.listener(|this, _event, _window, cx| {
                     this.revealed = true;
+                    this.schedule_rehide(cx);
                     cx.notify();
                 }))
                 .into_any_element();
@@ -576,16 +694,9 @@ impl Render for Dock {
 
         let background = cx.theme().bg.primary;
         let border = cx.theme().border.subtle;
-        let is_vertical = cx.config().dock.position.is_vertical();
-        let items = self.items(window, cx);
-        let target_size = dock_window_size(
-            cx.config().dock.position,
-            cx.config().dock.icon_size,
-            items.len() + 1,
-            cx.config().dock.hover_effect,
-        );
-        if window.viewport_size() != target_size {
-            window.resize(target_size);
+        let is_vertical = position.is_vertical();
+        if window.viewport_size() != dock_size {
+            window.resize(dock_size);
         }
         let elements: Vec<AnyElement> = items
             .iter()
@@ -805,10 +916,12 @@ pub fn init(cx: &mut App) {
 mod tests {
     use super::picker;
     use super::{
-        DOCK_APP_PICKER_WIDTH, DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect, dock_context_menu_height,
-        dock_context_menu_size, dock_item_count, dock_panel_placement_from_dock_click,
-        dock_window_size, focused_window_is_on_other_monitor, geometry_overlaps_dock,
-        next_cycle_index, toggled_pins, windows_for_monitor,
+        DOCK_APP_PICKER_WIDTH, DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect,
+        dock_bounds_in_compositor_space, dock_context_menu_height, dock_context_menu_size,
+        dock_item_count, dock_panel_placement_from_dock_click, dock_window_size,
+        dodge_windows_should_hide, focused_window_is_on_other_monitor, geometry_overlaps_dock,
+        hidden_strip_size, next_cycle_index, revealed_after_visibility_update, toggled_pins,
+        windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
     use gpui::{Bounds, Size, layer_shell::Anchor, point, px};
@@ -885,6 +998,88 @@ mod tests {
                 height: 50,
             },
             dock,
+        ));
+    }
+
+    #[test]
+    fn dodge_windows_falls_back_to_intelligent_hide_without_geometry_or_bounds() {
+        let other_monitor = window("focused", "HDMI-A-1");
+        let same_monitor = window("focused", "eDP-1");
+        let geometry = services::WindowGeometry {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let same_monitor_with_geometry = services::Window {
+            geometry: Some(geometry),
+            ..same_monitor.clone()
+        };
+
+        assert!(dodge_windows_should_hide(
+            Some(&other_monitor),
+            Some("eDP-1"),
+            None,
+        ));
+        assert!(!dodge_windows_should_hide(
+            Some(&same_monitor),
+            Some("eDP-1"),
+            None,
+        ));
+        assert!(!dodge_windows_should_hide(
+            Some(&same_monitor_with_geometry),
+            Some("eDP-1"),
+            None,
+        ));
+    }
+
+    #[test]
+    fn visibility_transition_keeps_a_pointer_revealed_dock_open_until_rehide() {
+        assert!(!revealed_after_visibility_update(false, true, true));
+        assert!(revealed_after_visibility_update(true, true, true));
+        assert!(!revealed_after_visibility_update(true, false, true));
+        assert!(revealed_after_visibility_update(true, false, false));
+    }
+
+    #[test]
+    fn hidden_strip_resizes_along_the_dock_edge() {
+        let dock_size = Size::new(px(200.0), px(61.0));
+
+        assert_eq!(
+            hidden_strip_size(BarPosition::Bottom, dock_size),
+            Size::new(px(200.0), px(6.0))
+        );
+        assert_eq!(
+            hidden_strip_size(BarPosition::Left, dock_size),
+            Size::new(px(6.0), px(61.0))
+        );
+    }
+
+    #[test]
+    fn dodge_windows_uses_compositor_coordinates_for_nonzero_monitor_origins() {
+        let monitor = services::Monitor {
+            name: "HDMI-A-1".to_string(),
+            x: 1920,
+            y: 100,
+            width: 2560,
+            height: 1440,
+            ..Default::default()
+        };
+        let dock_bounds = dock_bounds_in_compositor_space(
+            BarPosition::Bottom,
+            Size::new(px(200.0), px(61.0)),
+            &monitor,
+        );
+
+        assert_eq!(dock_bounds.origin, point(px(3100.0), px(1471.0)));
+        assert!(geometry_overlaps_dock(
+            services::WindowGeometry {
+                x: 3100,
+                y: 1450,
+                width: 200,
+                height: 100,
+            },
+            dock_bounds,
         ));
     }
 
