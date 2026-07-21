@@ -26,87 +26,76 @@ struct DockContextMenuPlacement {
     margin: (f32, f32, f32, f32),
 }
 
-/// Position a dock context menu beside the clicked icon while keeping the
-/// complete menu within the display's usable area.
-fn dock_context_menu_placement_from_click(
+/// Position a dock context menu beside a dock-local click while keeping the
+/// complete menu within the output's usable area. Layer-shell windows do not
+/// reliably expose their global position, so this derives it from the dock's
+/// known edge and centered layout instead.
+fn dock_context_menu_placement_from_dock_click(
     dock_position: crate::bar::config::BarPosition,
-    click: gpui::Point<gpui::Pixels>,
+    dock_click: gpui::Point<gpui::Pixels>,
+    dock_size: Size<gpui::Pixels>,
     menu_size: Size<gpui::Pixels>,
     display_bounds: Bounds<gpui::Pixels>,
     usable_bounds: Bounds<gpui::Pixels>,
 ) -> DockContextMenuPlacement {
-    let display_x: f32 = display_bounds.origin.x.into();
-    let display_y: f32 = display_bounds.origin.y.into();
     let display_width: f32 = display_bounds.size.width.into();
     let display_height: f32 = display_bounds.size.height.into();
+    let dock_width: f32 = dock_size.width.into();
+    let dock_height: f32 = dock_size.height.into();
     let menu_width: f32 = menu_size.width.into();
     let menu_height: f32 = menu_size.height.into();
 
-    let usable_left: f32 = usable_bounds.origin.x.into();
-    let usable_top: f32 = usable_bounds.origin.y.into();
-    let usable_right: f32 = (usable_bounds.origin.x + usable_bounds.size.width).into();
-    let usable_bottom: f32 = (usable_bounds.origin.y + usable_bounds.size.height).into();
+    let usable_left: f32 = (usable_bounds.origin.x - display_bounds.origin.x).into();
+    let usable_top: f32 = (usable_bounds.origin.y - display_bounds.origin.y).into();
+    let usable_right: f32 =
+        (usable_bounds.origin.x + usable_bounds.size.width - display_bounds.origin.x).into();
+    let usable_bottom: f32 =
+        (usable_bounds.origin.y + usable_bounds.size.height - display_bounds.origin.y).into();
 
     let min_x = usable_left;
     let max_x = (usable_right - menu_width).max(min_x);
     let min_y = usable_top;
     let max_y = (usable_bottom - menu_height).max(min_y);
-    let click_x: f32 = click.x.into();
-    let click_y: f32 = click.y.into();
 
-    let (origin_x, origin_y, anchor) = match dock_position {
-        crate::bar::config::BarPosition::Top => (
-            clamp_dock_menu_origin(click_x - menu_width / 2.0, min_x, max_x),
-            clamp_dock_menu_origin(click_y, min_y, max_y),
-            if click_x < display_x + display_width / 2.0 {
-                Anchor::TOP | Anchor::LEFT
-            } else {
-                Anchor::TOP | Anchor::RIGHT
-            },
-        ),
-        crate::bar::config::BarPosition::Bottom => (
-            clamp_dock_menu_origin(click_x - menu_width / 2.0, min_x, max_x),
-            clamp_dock_menu_origin(click_y - menu_height, min_y, max_y),
-            if click_x < display_x + display_width / 2.0 {
-                Anchor::BOTTOM | Anchor::LEFT
-            } else {
-                Anchor::BOTTOM | Anchor::RIGHT
-            },
-        ),
-        crate::bar::config::BarPosition::Left => (
-            clamp_dock_menu_origin(click_x, min_x, max_x),
-            clamp_dock_menu_origin(click_y - menu_height / 2.0, min_y, max_y),
-            if click_y < display_y + display_height / 2.0 {
-                Anchor::TOP | Anchor::LEFT
-            } else {
-                Anchor::BOTTOM | Anchor::LEFT
-            },
-        ),
-        crate::bar::config::BarPosition::Right => (
-            clamp_dock_menu_origin(click_x - menu_width, min_x, max_x),
-            clamp_dock_menu_origin(click_y - menu_height / 2.0, min_y, max_y),
-            if click_y < display_y + display_height / 2.0 {
-                Anchor::TOP | Anchor::RIGHT
-            } else {
-                Anchor::BOTTOM | Anchor::RIGHT
-            },
-        ),
-    };
-
-    let left = origin_x - display_x;
-    let top = origin_y - display_y;
-    let right = display_width - left - menu_width;
-    let bottom = display_height - top - menu_height;
-    let margin = match anchor {
-        anchor if anchor.contains(Anchor::TOP) && anchor.contains(Anchor::LEFT) => {
-            (top, right, 0.0, left)
+    let (dock_x, dock_y) = match dock_position {
+        crate::bar::config::BarPosition::Top => {
+            ((display_width - dock_width).max(0.0) / 2.0, spacing::SM)
         }
-        anchor if anchor.contains(Anchor::TOP) => (top, right, 0.0, 0.0),
-        anchor if anchor.contains(Anchor::LEFT) => (0.0, 0.0, bottom, left),
-        _ => (0.0, right, bottom, 0.0),
+        crate::bar::config::BarPosition::Bottom => (
+            (display_width - dock_width).max(0.0) / 2.0,
+            display_height - dock_height - spacing::SM,
+        ),
+        crate::bar::config::BarPosition::Left => {
+            (spacing::SM, (display_height - dock_height).max(0.0) / 2.0)
+        }
+        crate::bar::config::BarPosition::Right => (
+            display_width - dock_width - spacing::SM,
+            (display_height - dock_height).max(0.0) / 2.0,
+        ),
     };
 
-    DockContextMenuPlacement { anchor, margin }
+    let click_x: f32 = dock_x + Into::<f32>::into(dock_click.x);
+    let click_y: f32 = dock_y + Into::<f32>::into(dock_click.y);
+    let (origin_x, origin_y) = match dock_position {
+        crate::bar::config::BarPosition::Top => (click_x - menu_width / 2.0, dock_y + dock_height),
+        crate::bar::config::BarPosition::Bottom => {
+            (click_x - menu_width / 2.0, dock_y - menu_height)
+        }
+        crate::bar::config::BarPosition::Left => (dock_x + dock_width, click_y - menu_height / 2.0),
+        crate::bar::config::BarPosition::Right => {
+            (dock_x - menu_width, click_y - menu_height / 2.0)
+        }
+    };
+
+    DockContextMenuPlacement {
+        anchor: Anchor::TOP | Anchor::LEFT,
+        margin: (
+            clamp_dock_menu_origin(origin_y, min_y, max_y),
+            0.0,
+            0.0,
+            clamp_dock_menu_origin(origin_x, min_x, max_x),
+        ),
+    }
 }
 
 fn dock_context_menu_placement_from_event(
@@ -114,23 +103,21 @@ fn dock_context_menu_placement_from_event(
     event: &MouseDownEvent,
     window: &Window,
     cx: &App,
+    dock_size: Size<gpui::Pixels>,
     menu_size: Size<gpui::Pixels>,
 ) -> DockContextMenuPlacement {
-    let (display_bounds, usable_bounds) = window
-        .display(cx)
+    let (display_bounds, usable_bounds) = display_id_for_window(window)
+        .and_then(|display_id| cx.find_display(display_id))
         .map(|display| (display.bounds(), display.visible_bounds()))
         .unwrap_or_else(|| {
-            let bounds = window.bounds();
+            let bounds = Bounds::new(point(px(0.0), px(0.0)), window.viewport_size());
             (bounds, bounds)
         });
-    let click = point(
-        window.bounds().origin.x + event.position.x,
-        window.bounds().origin.y + event.position.y,
-    );
 
-    dock_context_menu_placement_from_click(
+    dock_context_menu_placement_from_dock_click(
         dock_position,
-        click,
+        event.position,
+        dock_size,
         menu_size,
         display_bounds,
         usable_bounds,
@@ -428,6 +415,7 @@ impl Dock {
                         event,
                         window,
                         cx,
+                        window.viewport_size(),
                         panel_size,
                     );
                     let panel_config = crate::panel::PanelConfig {
@@ -444,17 +432,23 @@ impl Dock {
                     let exec = item.exec.clone();
                     let app_name = item.name.clone();
                     let icon_path = item.icon_path.clone();
-                    crate::panel::toggle_panel(&panel_id, panel_config, cx, move |cx| {
-                        context_menu::DockContextMenu::new(
-                            menu_panel_id,
-                            item_key,
-                            is_pinned,
-                            exec,
-                            app_name,
-                            icon_path,
-                            cx,
-                        )
-                    });
+                    crate::panel::toggle_panel_on_display(
+                        &panel_id,
+                        panel_config,
+                        display_id_for_window(window),
+                        cx,
+                        move |cx| {
+                            context_menu::DockContextMenu::new(
+                                menu_panel_id,
+                                item_key,
+                                is_pinned,
+                                exec,
+                                app_name,
+                                icon_path,
+                                cx,
+                            )
+                        },
+                    );
                 })
             })
             .child(icon_element)
@@ -657,8 +651,8 @@ pub fn init(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DockHoverEffect, dock_context_menu_placement_from_click, dock_item_count, dock_window_size,
-        next_cycle_index, toggled_pins, windows_for_monitor,
+        DockHoverEffect, dock_context_menu_placement_from_dock_click, dock_item_count,
+        dock_window_size, next_cycle_index, toggled_pins, windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
     use gpui::{Bounds, Size, layer_shell::Anchor, point, px};
@@ -775,30 +769,73 @@ mod tests {
     }
 
     #[test]
-    fn dock_context_menu_bottom_is_above_the_clicked_icon() {
-        let placement = dock_context_menu_placement_from_click(
+    fn dock_context_menu_bottom_uses_the_dock_local_click_position() {
+        let placement = dock_context_menu_placement_from_dock_click(
             BarPosition::Bottom,
-            point(px(500.0), px(760.0)),
+            point(px(78.0), px(28.0)),
+            Size::new(px(104.0), px(61.0)),
             Size::new(px(160.0), px(80.0)),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
-            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(760.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
-        assert!(placement.anchor.contains(Anchor::BOTTOM));
-        assert_eq!(placement.margin, (0.0, 420.0, 40.0, 0.0));
+        assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
+        assert_eq!(placement.margin, (651.0, 0.0, 0.0, 446.0));
     }
 
     #[test]
-    fn dock_context_menu_clamps_to_usable_bounds_near_a_corner() {
-        let placement = dock_context_menu_placement_from_click(
-            BarPosition::Left,
-            point(px(10.0), px(20.0)),
+    fn dock_context_menu_top_opens_below_the_clicked_icon() {
+        let placement = dock_context_menu_placement_from_dock_click(
+            BarPosition::Top,
+            point(px(26.0), px(28.0)),
+            Size::new(px(104.0), px(61.0)),
             Size::new(px(160.0), px(80.0)),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
-            Bounds::new(point(px(30.0), px(40.0)), Size::new(px(940.0), px(700.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
-        assert!(placement.anchor.contains(Anchor::LEFT));
-        assert_eq!(placement.margin, (40.0, 810.0, 0.0, 30.0));
+        assert_eq!(placement.margin, (69.0, 0.0, 0.0, 394.0));
+    }
+
+    #[test]
+    fn dock_context_menu_left_opens_to_the_right_of_the_clicked_icon() {
+        let placement = dock_context_menu_placement_from_dock_click(
+            BarPosition::Left,
+            point(px(25.0), px(90.0)),
+            Size::new(px(56.0), px(114.0)),
+            Size::new(px(160.0), px(80.0)),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+        );
+
+        assert_eq!(placement.margin, (393.0, 0.0, 0.0, 64.0));
+    }
+
+    #[test]
+    fn dock_context_menu_right_opens_to_the_left_of_the_clicked_icon() {
+        let placement = dock_context_menu_placement_from_dock_click(
+            BarPosition::Right,
+            point(px(20.0), px(30.0)),
+            Size::new(px(56.0), px(114.0)),
+            Size::new(px(160.0), px(80.0)),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
+        );
+
+        assert_eq!(placement.margin, (333.0, 0.0, 0.0, 776.0));
+    }
+
+    #[test]
+    fn dock_context_menu_clamps_the_dock_local_position_to_usable_bounds() {
+        let placement = dock_context_menu_placement_from_dock_click(
+            BarPosition::Bottom,
+            point(px(130.0), px(28.0)),
+            Size::new(px(104.0), px(61.0)),
+            Size::new(px(160.0), px(80.0)),
+            Bounds::new(point(px(0.0), px(0.0)), Size::new(px(300.0), px(200.0))),
+            Bounds::new(point(px(20.0), px(10.0)), Size::new(px(260.0), px(170.0))),
+        );
+
+        assert_eq!(placement.margin, (51.0, 0.0, 0.0, 120.0));
     }
 }
