@@ -1,12 +1,52 @@
 //! Application-wide runtime state stored as a GPUI global.
 
+use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use futures_signals::signal::{Signal, SignalExt};
 use futures_util::StreamExt;
-use gpui::{App, Context, Global};
+use gpui::{AnyWindowHandle, App, Context, DisplayId, Global, Window};
+
+/// Maps each bar window to the display it was explicitly opened on.
+///
+/// We can't correlate a window to a compositor monitor by position: gpui's
+/// `Display::bounds()` doesn't reflect real global monitor placement in this
+/// fork (every display reports origin (0, 0) regardless of its actual
+/// position), and `Window::display()` is separately unreliable for
+/// layer-shell windows (gpui_linux derives it from `primary_output_scale()`,
+/// which just picks whichever output has the highest scale factor). We also
+/// can't assume `cx.displays()` and the compositor's own monitor list
+/// enumerate outputs in the same order - on at least one real dual-monitor
+/// setup they didn't, which silently swapped which bar controlled which
+/// monitor. So instead we record the specific `DisplayId` each window was
+/// opened with, and match it against a compositor monitor by name via
+/// `PlatformDisplay::uuid()` (see the `bar` and `dock` modules'
+/// monitor-matching code), which gpui_linux derives deterministically from
+/// the Wayland output's name.
+static WINDOW_DISPLAYS: Mutex<Option<HashMap<AnyWindowHandle, DisplayId>>> = Mutex::new(None);
+
+/// Look up the display a bar window was opened on.
+pub fn display_id_for_window(window: &Window) -> Option<DisplayId> {
+    WINDOW_DISPLAYS
+        .lock()
+        .ok()?
+        .as_ref()?
+        .get(&window.window_handle())
+        .copied()
+}
+
+pub(crate) fn record_window_display(handle: AnyWindowHandle, display_id: Option<DisplayId>) {
+    let Some(display_id) = display_id else {
+        return;
+    };
+    let mut guard = WINDOW_DISPLAYS.lock().unwrap();
+    guard
+        .get_or_insert_with(HashMap::new)
+        .insert(handle, display_id);
+}
 
 /// Shared services container for all system integrations.
 ///

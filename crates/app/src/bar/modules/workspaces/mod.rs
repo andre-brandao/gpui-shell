@@ -58,10 +58,10 @@ impl Workspaces {
     /// identity: gpui_linux's `PlatformDisplay::uuid()` is a deterministic
     /// hash of the Wayland output's name (`Uuid::new_v5(NAMESPACE_DNS,
     /// name)`), so we look up the `DisplayId` this bar window was opened
-    /// with (`crate::bar::display_id_for_window`), and compare its uuid
+    /// with (`crate::state::display_id_for_window`), and compare its uuid
     /// against the same hash computed from each compositor monitor's name.
     fn current_monitor_name(&self, window: &Window, cx: &gpui::App) -> Option<String> {
-        let display_id = crate::bar::display_id_for_window(window)?;
+        let display_id = crate::state::display_id_for_window(window)?;
         let display_uuid = cx.find_display(display_id)?.uuid().ok()?;
 
         self.state
