@@ -70,9 +70,9 @@ impl Render for DockContextMenu {
         let mut children = vec![
             self.render_entry(
                 pin_label,
-                move |this, window, cx| {
+                move |this, _window, cx| {
                     toggle_pin(&this.item_key, cx);
-                    window.remove_window();
+                    crate::panel::close_panel(cx);
                 },
                 cx,
             )
@@ -83,7 +83,7 @@ impl Render for DockContextMenu {
             children.push(
                 self.render_entry(
                     "New Window".to_string(),
-                    move |_this, window, _cx| {
+                    move |_this, _window, cx| {
                         let app = services::Application {
                             name: app_name.clone(),
                             exec: exec.clone(),
@@ -94,7 +94,7 @@ impl Render for DockContextMenu {
                             startup_wm_class: None,
                         };
                         app.launch();
-                        window.remove_window();
+                        crate::panel::close_panel(cx);
                     },
                     cx,
                 )
