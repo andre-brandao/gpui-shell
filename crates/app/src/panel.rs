@@ -274,6 +274,17 @@ pub fn close_panel(cx: &mut App) {
     }
 }
 
+/// Forget a panel that has already closed itself through its window lifecycle.
+pub fn forget_panel(panel_id: &str) {
+    let mut guard = ACTIVE_PANEL.lock().unwrap();
+    if guard
+        .as_ref()
+        .is_some_and(|(active_panel_id, _)| active_panel_id == panel_id)
+    {
+        guard.take();
+    }
+}
+
 /// Check if a specific panel is open.
 #[allow(dead_code)]
 pub fn is_panel_open(panel_id: &str) -> bool {

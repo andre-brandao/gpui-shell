@@ -1,20 +1,26 @@
 //! Right-click context menu for a dock item: pin/unpin, new window.
 
-use gpui::{Context, MouseButton, Render, Window, div, prelude::*, px};
+use gpui::{
+    Context, FocusHandle, Focusable, MouseButton, Render, Subscription, Window, div, prelude::*, px,
+};
 use ui::{ActiveTheme, radius, spacing};
 
 use super::toggle_pin;
 
 pub(super) struct DockContextMenu {
+    panel_id: String,
     item_key: String,
     is_pinned: bool,
     exec: Option<String>,
     app_name: String,
     icon_path: Option<std::path::PathBuf>,
+    focus_handle: FocusHandle,
+    focus_out_subscription: Option<Subscription>,
 }
 
 impl DockContextMenu {
     pub(super) fn new(
+        panel_id: String,
         item_key: String,
         is_pinned: bool,
         exec: Option<String>,
@@ -23,11 +29,14 @@ impl DockContextMenu {
         _cx: &mut Context<Self>,
     ) -> Self {
         Self {
+            panel_id,
             item_key,
             is_pinned,
             exec,
             app_name,
             icon_path,
+            focus_handle: _cx.focus_handle(),
+            focus_out_subscription: None,
         }
     }
 
@@ -54,8 +63,28 @@ impl DockContextMenu {
     }
 }
 
+impl Focusable for DockContextMenu {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
 impl Render for DockContextMenu {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.focus_out_subscription.is_none() {
+            let panel_id = self.panel_id.clone();
+            self.focus_out_subscription =
+                Some(
+                    cx.on_focus_out(&self.focus_handle, window, move |_, _, window, _| {
+                        window.remove_window();
+                        crate::panel::forget_panel(&panel_id);
+                    }),
+                );
+        }
+        if !self.focus_handle.is_focused(window) {
+            self.focus_handle.focus(window, cx);
+        }
+
         let theme = cx.theme().clone();
         let pin_label = if self.is_pinned {
             "Remove from Dock".to_string()
