@@ -274,11 +274,39 @@ fn monitor_name_for_display(
         .map(|monitor| monitor.name.clone())
 }
 
+fn focused_window_is_on_other_monitor(
+    focused_window: Option<&services::Window>,
+    monitor_name: Option<&str>,
+) -> bool {
+    focused_window.is_some_and(|window| Some(window.monitor.as_str()) != monitor_name)
+}
+
+fn geometry_overlaps_dock(
+    geometry: services::WindowGeometry,
+    dock_bounds: Bounds<gpui::Pixels>,
+) -> bool {
+    let dock_left: f32 = dock_bounds.origin.x.into();
+    let dock_top: f32 = dock_bounds.origin.y.into();
+    let dock_right = dock_left + f32::from(dock_bounds.size.width);
+    let dock_bottom = dock_top + f32::from(dock_bounds.size.height);
+
+    let window_left = geometry.x as f32;
+    let window_top = geometry.y as f32;
+    let window_right = window_left + geometry.width as f32;
+    let window_bottom = window_top + geometry.height as f32;
+
+    window_left < dock_right
+        && window_right > dock_left
+        && window_top < dock_bottom
+        && window_bottom > dock_top
+}
+
 /// The dock's own view, rendered in a standalone layer-shell window.
 struct Dock {
     compositor: services::CompositorSubscriber,
     state: services::CompositorState,
     cycle_index: HashMap<String, usize>,
+    revealed: bool,
 }
 
 impl Dock {
@@ -295,11 +323,46 @@ impl Dock {
             compositor,
             state,
             cycle_index: HashMap::new(),
+            revealed: true,
         }
     }
 
     fn current_monitor_name(&self, window: &Window, cx: &App) -> Option<String> {
         monitor_name_for_display(display_id_for_window(window), &self.state, cx)
+    }
+
+    /// The focused window's full record, cross-referenced from the active
+    /// window address because `ActiveWindow` has no monitor or geometry.
+    fn focused_window(&self) -> Option<&services::Window> {
+        let address = &self.state.active_window.as_ref()?.address;
+        self.state
+            .windows
+            .iter()
+            .find(|window| &window.id == address)
+    }
+
+    /// Whether the dock should be hidden for the configured visibility mode.
+    /// `DodgeWindows` uses the intelligent-hide behavior when the compositor
+    /// cannot report window geometry, as with Niri.
+    fn should_hide(&self, window: &Window, cx: &App) -> bool {
+        let monitor_name = self.current_monitor_name(window, cx);
+        let intelligent_hide =
+            || focused_window_is_on_other_monitor(self.focused_window(), monitor_name.as_deref());
+
+        match cx.config().dock.visibility {
+            config::DockVisibility::AlwaysVisible => false,
+            config::DockVisibility::IntelligentHide => intelligent_hide(),
+            config::DockVisibility::DodgeWindows => {
+                let Some(focused_window) = self.focused_window() else {
+                    return false;
+                };
+                let Some(geometry) = focused_window.geometry else {
+                    return intelligent_hide();
+                };
+
+                geometry_overlaps_dock(geometry, window.bounds())
+            }
+        }
     }
 
     fn items(&self, window: &Window, cx: &App) -> Vec<DockItem> {
@@ -494,7 +557,23 @@ impl Dock {
 }
 
 impl Render for Dock {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    #[allow(refining_impl_trait)]
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if cx.config().dock.visibility != config::DockVisibility::AlwaysVisible {
+            self.revealed = !self.should_hide(window, cx);
+        }
+
+        if !self.revealed {
+            return div()
+                .id("dock-hidden-strip")
+                .size(px(6.0))
+                .on_mouse_move(cx.listener(|this, _event, _window, cx| {
+                    this.revealed = true;
+                    cx.notify();
+                }))
+                .into_any_element();
+        }
+
         let background = cx.theme().bg.primary;
         let border = cx.theme().border.subtle;
         let is_vertical = cx.config().dock.position.is_vertical();
@@ -572,6 +651,7 @@ impl Render for Dock {
                     )
                     .child("+"),
             )
+            .into_any_element()
     }
 }
 
@@ -727,7 +807,8 @@ mod tests {
     use super::{
         DOCK_APP_PICKER_WIDTH, DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect, dock_context_menu_height,
         dock_context_menu_size, dock_item_count, dock_panel_placement_from_dock_click,
-        dock_window_size, next_cycle_index, toggled_pins, windows_for_monitor,
+        dock_window_size, focused_window_is_on_other_monitor, geometry_overlaps_dock,
+        next_cycle_index, toggled_pins, windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
     use gpui::{Bounds, Size, layer_shell::Anchor, point, px};
@@ -756,6 +837,55 @@ mod tests {
             is_minimized: false,
             geometry: None,
         }
+    }
+
+    #[test]
+    fn intelligent_hide_only_hides_for_a_focused_window_on_another_monitor() {
+        let focused = window("focused", "HDMI-A-1");
+
+        assert!(!focused_window_is_on_other_monitor(None, Some("HDMI-A-1")));
+        assert!(!focused_window_is_on_other_monitor(
+            Some(&focused),
+            Some("HDMI-A-1")
+        ));
+        assert!(focused_window_is_on_other_monitor(
+            Some(&focused),
+            Some("eDP-1")
+        ));
+        assert!(focused_window_is_on_other_monitor(Some(&focused), None));
+    }
+
+    #[test]
+    fn dodge_windows_hides_only_for_strictly_overlapping_geometry() {
+        let dock = Bounds::new(point(px(100.0), px(900.0)), gpui::size(px(200.0), px(50.0)));
+
+        assert!(geometry_overlaps_dock(
+            services::WindowGeometry {
+                x: 150,
+                y: 850,
+                width: 200,
+                height: 100,
+            },
+            dock,
+        ));
+        assert!(!geometry_overlaps_dock(
+            services::WindowGeometry {
+                x: 300,
+                y: 900,
+                width: 100,
+                height: 50,
+            },
+            dock,
+        ));
+        assert!(!geometry_overlaps_dock(
+            services::WindowGeometry {
+                x: 100,
+                y: 950,
+                width: 200,
+                height: 50,
+            },
+            dock,
+        ));
     }
 
     #[test]
