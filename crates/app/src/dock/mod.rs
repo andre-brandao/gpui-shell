@@ -119,15 +119,34 @@ impl Dock {
 
     fn render_item(&self, item: &DockItem, cx: &Context<Self>) -> AnyElement {
         let theme = cx.theme();
-        let icon_size = cx.config().dock.icon_size;
+        let config = &cx.config().dock;
+        let icon_size = config.icon_size;
+        let hover_effect = config.hover_effect;
+        let accent = theme.accent.primary;
 
-        div()
+        let mut element = div()
             .id(item.key.clone())
             .size(px(icon_size))
             .flex()
             .items_center()
             .justify_center()
-            .rounded(px(radius::MD))
+            .rounded(px(radius::MD));
+
+        element = match hover_effect {
+            config::DockHoverEffect::None => element,
+            config::DockHoverEffect::Lift => element.hover(move |style| style.mb(px(8.0))),
+            config::DockHoverEffect::Magnify => {
+                element.hover(move |style| style.size(px(icon_size * 1.3)))
+            }
+            config::DockHoverEffect::Glow => {
+                element.hover(move |style| style.border_2().border_color(accent))
+            }
+            config::DockHoverEffect::MagnifyLift => {
+                element.hover(move |style| style.size(px(icon_size * 1.3)).mb(px(8.0)))
+            }
+        };
+
+        element
             .when_some(item.icon_path.clone(), |element, path| {
                 element.child(img(path).size(px(icon_size * 0.75)))
             })
