@@ -10,6 +10,7 @@ use ui::Theme;
 
 pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
 pub use crate::control_center::ControlCenterConfig;
+pub use crate::dock::DockConfig;
 pub use crate::launcher::config::LauncherConfig;
 pub use crate::notification::{NotificationConfig, NotificationPopupPosition};
 pub use crate::osd::{OsdConfig, OsdPosition};
@@ -23,6 +24,7 @@ pub struct Config {
     pub osd: OsdConfig,
     pub notification: NotificationConfig,
     pub control_center: ControlCenterConfig,
+    pub dock: DockConfig,
     /// Watch config.toml for changes and hot-reload (requires restart to change).
     pub watch_config: bool,
     /// Watch theme.toml for changes and hot-reload (requires restart to change).
@@ -37,6 +39,7 @@ impl Default for Config {
             osd: OsdConfig::default(),
             notification: NotificationConfig::default(),
             control_center: ControlCenterConfig::default(),
+            dock: DockConfig::default(),
             watch_config: true,
             watch_theme: true,
         }
