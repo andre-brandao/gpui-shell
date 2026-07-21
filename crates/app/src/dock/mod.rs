@@ -4,6 +4,7 @@
 pub mod config;
 mod context_menu;
 mod item;
+mod picker;
 
 pub use config::{DockConfig, DockHoverEffect, DockMonitors, DockVisibility};
 
@@ -500,7 +501,7 @@ impl Render for Dock {
         let target_size = dock_window_size(
             cx.config().dock.position,
             cx.config().dock.icon_size,
-            items.len(),
+            items.len() + 1,
             cx.config().dock.hover_effect,
         );
         if window.viewport_size() != target_size {
@@ -525,6 +526,46 @@ impl Render for Dock {
             .border_1()
             .border_color(border)
             .children(elements)
+            .child(
+                div()
+                    .id("dock-add")
+                    .size(px(cx.config().dock.icon_size * 0.6))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(radius::MD))
+                    .cursor_pointer()
+                    .text_color(cx.theme().text.muted)
+                    .hover(|style| style.text_color(cx.theme().text.primary))
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|_this, event, window, cx| {
+                            let config = cx.config().dock.clone();
+                            let panel_size = gpui::Size::new(px(240.0), px(280.0));
+                            let (anchor, margin) = crate::panel::panel_placement_from_event(
+                                config.position,
+                                event,
+                                window,
+                                cx,
+                                panel_size,
+                            );
+                            let panel_config = crate::panel::PanelConfig {
+                                width: 240.0,
+                                height: 280.0,
+                                anchor,
+                                margin,
+                                namespace: "dock-app-picker".to_string(),
+                            };
+                            crate::panel::toggle_panel(
+                                "dock-app-picker",
+                                panel_config,
+                                cx,
+                                picker::DockAppPicker::new,
+                            );
+                        }),
+                    )
+                    .child("+"),
+            )
     }
 }
 
@@ -539,7 +580,7 @@ fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
         AppState::applications(cx).all(),
         &config.pinned,
         monitor_name_for_display(display_id, &compositor_state, cx).as_deref(),
-    );
+    ) + 1;
     let window_size = dock_window_size(
         config.position,
         config.icon_size,
