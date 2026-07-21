@@ -2,5 +2,6 @@
 //! window per configured monitor.
 
 pub mod config;
+mod item;
 
 pub use config::{DockConfig, DockHoverEffect, DockMonitors, DockVisibility};
