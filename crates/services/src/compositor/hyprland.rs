@@ -57,9 +57,14 @@ fn map_client(c: Client, monitors: &[super::types::Monitor]) -> super::types::Wi
 fn refresh_windows(state: &mut super::types::CompositorState) {
     if let Ok(clients) = Clients::get() {
         let monitors = state.monitors.clone();
+        let focused_address = state.active_window.as_ref().map(|w| w.address.clone());
         state.windows = clients
             .into_iter()
-            .map(|c| map_client(c, &monitors))
+            .map(|c| {
+                let mut w = map_client(c, &monitors);
+                w.is_focused = Some(&w.id) == focused_address.as_ref();
+                w
+            })
             .collect();
     }
 }
