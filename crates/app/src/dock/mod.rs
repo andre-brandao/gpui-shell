@@ -16,6 +16,8 @@ use crate::config::{ActiveConfig, Config};
 use crate::state::{AppState, display_id_for_window, record_window_display, watch};
 use item::{DockItem, build_dock_items};
 
+const INDICATOR_ROW_HEIGHT: f32 = 5.0;
+
 /// Retain only the windows on a resolved compositor monitor. When the monitor
 /// cannot be resolved, retain every window so the dock remains useful.
 fn windows_for_monitor(
@@ -57,8 +59,9 @@ fn dock_window_size(
     item_count: usize,
     hover_effect: config::DockHoverEffect,
 ) -> Size<gpui::Pixels> {
-    let primary_extent = item_count.max(1) as f32 * (icon_size + spacing::SM) + spacing::SM;
-    let cross_extent = icon_size + spacing::SM * 2.0;
+    let item_count = item_count.max(1) as f32;
+    let primary_extent = item_count * (icon_size + spacing::SM) + spacing::SM;
+    let cross_extent = icon_size + INDICATOR_ROW_HEIGHT + spacing::SM * 2.0;
     let magnify_reserve = match hover_effect {
         config::DockHoverEffect::Magnify | config::DockHoverEffect::MagnifyLift => icon_size * 0.3,
         _ => 0.0,
@@ -73,6 +76,11 @@ fn dock_window_size(
     };
 
     let primary_extent = primary_extent
+        + if position.is_vertical() {
+            item_count * INDICATOR_ROW_HEIGHT
+        } else {
+            0.0
+        }
         + magnify_reserve
         + glow_reserve
         + if position.is_vertical() {
@@ -157,6 +165,7 @@ impl Dock {
 
         let mut element = div()
             .id(item.key.clone())
+            .relative()
             .size(px(icon_size))
             .flex()
             .items_center()
@@ -177,7 +186,12 @@ impl Dock {
             }
         };
 
-        element
+        let is_focused = item.windows.iter().any(|window| window.is_focused);
+        let window_count = item.windows.len();
+        let bar_color = if is_focused { accent } else { theme.text.muted };
+        let bar_width = if window_count > 1 { 20.0 } else { 6.0 };
+
+        let icon_element = element
             .when_some(item.icon_path.clone(), |element, path| {
                 element.child(img(path).size(px(icon_size * 0.75)))
             })
@@ -187,6 +201,41 @@ impl Dock {
                         .text_size(theme.font_sizes.md)
                         .text_color(theme.text.primary)
                         .child(item.name.chars().take(1).collect::<String>()),
+                )
+            })
+            .when(window_count > 1, |element| {
+                element.child(
+                    div()
+                        .absolute()
+                        .top(px(-2.0))
+                        .right(px(-2.0))
+                        .min_w(px(14.0))
+                        .h(px(14.0))
+                        .px(px(3.0))
+                        .rounded(px(7.0))
+                        .bg(accent)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(theme.font_sizes.xs)
+                        .text_color(theme.bg.primary)
+                        .child(window_count.to_string()),
+                )
+            });
+
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(2.0))
+            .child(icon_element)
+            .when(item.is_running(), |element| {
+                element.child(
+                    div()
+                        .w(px(bar_width))
+                        .h(px(3.0))
+                        .rounded(px(1.5))
+                        .bg(bar_color),
                 )
             })
             .into_any_element()
@@ -437,7 +486,14 @@ mod tests {
     fn dock_window_size_matches_horizontal_item_extent() {
         let size = dock_window_size(BarPosition::Bottom, 40.0, 2, DockHoverEffect::None);
 
-        assert_eq!(size, Size::new(px(104.0), px(56.0)));
+        assert_eq!(size, Size::new(px(104.0), px(61.0)));
+    }
+
+    #[test]
+    fn dock_window_size_reserves_indicator_space_for_vertical_items() {
+        let size = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::None);
+
+        assert_eq!(size, Size::new(px(61.0), px(114.0)));
     }
 
     #[test]
@@ -445,8 +501,8 @@ mod tests {
         let horizontal = dock_window_size(BarPosition::Bottom, 40.0, 2, DockHoverEffect::Lift);
         let vertical = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::Lift);
 
-        assert_eq!(horizontal, Size::new(px(104.0), px(64.0)));
-        assert_eq!(vertical, Size::new(px(56.0), px(112.0)));
+        assert_eq!(horizontal, Size::new(px(104.0), px(69.0)));
+        assert_eq!(vertical, Size::new(px(61.0), px(122.0)));
     }
 
     #[test]
@@ -455,7 +511,7 @@ mod tests {
             dock_window_size(BarPosition::Bottom, 40.0, 2, DockHoverEffect::MagnifyLift);
         let vertical = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::MagnifyLift);
 
-        assert_eq!(horizontal, Size::new(px(116.0), px(76.0)));
-        assert_eq!(vertical, Size::new(px(68.0), px(124.0)));
+        assert_eq!(horizontal, Size::new(px(116.0), px(81.0)));
+        assert_eq!(vertical, Size::new(px(73.0), px(134.0)));
     }
 }
