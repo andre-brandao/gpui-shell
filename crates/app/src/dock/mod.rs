@@ -716,6 +716,11 @@ impl Render for Dock {
             .bg(background)
             .border_1()
             .border_color(border)
+            .on_mouse_move(cx.listener(|this, _event, _window, cx| {
+                if this.hidden_by_rule {
+                    this.schedule_rehide(cx);
+                }
+            }))
             .children(elements)
             .child(
                 div()
