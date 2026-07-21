@@ -34,7 +34,7 @@ pub enum DockVisibility {
 
 /// Hover effect applied to a dock item under the cursor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum DockHoverEffect {
     /// No hover effect.
     None,
@@ -77,5 +77,17 @@ impl Default for DockConfig {
             icon_size: 40.0,
             pinned: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DockConfig, DockHoverEffect};
+
+    #[test]
+    fn hover_effect_deserializes_magnify_lift_from_kebab_case() {
+        let config: DockConfig = toml::from_str("hover_effect = \"magnify-lift\"").unwrap();
+
+        assert_eq!(config.hover_effect, DockHoverEffect::MagnifyLift);
     }
 }

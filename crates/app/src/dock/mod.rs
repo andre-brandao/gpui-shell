@@ -55,13 +55,44 @@ fn dock_window_size(
     position: crate::bar::config::BarPosition,
     icon_size: f32,
     item_count: usize,
+    hover_effect: config::DockHoverEffect,
 ) -> Size<gpui::Pixels> {
-    let content_extent = item_count.max(1) as f32 * (icon_size + spacing::SM) + spacing::SM;
+    let primary_extent = item_count.max(1) as f32 * (icon_size + spacing::SM) + spacing::SM;
+    let cross_extent = icon_size + spacing::SM * 2.0;
+    let magnify_reserve = match hover_effect {
+        config::DockHoverEffect::Magnify | config::DockHoverEffect::MagnifyLift => icon_size * 0.3,
+        _ => 0.0,
+    };
+    let glow_reserve = match hover_effect {
+        config::DockHoverEffect::Glow => 4.0,
+        _ => 0.0,
+    };
+    let lift_reserve = match hover_effect {
+        config::DockHoverEffect::Lift | config::DockHoverEffect::MagnifyLift => 8.0,
+        _ => 0.0,
+    };
+
+    let primary_extent = primary_extent
+        + magnify_reserve
+        + glow_reserve
+        + if position.is_vertical() {
+            lift_reserve
+        } else {
+            0.0
+        };
+    let cross_extent = cross_extent
+        + magnify_reserve
+        + glow_reserve
+        + if position.is_vertical() {
+            0.0
+        } else {
+            lift_reserve
+        };
 
     if position.is_vertical() {
-        Size::new(px(icon_size + spacing::SM * 2.0), px(content_extent))
+        Size::new(px(cross_extent), px(primary_extent))
     } else {
-        Size::new(px(content_extent), px(icon_size + spacing::SM * 2.0))
+        Size::new(px(primary_extent), px(cross_extent))
     }
 }
 
@@ -171,6 +202,7 @@ impl Render for Dock {
             cx.config().dock.position,
             cx.config().dock.icon_size,
             items.len(),
+            cx.config().dock.hover_effect,
         );
         if window.viewport_size() != target_size {
             window.resize(target_size);
@@ -209,7 +241,12 @@ fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
         &config.pinned,
         monitor_name_for_display(display_id, &compositor_state, cx).as_deref(),
     );
-    let window_size = dock_window_size(config.position, config.icon_size, item_count);
+    let window_size = dock_window_size(
+        config.position,
+        config.icon_size,
+        item_count,
+        config.hover_effect,
+    );
 
     let anchor = if is_vertical {
         match config.position {
@@ -332,7 +369,7 @@ pub fn init(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{dock_item_count, dock_window_size, windows_for_monitor};
+    use super::{DockHoverEffect, dock_item_count, dock_window_size, windows_for_monitor};
     use crate::bar::config::BarPosition;
     use gpui::{Size, px};
     use std::path::PathBuf;
@@ -398,8 +435,27 @@ mod tests {
 
     #[test]
     fn dock_window_size_matches_horizontal_item_extent() {
-        let size = dock_window_size(BarPosition::Bottom, 40.0, 2);
+        let size = dock_window_size(BarPosition::Bottom, 40.0, 2, DockHoverEffect::None);
 
         assert_eq!(size, Size::new(px(104.0), px(56.0)));
+    }
+
+    #[test]
+    fn dock_window_size_reserves_lift_margin_for_each_orientation() {
+        let horizontal = dock_window_size(BarPosition::Bottom, 40.0, 2, DockHoverEffect::Lift);
+        let vertical = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::Lift);
+
+        assert_eq!(horizontal, Size::new(px(104.0), px(64.0)));
+        assert_eq!(vertical, Size::new(px(56.0), px(112.0)));
+    }
+
+    #[test]
+    fn dock_window_size_reserves_magnify_lift_for_each_orientation() {
+        let horizontal =
+            dock_window_size(BarPosition::Bottom, 40.0, 2, DockHoverEffect::MagnifyLift);
+        let vertical = dock_window_size(BarPosition::Left, 40.0, 2, DockHoverEffect::MagnifyLift);
+
+        assert_eq!(horizontal, Size::new(px(116.0), px(76.0)));
+        assert_eq!(vertical, Size::new(px(68.0), px(124.0)));
     }
 }
