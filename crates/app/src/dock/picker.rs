@@ -14,6 +14,12 @@ use crate::keybinds::{
 };
 use crate::state::AppState;
 
+pub(super) const DOCK_APP_PICKER_HEIGHT: f32 = 280.0;
+const INPUT_LINE_HEIGHT: f32 = 14.0;
+const RESULT_ROW_HEIGHT: f32 = 32.0;
+const MAX_RESULTS: usize = ((DOCK_APP_PICKER_HEIGHT - 2.0 * spacing::SM - INPUT_LINE_HEIGHT)
+    / (RESULT_ROW_HEIGHT + spacing::XS)) as usize;
+
 pub(super) struct DockAppPicker {
     input: InputBuffer,
     focus_handle: FocusHandle,
@@ -35,7 +41,7 @@ impl DockAppPicker {
             .search(self.input.text())
             .into_iter()
             .filter(|app| !pinned.contains(&desktop_file_id(app)))
-            .take(8)
+            .take(MAX_RESULTS)
             .cloned()
             .collect()
     }
@@ -72,6 +78,7 @@ impl Render for DockAppPicker {
                 .id(gpui::SharedString::from(id.clone()))
                 .px(px(spacing::MD))
                 .py(px(spacing::SM))
+                .min_h(px(RESULT_ROW_HEIGHT))
                 .rounded(px(radius::SM))
                 .cursor_pointer()
                 .text_color(theme.text.primary)
@@ -166,5 +173,24 @@ impl Render for DockAppPicker {
             .border_color(theme.border.subtle)
             .child(render_input_line(&self.input, "Search apps to pin...", cx))
             .children(entries)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DOCK_APP_PICKER_HEIGHT, INPUT_LINE_HEIGHT, MAX_RESULTS, RESULT_ROW_HEIGHT};
+    use ui::spacing;
+
+    fn picker_content_height(result_count: usize) -> f32 {
+        2.0 * spacing::SM
+            + INPUT_LINE_HEIGHT
+            + result_count as f32 * (RESULT_ROW_HEIGHT + spacing::XS)
+    }
+
+    #[test]
+    fn max_results_fit_the_fixed_picker_panel() {
+        assert_eq!(MAX_RESULTS, 6);
+        assert!(picker_content_height(MAX_RESULTS) <= DOCK_APP_PICKER_HEIGHT);
+        assert!(picker_content_height(MAX_RESULTS + 1) > DOCK_APP_PICKER_HEIGHT);
     }
 }

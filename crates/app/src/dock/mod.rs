@@ -541,7 +541,8 @@ impl Render for Dock {
                         gpui::MouseButton::Left,
                         cx.listener(|_this, event, window, cx| {
                             let config = cx.config().dock.clone();
-                            let panel_size = gpui::Size::new(px(240.0), px(280.0));
+                            let panel_size =
+                                gpui::Size::new(px(240.0), px(picker::DOCK_APP_PICKER_HEIGHT));
                             let (anchor, margin) = crate::panel::panel_placement_from_event(
                                 config.position,
                                 event,
@@ -551,7 +552,7 @@ impl Render for Dock {
                             );
                             let panel_config = crate::panel::PanelConfig {
                                 width: 240.0,
-                                height: 280.0,
+                                height: picker::DOCK_APP_PICKER_HEIGHT,
                                 anchor,
                                 margin,
                                 namespace: "dock-app-picker".to_string(),
