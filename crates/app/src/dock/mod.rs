@@ -20,6 +20,14 @@ use crate::state::{AppState, display_id_for_window, record_window_display, watch
 use item::{DockItem, build_dock_items};
 
 const INDICATOR_ROW_HEIGHT: f32 = 5.0;
+const DOCK_CONTEXT_MENU_WIDTH: f32 = 160.0;
+// Two 36 px entries, 8 px vertical container padding, a 2 px gap, and two
+// 1 px borders.
+const DOCK_CONTEXT_MENU_HEIGHT: f32 = 84.0;
+
+fn dock_context_menu_size() -> Size<gpui::Pixels> {
+    Size::new(px(DOCK_CONTEXT_MENU_WIDTH), px(DOCK_CONTEXT_MENU_HEIGHT))
+}
 
 struct DockContextMenuPlacement {
     anchor: Anchor,
@@ -409,7 +417,7 @@ impl Dock {
                 let item = item.clone();
                 cx.listener(move |_this, event, window, cx| {
                     let config = cx.config().dock.clone();
-                    let panel_size = gpui::Size::new(px(160.0), px(80.0));
+                    let panel_size = dock_context_menu_size();
                     let placement = dock_context_menu_placement_from_event(
                         config.position,
                         event,
@@ -419,8 +427,8 @@ impl Dock {
                         panel_size,
                     );
                     let panel_config = crate::panel::PanelConfig {
-                        width: 160.0,
-                        height: 80.0,
+                        width: DOCK_CONTEXT_MENU_WIDTH,
+                        height: DOCK_CONTEXT_MENU_HEIGHT,
                         anchor: placement.anchor,
                         margin: placement.margin,
                         namespace: "dock-context-menu".to_string(),
@@ -651,7 +659,8 @@ pub fn init(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DockHoverEffect, dock_context_menu_placement_from_dock_click, dock_item_count,
+        DOCK_CONTEXT_MENU_HEIGHT, DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect,
+        dock_context_menu_placement_from_dock_click, dock_context_menu_size, dock_item_count,
         dock_window_size, next_cycle_index, toggled_pins, windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
@@ -769,18 +778,27 @@ mod tests {
     }
 
     #[test]
+    fn dock_context_menu_size_fits_two_entries_with_padding_gap_and_borders() {
+        assert_eq!(
+            dock_context_menu_size(),
+            Size::new(px(DOCK_CONTEXT_MENU_WIDTH), px(DOCK_CONTEXT_MENU_HEIGHT))
+        );
+        assert_eq!(DOCK_CONTEXT_MENU_HEIGHT, 84.0);
+    }
+
+    #[test]
     fn dock_context_menu_bottom_uses_the_dock_local_click_position() {
         let placement = dock_context_menu_placement_from_dock_click(
             BarPosition::Bottom,
             point(px(78.0), px(28.0)),
             Size::new(px(104.0), px(61.0)),
-            Size::new(px(160.0), px(80.0)),
+            dock_context_menu_size(),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
         assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
-        assert_eq!(placement.margin, (651.0, 0.0, 0.0, 446.0));
+        assert_eq!(placement.margin, (647.0, 0.0, 0.0, 446.0));
     }
 
     #[test]
@@ -789,7 +807,7 @@ mod tests {
             BarPosition::Top,
             point(px(26.0), px(28.0)),
             Size::new(px(104.0), px(61.0)),
-            Size::new(px(160.0), px(80.0)),
+            dock_context_menu_size(),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
@@ -803,12 +821,12 @@ mod tests {
             BarPosition::Left,
             point(px(25.0), px(90.0)),
             Size::new(px(56.0), px(114.0)),
-            Size::new(px(160.0), px(80.0)),
+            dock_context_menu_size(),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
-        assert_eq!(placement.margin, (393.0, 0.0, 0.0, 64.0));
+        assert_eq!(placement.margin, (391.0, 0.0, 0.0, 64.0));
     }
 
     #[test]
@@ -817,12 +835,12 @@ mod tests {
             BarPosition::Right,
             point(px(20.0), px(30.0)),
             Size::new(px(56.0), px(114.0)),
-            Size::new(px(160.0), px(80.0)),
+            dock_context_menu_size(),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
-        assert_eq!(placement.margin, (333.0, 0.0, 0.0, 776.0));
+        assert_eq!(placement.margin, (331.0, 0.0, 0.0, 776.0));
     }
 
     #[test]
@@ -831,11 +849,11 @@ mod tests {
             BarPosition::Bottom,
             point(px(130.0), px(28.0)),
             Size::new(px(104.0), px(61.0)),
-            Size::new(px(160.0), px(80.0)),
+            dock_context_menu_size(),
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(300.0), px(200.0))),
             Bounds::new(point(px(20.0), px(10.0)), Size::new(px(260.0), px(170.0))),
         );
 
-        assert_eq!(placement.margin, (51.0, 0.0, 0.0, 120.0));
+        assert_eq!(placement.margin, (47.0, 0.0, 0.0, 120.0));
     }
 }
