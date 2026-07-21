@@ -21,9 +21,9 @@ use item::{DockItem, build_dock_items};
 
 const INDICATOR_ROW_HEIGHT: f32 = 5.0;
 const DOCK_CONTEXT_MENU_WIDTH: f32 = 160.0;
-// Two 36 px entries, 8 px vertical container padding, a 2 px gap, and two
-// 1 px borders.
-const DOCK_CONTEXT_MENU_HEIGHT: f32 = 84.0;
+// The theoretical two-entry layout is 84 px. Reserve 12 px more for GPUI text
+// layout so the lower entry is not clipped.
+const DOCK_CONTEXT_MENU_HEIGHT: f32 = 96.0;
 
 fn dock_context_menu_size() -> Size<gpui::Pixels> {
     Size::new(px(DOCK_CONTEXT_MENU_WIDTH), px(DOCK_CONTEXT_MENU_HEIGHT))
@@ -778,12 +778,12 @@ mod tests {
     }
 
     #[test]
-    fn dock_context_menu_size_fits_two_entries_with_padding_gap_and_borders() {
+    fn dock_context_menu_size_includes_vertical_text_layout_safety_allowance() {
         assert_eq!(
             dock_context_menu_size(),
             Size::new(px(DOCK_CONTEXT_MENU_WIDTH), px(DOCK_CONTEXT_MENU_HEIGHT))
         );
-        assert_eq!(DOCK_CONTEXT_MENU_HEIGHT, 84.0);
+        assert_eq!(DOCK_CONTEXT_MENU_HEIGHT, 96.0);
     }
 
     #[test]
@@ -798,7 +798,7 @@ mod tests {
         );
 
         assert_eq!(placement.anchor, Anchor::TOP | Anchor::LEFT);
-        assert_eq!(placement.margin, (647.0, 0.0, 0.0, 446.0));
+        assert_eq!(placement.margin, (635.0, 0.0, 0.0, 446.0));
     }
 
     #[test]
@@ -826,7 +826,7 @@ mod tests {
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
-        assert_eq!(placement.margin, (391.0, 0.0, 0.0, 64.0));
+        assert_eq!(placement.margin, (385.0, 0.0, 0.0, 64.0));
     }
 
     #[test]
@@ -840,7 +840,7 @@ mod tests {
             Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1000.0), px(800.0))),
         );
 
-        assert_eq!(placement.margin, (331.0, 0.0, 0.0, 776.0));
+        assert_eq!(placement.margin, (325.0, 0.0, 0.0, 776.0));
     }
 
     #[test]
@@ -854,6 +854,6 @@ mod tests {
             Bounds::new(point(px(20.0), px(10.0)), Size::new(px(260.0), px(170.0))),
         );
 
-        assert_eq!(placement.margin, (47.0, 0.0, 0.0, 120.0));
+        assert_eq!(placement.margin, (35.0, 0.0, 0.0, 120.0));
     }
 }
