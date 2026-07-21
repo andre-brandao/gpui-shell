@@ -96,6 +96,9 @@ pub fn execute_command(cmd: CompositorCommand) -> Result<()> {
             // to `(current + 1) % num_layouts`, i.e. cycling to the next layout.
             "dispatch switch_keyboard_layout".to_string()
         }
+        CompositorCommand::FocusWindow(id) => {
+            format!("dispatch focusid client,{}", id)
+        }
         CompositorCommand::Custom(action, args) => {
             if args.is_empty() {
                 format!("dispatch {}", action)
@@ -177,6 +180,36 @@ fn build_monitors(monitors: &[Value]) -> (Vec<Workspace>, Vec<Monitor>, Option<i
     (workspaces, out_monitors, active_workspace_id)
 }
 
+/// Build the window list from a `get`/`watch all-clients` reply's
+/// `clients` array.
+fn build_windows(clients: &[Value]) -> Vec<super::types::Window> {
+    clients
+        .iter()
+        .map(|c| super::types::Window {
+            id: c["id"]
+                .as_i64()
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
+            app_id: c["appid"].as_str().unwrap_or_default().to_string(),
+            title: c["title"].as_str().unwrap_or_default().to_string(),
+            monitor: c["monitor"].as_str().unwrap_or_default().to_string(),
+            workspace_id: c["tags"]
+                .as_array()
+                .and_then(|tags| tags.first())
+                .and_then(Value::as_i64)
+                .unwrap_or(0) as i32,
+            is_focused: c["is_focused"].as_bool().unwrap_or(false),
+            is_minimized: c["is_minimized"].as_bool().unwrap_or(false),
+            geometry: Some(super::types::WindowGeometry {
+                x: c["x"].as_i64().unwrap_or(0) as i32,
+                y: c["y"].as_i64().unwrap_or(0) as i32,
+                width: c["width"].as_i64().unwrap_or(0) as u32,
+                height: c["height"].as_i64().unwrap_or(0) as u32,
+            }),
+        })
+        .collect()
+}
+
 fn keymode_to_submap(keymode: &str) -> Option<String> {
     if keymode.is_empty() || keymode == "default" {
         None
@@ -193,6 +226,12 @@ pub fn fetch_full_state() -> Result<CompositorState> {
         .cloned()
         .unwrap_or_default();
     let (workspaces, monitors, active_workspace_id) = build_monitors(&monitors);
+
+    let clients_reply = send_command("get all-clients")?;
+    let windows = clients_reply["clients"]
+        .as_array()
+        .map(|arr| build_windows(arr))
+        .unwrap_or_default();
 
     let focusing_reply = send_command("get focusing-client")?;
     let active_window = map_active_window(&focusing_reply);
@@ -211,6 +250,7 @@ pub fn fetch_full_state() -> Result<CompositorState> {
     Ok(CompositorState {
         workspaces,
         monitors,
+        windows,
         active_workspace_id,
         active_window,
         keyboard_layout,
@@ -249,6 +289,13 @@ pub fn start_listener(data: Mutable<CompositorState>) {
         if let Some(layout) = json["layout"].as_str() {
             let mut state = data.lock_mut();
             state.keyboard_layout = layout.to_string();
+        }
+    });
+
+    spawn_watch_thread(data.clone(), "watch all-clients", |data, json| {
+        if let Some(clients) = json["clients"].as_array() {
+            let mut state = data.lock_mut();
+            state.windows = build_windows(clients);
         }
     });
 }
