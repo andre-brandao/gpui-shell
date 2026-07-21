@@ -59,6 +59,7 @@ async fn main() {
         keybinds::register(cx);
 
         bar::init(cx);
+        dock::init(cx);
         notification::init(cx);
         osd::init(cx);
         launcher::init(cx);
