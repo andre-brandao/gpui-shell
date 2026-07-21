@@ -32,6 +32,7 @@ pub(super) const DOCK_CONTEXT_MENU_BORDER_WIDTH: f32 = 1.0;
 const DOCK_CONTEXT_MENU_TEXT_LAYOUT_HEADROOM: f32 = 12.0;
 const DOCK_HIDDEN_STRIP_SIZE: f32 = 6.0;
 const DOCK_REVEAL_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(750);
+const DOCK_INITIAL_HIDE_DELAY: std::time::Duration = std::time::Duration::from_millis(750);
 
 fn dock_context_menu_height(action_count: usize) -> f32 {
     let gaps = action_count.saturating_sub(1) as f32 * DOCK_CONTEXT_MENU_GAP;
@@ -191,8 +192,25 @@ fn dock_item_count(
     dock_items(windows, apps, pinned, monitor_name).len().max(1)
 }
 
-fn next_cycle_index(previous: Option<usize>, window_count: usize) -> Option<usize> {
-    (window_count > 0).then(|| previous.map_or(0, |index| (index + 1) % window_count))
+fn activation_index(windows: &[services::Window], previous: Option<usize>) -> Option<usize> {
+    match windows {
+        [] => None,
+        [window] if window.is_focused => None,
+        [_] => Some(0),
+        windows => Some(previous.map_or_else(
+            || {
+                windows
+                    .iter()
+                    .position(|window| window.is_focused)
+                    .map_or(0, |index| (index + 1) % windows.len())
+            },
+            |index| (index + 1) % windows.len(),
+        )),
+    }
+}
+
+fn dock_item_can_be_pinned(item: &DockItem) -> bool {
+    item.exec.is_some()
 }
 
 fn toggled_pins(pinned: &mut Vec<String>, item_key: &str) {
@@ -359,20 +377,65 @@ fn revealed_after_visibility_update(
     }
 }
 
-fn dodge_windows_should_hide(
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DockHideBehavior {
+    Visible,
+    Delayed,
+    Immediate,
+}
+
+impl DockHideBehavior {
+    fn hides(self) -> bool {
+        !matches!(self, Self::Visible)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InitialHideAction {
+    Reveal,
+    Keep,
+    HideNow,
+    ScheduleDelayedHide,
+}
+
+fn initial_hide_action(
+    was_hidden_by_rule: bool,
+    hide_behavior: DockHideBehavior,
+) -> InitialHideAction {
+    match (was_hidden_by_rule, hide_behavior) {
+        (_, DockHideBehavior::Visible) => InitialHideAction::Reveal,
+        (false, DockHideBehavior::Delayed) => InitialHideAction::ScheduleDelayedHide,
+        (false, DockHideBehavior::Immediate) => InitialHideAction::HideNow,
+        (true, _) => InitialHideAction::Keep,
+    }
+}
+
+fn dodge_windows_hide_behavior(
     focused_window: Option<&services::Window>,
     monitor_name: Option<&str>,
     dock_bounds: Option<Bounds<gpui::Pixels>>,
-) -> bool {
+) -> DockHideBehavior {
     let intelligent_hide = focused_window_is_on_other_monitor(focused_window, monitor_name);
     let Some(geometry) = focused_window.and_then(|window| window.geometry) else {
-        return intelligent_hide;
+        return if intelligent_hide {
+            DockHideBehavior::Delayed
+        } else {
+            DockHideBehavior::Visible
+        };
     };
     let Some(dock_bounds) = dock_bounds else {
-        return intelligent_hide;
+        return if intelligent_hide {
+            DockHideBehavior::Delayed
+        } else {
+            DockHideBehavior::Visible
+        };
     };
 
-    geometry_overlaps_dock(geometry, dock_bounds)
+    if geometry_overlaps_dock(geometry, dock_bounds) {
+        DockHideBehavior::Immediate
+    } else {
+        DockHideBehavior::Visible
+    }
 }
 
 /// The dock's own view, rendered in a standalone layer-shell window.
@@ -383,6 +446,7 @@ struct Dock {
     revealed: bool,
     hidden_by_rule: bool,
     reveal_generation: u64,
+    hide_generation: u64,
 }
 
 impl Dock {
@@ -402,6 +466,7 @@ impl Dock {
             revealed: true,
             hidden_by_rule: false,
             reveal_generation: 0,
+            hide_generation: 0,
         }
     }
 
@@ -422,16 +487,27 @@ impl Dock {
     /// Whether the dock should be hidden for the configured visibility mode.
     /// `DodgeWindows` uses the intelligent-hide behavior when the compositor
     /// cannot report window geometry, as with Niri.
-    fn should_hide(&self, window: &Window, dock_size: Size<gpui::Pixels>, cx: &App) -> bool {
+    fn hide_behavior(
+        &self,
+        window: &Window,
+        dock_size: Size<gpui::Pixels>,
+        cx: &App,
+    ) -> DockHideBehavior {
         let monitor_name = self.current_monitor_name(window, cx);
         let focused_window = self.focused_window();
         let intelligent_hide =
             || focused_window_is_on_other_monitor(focused_window, monitor_name.as_deref());
 
         match cx.config().dock.visibility {
-            config::DockVisibility::AlwaysVisible => false,
-            config::DockVisibility::IntelligentHide => intelligent_hide(),
-            config::DockVisibility::DodgeWindows => dodge_windows_should_hide(
+            config::DockVisibility::AlwaysVisible => DockHideBehavior::Visible,
+            config::DockVisibility::IntelligentHide => {
+                if intelligent_hide() {
+                    DockHideBehavior::Delayed
+                } else {
+                    DockHideBehavior::Visible
+                }
+            }
+            config::DockVisibility::DodgeWindows => dodge_windows_hide_behavior(
                 focused_window,
                 monitor_name.as_deref(),
                 monitor_name.as_deref().and_then(|monitor_name| {
@@ -452,12 +528,30 @@ impl Dock {
     }
 
     fn schedule_rehide(&mut self, cx: &mut Context<Self>) {
+        self.hide_generation += 1;
         self.reveal_generation += 1;
         let generation = self.reveal_generation;
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(DOCK_REVEAL_TIMEOUT).await;
             let _ = this.update(cx, |this, cx| {
                 if this.hidden_by_rule && this.reveal_generation == generation {
+                    this.revealed = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn schedule_initial_hide(&mut self, cx: &mut Context<Self>) {
+        self.hide_generation += 1;
+        let generation = self.hide_generation;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(DOCK_INITIAL_HIDE_DELAY)
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if this.hidden_by_rule && this.hide_generation == generation {
                     this.revealed = false;
                     cx.notify();
                 }
@@ -494,8 +588,10 @@ impl Dock {
             return;
         }
 
-        let index = next_cycle_index(self.cycle_index.get(&item.key).copied(), item.windows.len())
-            .expect("non-empty dock items have a selectable window");
+        let Some(index) = activation_index(&item.windows, self.cycle_index.get(&item.key).copied())
+        else {
+            return;
+        };
         if item.windows.len() > 1 {
             self.cycle_index.insert(item.key.clone(), index);
         }
@@ -598,8 +694,11 @@ impl Dock {
             .on_mouse_down(gpui::MouseButton::Right, {
                 let item = item.clone();
                 cx.listener(move |_this, event, window, cx| {
+                    if !dock_item_can_be_pinned(&item) {
+                        return;
+                    }
                     let config = cx.config().dock.clone();
-                    let action_count = 1 + usize::from(item.exec.is_some());
+                    let action_count = 2;
                     let panel_height = dock_context_menu_height(action_count);
                     let panel_size = dock_context_menu_size(action_count);
                     let placement = dock_panel_placement_from_event(
@@ -668,11 +767,23 @@ impl Render for Dock {
             items.len() + 1,
             cx.config().dock.hover_effect,
         );
-        let is_hidden_by_rule = cx.config().dock.visibility
-            != config::DockVisibility::AlwaysVisible
-            && self.should_hide(window, dock_size, cx);
-        self.revealed =
-            revealed_after_visibility_update(self.hidden_by_rule, self.revealed, is_hidden_by_rule);
+        let hide_behavior = self.hide_behavior(window, dock_size, cx);
+        let is_hidden_by_rule = hide_behavior.hides();
+        match initial_hide_action(self.hidden_by_rule, hide_behavior) {
+            InitialHideAction::Reveal => {
+                self.hide_generation += 1;
+                self.revealed = true;
+            }
+            InitialHideAction::Keep => {
+                self.revealed = revealed_after_visibility_update(
+                    self.hidden_by_rule,
+                    self.revealed,
+                    is_hidden_by_rule,
+                );
+            }
+            InitialHideAction::HideNow => self.revealed = false,
+            InitialHideAction::ScheduleDelayedHide => self.schedule_initial_hide(cx),
+        }
         self.hidden_by_rule = is_hidden_by_rule;
 
         if !self.revealed {
@@ -921,12 +1032,12 @@ pub fn init(cx: &mut App) {
 mod tests {
     use super::picker;
     use super::{
-        DOCK_APP_PICKER_WIDTH, DOCK_CONTEXT_MENU_WIDTH, DockHoverEffect,
-        dock_bounds_in_compositor_space, dock_context_menu_height, dock_context_menu_size,
-        dock_item_count, dock_panel_placement_from_dock_click, dock_window_size,
-        dodge_windows_should_hide, focused_window_is_on_other_monitor, geometry_overlaps_dock,
-        hidden_strip_size, next_cycle_index, revealed_after_visibility_update, toggled_pins,
-        windows_for_monitor,
+        DOCK_APP_PICKER_WIDTH, DOCK_CONTEXT_MENU_WIDTH, DockHideBehavior, DockHoverEffect,
+        InitialHideAction, activation_index, dock_bounds_in_compositor_space,
+        dock_context_menu_height, dock_context_menu_size, dock_item_can_be_pinned, dock_item_count,
+        dock_panel_placement_from_dock_click, dock_window_size, dodge_windows_hide_behavior,
+        focused_window_is_on_other_monitor, geometry_overlaps_dock, hidden_strip_size,
+        initial_hide_action, revealed_after_visibility_update, toggled_pins, windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
     use gpui::{Bounds, Size, layer_shell::Anchor, point, px};
@@ -1007,7 +1118,7 @@ mod tests {
     }
 
     #[test]
-    fn dodge_windows_falls_back_to_intelligent_hide_without_geometry_or_bounds() {
+    fn dodge_windows_falls_back_to_delayed_intelligent_hide_without_geometry_or_bounds() {
         let other_monitor = window("focused", "HDMI-A-1");
         let same_monitor = window("focused", "eDP-1");
         let geometry = services::WindowGeometry {
@@ -1021,21 +1132,18 @@ mod tests {
             ..same_monitor.clone()
         };
 
-        assert!(dodge_windows_should_hide(
-            Some(&other_monitor),
-            Some("eDP-1"),
-            None,
-        ));
-        assert!(!dodge_windows_should_hide(
-            Some(&same_monitor),
-            Some("eDP-1"),
-            None,
-        ));
-        assert!(!dodge_windows_should_hide(
-            Some(&same_monitor_with_geometry),
-            Some("eDP-1"),
-            None,
-        ));
+        assert_eq!(
+            dodge_windows_hide_behavior(Some(&other_monitor), Some("eDP-1"), None,),
+            DockHideBehavior::Delayed
+        );
+        assert_eq!(
+            dodge_windows_hide_behavior(Some(&same_monitor), Some("eDP-1"), None,),
+            DockHideBehavior::Visible
+        );
+        assert_eq!(
+            dodge_windows_hide_behavior(Some(&same_monitor_with_geometry), Some("eDP-1"), None,),
+            DockHideBehavior::Visible
+        );
     }
 
     #[test]
@@ -1044,6 +1152,26 @@ mod tests {
         assert!(revealed_after_visibility_update(true, true, true));
         assert!(!revealed_after_visibility_update(true, false, true));
         assert!(revealed_after_visibility_update(true, false, false));
+    }
+
+    #[test]
+    fn initial_intelligent_hide_is_delayed_but_dodge_overlap_hides_immediately() {
+        assert_eq!(
+            initial_hide_action(false, DockHideBehavior::Delayed),
+            InitialHideAction::ScheduleDelayedHide
+        );
+        assert_eq!(
+            initial_hide_action(false, DockHideBehavior::Immediate),
+            InitialHideAction::HideNow
+        );
+        assert_eq!(
+            initial_hide_action(true, DockHideBehavior::Delayed),
+            InitialHideAction::Keep
+        );
+        assert_eq!(
+            initial_hide_action(true, DockHideBehavior::Visible),
+            InitialHideAction::Reveal
+        );
     }
 
     #[test]
@@ -1156,10 +1284,48 @@ mod tests {
     }
 
     #[test]
-    fn next_cycle_index_advances_and_wraps_grouped_windows() {
-        assert_eq!(next_cycle_index(None, 2), Some(0));
-        assert_eq!(next_cycle_index(Some(0), 2), Some(1));
-        assert_eq!(next_cycle_index(Some(1), 2), Some(0));
+    fn activation_noops_for_the_already_focused_single_window() {
+        let focused = services::Window {
+            is_focused: true,
+            ..window("1", "eDP-1")
+        };
+
+        assert_eq!(activation_index(&[focused], None), None);
+    }
+
+    #[test]
+    fn activation_starts_after_the_focused_group_window_then_cycles() {
+        let windows = vec![
+            window("1", "eDP-1"),
+            services::Window {
+                is_focused: true,
+                ..window("2", "eDP-1")
+            },
+            window("3", "eDP-1"),
+        ];
+
+        assert_eq!(activation_index(&windows, None), Some(2));
+        assert_eq!(activation_index(&windows, Some(2)), Some(0));
+        assert_eq!(activation_index(&windows, Some(0)), Some(1));
+    }
+
+    #[test]
+    fn only_launchable_items_can_be_pinned() {
+        let launchable = super::DockItem {
+            key: "kitty.desktop".to_string(),
+            name: "Kitty".to_string(),
+            icon_path: None,
+            is_pinned: false,
+            windows: Vec::new(),
+            exec: Some("kitty".to_string()),
+        };
+        let unmatched = super::DockItem {
+            exec: None,
+            ..launchable.clone()
+        };
+
+        assert!(dock_item_can_be_pinned(&launchable));
+        assert!(!dock_item_can_be_pinned(&unmatched));
     }
 
     #[test]
