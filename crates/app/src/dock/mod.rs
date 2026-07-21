@@ -32,6 +32,55 @@ fn windows_for_monitor(
     }
 }
 
+fn dock_items(
+    windows: &[services::Window],
+    apps: &[services::Application],
+    pinned: &[String],
+    monitor_name: Option<&str>,
+) -> Vec<DockItem> {
+    let scoped_windows = windows_for_monitor(windows, monitor_name);
+    build_dock_items(&scoped_windows, apps, pinned)
+}
+
+fn dock_item_count(
+    windows: &[services::Window],
+    apps: &[services::Application],
+    pinned: &[String],
+    monitor_name: Option<&str>,
+) -> usize {
+    dock_items(windows, apps, pinned, monitor_name).len().max(1)
+}
+
+fn dock_window_size(
+    position: crate::bar::config::BarPosition,
+    icon_size: f32,
+    item_count: usize,
+) -> Size<gpui::Pixels> {
+    let content_extent = item_count.max(1) as f32 * (icon_size + spacing::SM) + spacing::SM;
+
+    if position.is_vertical() {
+        Size::new(px(icon_size + spacing::SM * 2.0), px(content_extent))
+    } else {
+        Size::new(px(content_extent), px(icon_size + spacing::SM * 2.0))
+    }
+}
+
+fn monitor_name_for_display(
+    display_id: Option<DisplayId>,
+    state: &services::CompositorState,
+    cx: &App,
+) -> Option<String> {
+    let display_uuid = cx.find_display(display_id?)?.uuid().ok()?;
+
+    state
+        .monitors
+        .iter()
+        .find(|monitor| {
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, monitor.name.as_bytes()) == display_uuid
+        })
+        .map(|monitor| monitor.name.clone())
+}
+
 /// The dock's own view, rendered in a standalone layer-shell window.
 struct Dock {
     _compositor: services::CompositorSubscriber,
@@ -55,26 +104,17 @@ impl Dock {
     }
 
     fn current_monitor_name(&self, window: &Window, cx: &App) -> Option<String> {
-        let display_id = display_id_for_window(window)?;
-        let display_uuid = cx.find_display(display_id)?.uuid().ok()?;
-
-        self.state
-            .monitors
-            .iter()
-            .find(|monitor| {
-                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, monitor.name.as_bytes())
-                    == display_uuid
-            })
-            .map(|monitor| monitor.name.clone())
+        monitor_name_for_display(display_id_for_window(window), &self.state, cx)
     }
 
     fn items(&self, window: &Window, cx: &App) -> Vec<DockItem> {
         let apps = AppState::applications(cx).all();
-        let scoped_windows = windows_for_monitor(
+        dock_items(
             &self.state.windows,
+            apps,
+            &cx.config().dock.pinned,
             self.current_monitor_name(window, cx).as_deref(),
-        );
-        build_dock_items(&scoped_windows, apps, &cx.config().dock.pinned)
+        )
     }
 
     fn render_item(&self, item: &DockItem, cx: &Context<Self>) -> AnyElement {
@@ -108,6 +148,14 @@ impl Render for Dock {
         let theme = cx.theme();
         let is_vertical = cx.config().dock.position.is_vertical();
         let items = self.items(window, cx);
+        let target_size = dock_window_size(
+            cx.config().dock.position,
+            cx.config().dock.icon_size,
+            items.len(),
+        );
+        if window.viewport_size() != target_size {
+            window.resize(target_size);
+        }
         let elements: Vec<AnyElement> = items
             .iter()
             .map(|item| self.render_item(item, cx))
@@ -135,30 +183,25 @@ impl Render for Dock {
 fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
     let config = &cx.config().dock;
     let is_vertical = config.position.is_vertical();
-    let item_count = AppState::compositor(cx)
-        .get()
-        .windows
-        .len()
-        .max(config.pinned.len())
-        .max(1) as f32;
-    let content_extent = item_count * (config.icon_size + spacing::SM) + spacing::SM;
+    let compositor_state = AppState::compositor(cx).get();
+    let item_count = dock_item_count(
+        &compositor_state.windows,
+        AppState::applications(cx).all(),
+        &config.pinned,
+        monitor_name_for_display(display_id, &compositor_state, cx).as_deref(),
+    );
+    let window_size = dock_window_size(config.position, config.icon_size, item_count);
 
-    let (window_size, anchor) = if is_vertical {
-        (
-            Size::new(px(config.icon_size + spacing::SM * 2.0), px(content_extent)),
-            match config.position {
-                crate::bar::config::BarPosition::Left => Anchor::LEFT,
-                _ => Anchor::RIGHT,
-            },
-        )
+    let anchor = if is_vertical {
+        match config.position {
+            crate::bar::config::BarPosition::Left => Anchor::LEFT,
+            _ => Anchor::RIGHT,
+        }
     } else {
-        (
-            Size::new(px(content_extent), px(config.icon_size + spacing::SM * 2.0)),
-            match config.position {
-                crate::bar::config::BarPosition::Top => Anchor::TOP,
-                _ => Anchor::BOTTOM,
-            },
-        )
+        match config.position {
+            crate::bar::config::BarPosition::Top => Anchor::TOP,
+            _ => Anchor::BOTTOM,
+        }
     };
 
     WindowOptions {
@@ -270,7 +313,22 @@ pub fn init(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::windows_for_monitor;
+    use super::{dock_item_count, dock_window_size, windows_for_monitor};
+    use crate::bar::config::BarPosition;
+    use gpui::{Size, px};
+    use std::path::PathBuf;
+
+    fn app(name: &str, desktop_file: &str) -> services::Application {
+        services::Application {
+            name: name.to_string(),
+            exec: name.to_string(),
+            icon: None,
+            icon_path: None,
+            description: None,
+            desktop_file: PathBuf::from(format!("/usr/share/applications/{desktop_file}")),
+            startup_wm_class: None,
+        }
+    }
 
     fn window(id: &str, monitor: &str) -> services::Window {
         services::Window {
@@ -302,5 +360,27 @@ mod tests {
         let scoped = windows_for_monitor(&windows, None);
 
         assert_eq!(scoped, windows);
+    }
+
+    #[test]
+    fn dock_item_count_includes_pinned_and_monitor_local_unpinned_items() {
+        let windows = vec![window("1", "HDMI-A-1"), window("2", "eDP-1")];
+        let apps = vec![app("Pinned", "pinned.desktop")];
+
+        let count = dock_item_count(
+            &windows,
+            &apps,
+            &["pinned.desktop".to_string()],
+            Some("HDMI-A-1"),
+        );
+
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn dock_window_size_matches_horizontal_item_extent() {
+        let size = dock_window_size(BarPosition::Bottom, 40.0, 2);
+
+        assert_eq!(size, Size::new(px(104.0), px(56.0)));
     }
 }
