@@ -2,6 +2,7 @@
 //! window per configured monitor.
 
 pub mod config;
+mod context_menu;
 mod item;
 
 pub use config::{DockConfig, DockHoverEffect, DockMonitors, DockVisibility};
@@ -56,6 +57,14 @@ fn dock_item_count(
 
 fn next_cycle_index(previous: Option<usize>, window_count: usize) -> Option<usize> {
     (window_count > 0).then(|| previous.map_or(0, |index| (index + 1) % window_count))
+}
+
+fn toggled_pins(pinned: &mut Vec<String>, item_key: &str) {
+    if let Some(pos) = pinned.iter().position(|pin| pin == item_key) {
+        pinned.remove(pos);
+    } else {
+        pinned.push(item_key.to_string());
+    }
 }
 
 fn dock_window_size(
@@ -288,6 +297,42 @@ impl Dock {
                     }
                 }),
             )
+            .on_mouse_down(gpui::MouseButton::Right, {
+                let item = item.clone();
+                cx.listener(move |_this, event, window, cx| {
+                    let config = cx.config().dock.clone();
+                    let panel_size = gpui::Size::new(px(160.0), px(80.0));
+                    let (anchor, margin) = crate::panel::panel_placement_from_event(
+                        config.position,
+                        event,
+                        window,
+                        cx,
+                        panel_size,
+                    );
+                    let panel_config = crate::panel::PanelConfig {
+                        width: 160.0,
+                        height: 80.0,
+                        anchor,
+                        margin,
+                        namespace: "dock-context-menu".to_string(),
+                    };
+                    let item_key = item.key.clone();
+                    let is_pinned = item.is_pinned;
+                    let exec = item.exec.clone();
+                    let app_name = item.name.clone();
+                    let icon_path = item.icon_path.clone();
+                    crate::panel::toggle_panel(
+                        &format!("dock-context-{item_key}"),
+                        panel_config,
+                        cx,
+                        move |cx| {
+                            context_menu::DockContextMenu::new(
+                                item_key, is_pinned, exec, app_name, icon_path, cx,
+                            )
+                        },
+                    );
+                })
+            })
             .child(icon_element)
             .when(item.is_running(), |element| {
                 element.child(
@@ -458,6 +503,14 @@ pub fn reload(cx: &mut App) {
     }
 }
 
+/// Toggle whether `item_key` (a desktop file id) is in the pinned list,
+/// persisting the change.
+pub(crate) fn toggle_pin(item_key: &str, cx: &mut App) {
+    let mut config = cx.config().clone();
+    toggled_pins(&mut config.dock.pinned, item_key);
+    Config::set(config, cx);
+}
+
 /// Initialize the dock using the current global config.
 pub fn init(cx: &mut App) {
     cx.observe_global::<Config>(|cx| {
@@ -480,7 +533,8 @@ pub fn init(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DockHoverEffect, dock_item_count, dock_window_size, next_cycle_index, windows_for_monitor,
+        DockHoverEffect, dock_item_count, dock_window_size, next_cycle_index, toggled_pins,
+        windows_for_monitor,
     };
     use crate::bar::config::BarPosition;
     use gpui::{Size, px};
@@ -583,5 +637,16 @@ mod tests {
         assert_eq!(next_cycle_index(None, 2), Some(0));
         assert_eq!(next_cycle_index(Some(0), 2), Some(1));
         assert_eq!(next_cycle_index(Some(1), 2), Some(0));
+    }
+
+    #[test]
+    fn toggled_pins_adds_missing_items_and_removes_existing_items() {
+        let mut pinned = vec!["firefox.desktop".to_string()];
+
+        toggled_pins(&mut pinned, "kitty.desktop");
+        assert_eq!(pinned, ["firefox.desktop", "kitty.desktop"]);
+
+        toggled_pins(&mut pinned, "firefox.desktop");
+        assert_eq!(pinned, ["kitty.desktop"]);
     }
 }
