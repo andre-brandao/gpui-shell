@@ -5,7 +5,10 @@ use gpui::{
 };
 use ui::{ActiveTheme, radius, spacing};
 
-use super::toggle_pin;
+use super::{
+    DOCK_CONTEXT_MENU_BORDER_WIDTH, DOCK_CONTEXT_MENU_GAP, DOCK_CONTEXT_MENU_ROW_HEIGHT,
+    DOCK_CONTEXT_MENU_VERTICAL_PADDING, toggle_pin,
+};
 
 pub(super) struct DockContextMenu {
     panel_id: String,
@@ -51,6 +54,7 @@ impl DockContextMenu {
             .id(gpui::SharedString::from(label.clone()))
             .px(px(spacing::MD))
             .py(px(spacing::SM))
+            .min_h(px(DOCK_CONTEXT_MENU_ROW_HEIGHT))
             .rounded(px(radius::SM))
             .cursor_pointer()
             .text_color(theme.text.primary)
@@ -134,11 +138,11 @@ impl Render for DockContextMenu {
         div()
             .flex()
             .flex_col()
-            .gap(px(2.0))
-            .p(px(spacing::XS))
+            .gap(px(DOCK_CONTEXT_MENU_GAP))
+            .p(px(DOCK_CONTEXT_MENU_VERTICAL_PADDING))
             .rounded(px(radius::MD))
             .bg(theme.bg.primary)
-            .border_1()
+            .border(px(DOCK_CONTEXT_MENU_BORDER_WIDTH))
             .border_color(theme.border.subtle)
             .children(children)
     }
