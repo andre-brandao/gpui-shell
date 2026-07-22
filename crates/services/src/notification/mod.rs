@@ -86,7 +86,7 @@ pub struct NotificationSubscriber {
 impl NotificationSubscriber {
     /// Create the notification daemon and begin listening on D-Bus.
     pub async fn new() -> anyhow::Result<Self> {
-        let conn = zbus::connection::Connection::session().await?;
+        let conn = crate::bus::session().await?;
         let data = Mutable::new(NotificationData::default());
         let status = Mutable::new(ServiceStatus::Initializing);
         let server = NotificationServer::new(data.clone(), conn.clone());

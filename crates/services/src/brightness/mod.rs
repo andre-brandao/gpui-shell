@@ -82,7 +82,7 @@ impl BrightnessSubscriber {
             Some(path) => {
                 let brightness_data = read_brightness(path)?;
                 let name = path.file_name().and_then(|n| n.to_str()).map(String::from);
-                let conn = zbus::Connection::system().await.ok();
+                let conn = crate::bus::system().await.ok();
 
                 info!(
                     "Brightness service initialized: {} (max: {})",

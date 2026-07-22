@@ -34,7 +34,7 @@ pub struct BluetoothSubscriber {
 impl BluetoothSubscriber {
     /// Create a new Bluetooth subscriber and start monitoring.
     pub async fn new() -> anyhow::Result<Self> {
-        let conn = zbus::Connection::system().await?;
+        let conn = crate::bus::system().await?;
         let status = Mutable::new(ServiceStatus::Initializing);
 
         let initial_data = match fetch_bluetooth_data(&conn).await {
@@ -62,7 +62,7 @@ impl BluetoothSubscriber {
         Ok(Self {
             data: Mutable::new(BluetoothData::default()),
             status: Mutable::new(ServiceStatus::Unavailable),
-            conn: zbus::Connection::system().await?,
+            conn: crate::bus::system().await?,
         })
     }
 

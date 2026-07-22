@@ -154,7 +154,7 @@ pub struct MprisSubscriber {
 impl MprisSubscriber {
     /// Create a new MPRIS subscriber and start monitoring player changes.
     pub async fn new() -> anyhow::Result<Self> {
-        let conn = Connection::session().await?;
+        let conn = crate::bus::session().await?;
         let status = Mutable::new(ServiceStatus::Initializing);
 
         let initial_data = match fetch_mpris_data(&conn).await {
@@ -181,7 +181,7 @@ impl MprisSubscriber {
         Ok(Self {
             data: Mutable::new(MprisData::default()),
             status: Mutable::new(ServiceStatus::Unavailable),
-            conn: Connection::session().await?,
+            conn: crate::bus::session().await?,
         })
     }
 

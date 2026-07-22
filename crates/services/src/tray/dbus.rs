@@ -28,7 +28,7 @@ pub struct StatusNotifierWatcher {
 impl StatusNotifierWatcher {
     /// Start the StatusNotifierWatcher D-Bus server.
     pub async fn start_server() -> anyhow::Result<Connection> {
-        let connection = zbus::connection::Connection::session().await?;
+        let connection = crate::bus::session().await?;
         let watcher = StatusNotifierWatcher::default();
         connection.object_server().at(OBJECT_PATH, watcher).await?;
         let interface = connection

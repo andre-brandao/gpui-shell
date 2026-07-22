@@ -35,7 +35,7 @@ pub struct NetworkSubscriber {
 impl NetworkSubscriber {
     /// Create a new network subscriber and start monitoring.
     pub async fn new() -> anyhow::Result<Self> {
-        let conn = Connection::system().await?;
+        let conn = crate::bus::system().await?;
         let status = Mutable::new(ServiceStatus::Initializing);
 
         let initial_data = match fetch_network_data(&conn).await {
@@ -63,7 +63,7 @@ impl NetworkSubscriber {
         Ok(Self {
             data: Mutable::new(NetworkData::default()),
             status: Mutable::new(ServiceStatus::Unavailable),
-            conn: Connection::system().await?,
+            conn: crate::bus::system().await?,
         })
     }
 

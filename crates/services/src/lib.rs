@@ -7,6 +7,7 @@ pub mod applications;
 pub mod audio;
 pub mod bluetooth;
 pub mod brightness;
+pub mod bus;
 pub mod compositor;
 pub mod mpris;
 pub mod network;

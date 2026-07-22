@@ -159,7 +159,7 @@ impl TraySubscriber {
         Ok(Self {
             data: Mutable::new(TrayData::default()),
             status: Mutable::new(ServiceStatus::Unavailable),
-            conn: zbus::Connection::session().await?,
+            conn: crate::bus::session().await?,
         })
     }
 

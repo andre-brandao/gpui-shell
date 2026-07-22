@@ -318,7 +318,7 @@ pub struct UPowerSubscriber {
 impl UPowerSubscriber {
     /// Create a new UPower subscriber and start monitoring.
     pub async fn new() -> Result<Self> {
-        let conn = Connection::system().await?;
+        let conn = crate::bus::system().await?;
         let status = Mutable::new(ServiceStatus::Initializing);
 
         let data = match UPowerData::init(&conn).await {
@@ -358,7 +358,7 @@ impl UPowerSubscriber {
         Ok(Self {
             data: Mutable::new(UPowerData::default()),
             status: Mutable::new(ServiceStatus::Unavailable),
-            conn: Connection::system().await?,
+            conn: crate::bus::system().await?,
         })
     }
 
