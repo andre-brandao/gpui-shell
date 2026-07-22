@@ -96,6 +96,9 @@ pub fn execute_command(cmd: CompositorCommand) -> Result<()> {
             // to `(current + 1) % num_layouts`, i.e. cycling to the next layout.
             "dispatch switch_keyboard_layout".to_string()
         }
+        CompositorCommand::FocusWindow(id) => {
+            format!("dispatch focusid client,{}", id)
+        }
         CompositorCommand::Custom(action, args) => {
             if args.is_empty() {
                 format!("dispatch {}", action)
@@ -177,6 +180,51 @@ fn build_monitors(monitors: &[Value]) -> (Vec<Workspace>, Vec<Monitor>, Option<i
     (workspaces, out_monitors, active_workspace_id)
 }
 
+/// Build the window list from a `get`/`watch all-clients` reply's
+/// `clients` array.
+///
+/// `workspace_id` is resolved to the same `monitor_index * 100 + tag_index`
+/// encoding `build_monitors` uses for `Workspace.id`, by looking up the
+/// window's monitor name in the already-fetched monitor list - Mango's raw
+/// per-monitor tag index alone isn't unique across monitors and wouldn't
+/// join against `Workspace.id` otherwise.
+fn build_windows(
+    clients: &[Value],
+    monitors: &[super::types::Monitor],
+) -> Vec<super::types::Window> {
+    clients
+        .iter()
+        .map(|c| {
+            let monitor = c["monitor"].as_str().unwrap_or_default().to_string();
+            let tag_index = c["tags"]
+                .as_array()
+                .and_then(|tags| tags.first())
+                .and_then(Value::as_i64)
+                .unwrap_or(0) as i32;
+            let monitor_index = monitors.iter().position(|m| m.name == monitor).unwrap_or(0);
+
+            super::types::Window {
+                id: c["id"]
+                    .as_i64()
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
+                app_id: c["appid"].as_str().unwrap_or_default().to_string(),
+                title: c["title"].as_str().unwrap_or_default().to_string(),
+                monitor,
+                workspace_id: (monitor_index as i32) * 100 + tag_index,
+                is_focused: c["is_focused"].as_bool().unwrap_or(false),
+                is_minimized: c["is_minimized"].as_bool().unwrap_or(false),
+                geometry: Some(super::types::WindowGeometry {
+                    x: c["x"].as_i64().unwrap_or(0) as i32,
+                    y: c["y"].as_i64().unwrap_or(0) as i32,
+                    width: c["width"].as_i64().unwrap_or(0) as u32,
+                    height: c["height"].as_i64().unwrap_or(0) as u32,
+                }),
+            }
+        })
+        .collect()
+}
+
 fn keymode_to_submap(keymode: &str) -> Option<String> {
     if keymode.is_empty() || keymode == "default" {
         None
@@ -193,6 +241,12 @@ pub fn fetch_full_state() -> Result<CompositorState> {
         .cloned()
         .unwrap_or_default();
     let (workspaces, monitors, active_workspace_id) = build_monitors(&monitors);
+
+    let clients_reply = send_command("get all-clients")?;
+    let windows = clients_reply["clients"]
+        .as_array()
+        .map(|arr| build_windows(arr, &monitors))
+        .unwrap_or_default();
 
     let focusing_reply = send_command("get focusing-client")?;
     let active_window = map_active_window(&focusing_reply);
@@ -211,6 +265,7 @@ pub fn fetch_full_state() -> Result<CompositorState> {
     Ok(CompositorState {
         workspaces,
         monitors,
+        windows,
         active_workspace_id,
         active_window,
         keyboard_layout,
@@ -236,6 +291,13 @@ pub fn start_listener(data: Mutable<CompositorState>) {
     spawn_watch_thread(data.clone(), "watch focusing-client", |data, json| {
         let mut state = data.lock_mut();
         state.active_window = map_active_window(&json);
+        // `watch all-clients` may not itself re-emit purely on a focus
+        // change, so re-derive is_focused here too rather than relying on
+        // that stream alone to keep it fresh.
+        let focused_id = state.active_window.as_ref().map(|w| w.address.clone());
+        for w in state.windows.iter_mut() {
+            w.is_focused = Some(&w.id) == focused_id.as_ref();
+        }
     });
 
     spawn_watch_thread(data.clone(), "watch keymode", |data, json| {
@@ -249,6 +311,14 @@ pub fn start_listener(data: Mutable<CompositorState>) {
         if let Some(layout) = json["layout"].as_str() {
             let mut state = data.lock_mut();
             state.keyboard_layout = layout.to_string();
+        }
+    });
+
+    spawn_watch_thread(data.clone(), "watch all-clients", |data, json| {
+        if let Some(clients) = json["clients"].as_array() {
+            let mut state = data.lock_mut();
+            let monitors = state.monitors.clone();
+            state.windows = build_windows(clients, &monitors);
         }
     });
 }

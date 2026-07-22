@@ -16,6 +16,7 @@ mod args;
 mod bar;
 pub mod config;
 pub mod control_center;
+pub mod dock;
 mod ipc;
 mod keybinds;
 pub mod launcher;
@@ -58,6 +59,7 @@ async fn main() {
         keybinds::register(cx);
 
         bar::init(cx);
+        dock::init(cx);
         notification::init(cx);
         osd::init(cx);
         launcher::init(cx);

@@ -30,7 +30,7 @@ pub use bluetooth::{
 pub use brightness::{BrightnessCommand, BrightnessData, BrightnessSubscriber};
 pub use compositor::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
-    Monitor, Workspace,
+    Monitor, Window, WindowGeometry, Workspace,
 };
 pub use mpris::{
     MprisCommand, MprisData, MprisPlayerData, MprisPlayerMetadata, MprisSubscriber, PlaybackStatus,

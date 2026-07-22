@@ -28,6 +28,9 @@ pub struct Application {
     pub description: Option<String>,
     /// Path to the desktop file.
     pub desktop_file: PathBuf,
+    /// The `StartupWMClass` desktop-entry key, when present. Used to
+    /// reliably match a running window's app_id/class back to this entry.
+    pub startup_wm_class: Option<String>,
 }
 
 impl Application {
@@ -194,6 +197,7 @@ fn parse_desktop_file(path: &PathBuf) -> Option<Application> {
     let mut exec = None;
     let mut icon = None;
     let mut description = None;
+    let mut startup_wm_class = None;
     let mut no_display = false;
     let mut hidden = false;
     let mut in_desktop_entry = false;
@@ -220,6 +224,7 @@ fn parse_desktop_file(path: &PathBuf) -> Option<Application> {
                 "Icon" => icon = Some(value.to_string()),
                 "Comment" if description.is_none() => description = Some(value.to_string()),
                 "GenericName" if description.is_none() => description = Some(value.to_string()),
+                "StartupWMClass" => startup_wm_class = Some(value.to_string()),
                 "NoDisplay" => no_display = value == "true",
                 "Hidden" => hidden = value == "true",
                 _ => {}
@@ -244,5 +249,114 @@ fn parse_desktop_file(path: &PathBuf) -> Option<Application> {
         icon_path,
         description,
         desktop_file: path.clone(),
+        startup_wm_class,
     })
+}
+
+/// Match a window's `app_id`/class against the application catalog.
+///
+/// Tries an exact (case-insensitive) `StartupWMClass` match first, then
+/// falls back to comparing against the `Exec` command's first whitespace-
+/// separated token (its binary name), also case-insensitive. Finally, it
+/// compares against the desktop-file filename and stem.
+pub fn match_app_id<'a>(apps: &'a [Application], app_id: &str) -> Option<&'a Application> {
+    let app_id_lower = app_id.to_lowercase();
+
+    apps.iter()
+        .find(|a| {
+            a.startup_wm_class
+                .as_deref()
+                .is_some_and(|c| c.to_lowercase() == app_id_lower)
+        })
+        .or_else(|| {
+            apps.iter().find(|a| {
+                a.exec
+                    .split_whitespace()
+                    .next()
+                    .map(|bin| bin.to_lowercase() == app_id_lower)
+                    .unwrap_or(false)
+            })
+        })
+        .or_else(|| {
+            apps.iter().find(|a| {
+                a.desktop_file
+                    .file_name()
+                    .and_then(|filename| filename.to_str())
+                    .is_some_and(|filename| filename.to_lowercase() == app_id_lower)
+                    || a.desktop_file
+                        .file_stem()
+                        .and_then(|stem| stem.to_str())
+                        .is_some_and(|stem| stem.to_lowercase() == app_id_lower)
+            })
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app(name: &str, exec: &str, startup_wm_class: Option<&str>) -> Application {
+        Application {
+            name: name.to_string(),
+            exec: exec.to_string(),
+            icon: None,
+            icon_path: None,
+            description: None,
+            desktop_file: PathBuf::from(format!("/usr/share/applications/{name}.desktop")),
+            startup_wm_class: startup_wm_class.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn matches_exact_startup_wm_class() {
+        let apps = vec![app("Firefox", "firefox %u", Some("firefox"))];
+        let matched = match_app_id(&apps, "firefox").unwrap();
+        assert_eq!(matched.name, "Firefox");
+    }
+
+    #[test]
+    fn startup_wm_class_match_is_case_insensitive() {
+        let apps = vec![app("Firefox", "firefox %u", Some("Firefox"))];
+        let matched = match_app_id(&apps, "firefox").unwrap();
+        assert_eq!(matched.name, "Firefox");
+    }
+
+    #[test]
+    fn falls_back_to_exec_basename_when_no_startup_wm_class() {
+        let apps = vec![app("Kitty", "kitty", None)];
+        let matched = match_app_id(&apps, "kitty").unwrap();
+        assert_eq!(matched.name, "Kitty");
+    }
+
+    #[test]
+    fn falls_back_to_desktop_filename_when_other_identifiers_do_not_match() {
+        let mut helium = app("Helium Browser", "helium-browser --new-window", None);
+        helium.desktop_file = PathBuf::from("/usr/share/applications/helium.desktop");
+        let apps = vec![helium];
+        let matched = match_app_id(&apps, "HELIUM").unwrap();
+        assert_eq!(matched.name, "Helium Browser");
+    }
+
+    #[test]
+    fn no_match_returns_none() {
+        let apps = vec![app("Firefox", "firefox %u", Some("firefox"))];
+        assert!(match_app_id(&apps, "totally-unrelated-app").is_none());
+    }
+
+    #[test]
+    fn parses_startup_wm_class_from_desktop_file() {
+        let dir = std::env::temp_dir().join(format!("gpuishell-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test-app.desktop");
+        std::fs::write(
+            &path,
+            "[Desktop Entry]\nName=Test App\nExec=test-app\nStartupWMClass=test-app-wm\n",
+        )
+        .unwrap();
+
+        let parsed = parse_desktop_file(&path).unwrap();
+        assert_eq!(parsed.startup_wm_class.as_deref(), Some("test-app-wm"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

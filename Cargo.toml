@@ -10,12 +10,12 @@ assets = { path = "crates/assets" }
 services = { path = "crates/services" }
 
 anyhow = "1.0"
-tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "time"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time"] }
 futures-util = { version = "0.3", default-features = false }
 futures-signals = "0.3"
 futures = "0.3"
 inotify = "0.11"
-zbus = "5.17"
+zbus = "5.18"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 itertools = "0.15"

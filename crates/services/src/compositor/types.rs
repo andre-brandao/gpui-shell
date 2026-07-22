@@ -53,6 +53,40 @@ pub struct ActiveWindow {
     pub address: String,
 }
 
+/// A single open window/toplevel tracked by the compositor.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Window {
+    /// Stable window address/handle (backend-specific format).
+    pub id: String,
+    /// Application ID / window class.
+    pub app_id: String,
+    /// Window title.
+    pub title: String,
+    /// Name of the monitor this window is on.
+    pub monitor: String,
+    /// ID of the workspace this window is on.
+    pub workspace_id: i32,
+    /// Whether this window currently has focus.
+    pub is_focused: bool,
+    /// Whether this window is minimized (always `false` on backends with
+    /// no minimize concept, e.g. Niri).
+    pub is_minimized: bool,
+    /// Window position and size, when the backend can report it. `None` on
+    /// backends with no fixed on-screen geometry (e.g. Niri's scrollable
+    /// tiling layout has no absolute window position).
+    pub geometry: Option<WindowGeometry>,
+}
+
+/// On-screen position and size of a window, in the compositor's global
+/// layout space (same space as `Monitor.x`/`Monitor.y`).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct WindowGeometry {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// Complete compositor state snapshot.
 #[derive(Debug, Clone, Default)]
 pub struct CompositorState {
@@ -64,6 +98,8 @@ pub struct CompositorState {
     pub active_workspace_id: Option<i32>,
     /// Currently focused window (if any).
     pub active_window: Option<ActiveWindow>,
+    /// All currently open windows.
+    pub windows: Vec<Window>,
     /// Current keyboard layout name.
     pub keyboard_layout: String,
     /// Current submap/mode (if any).
@@ -141,6 +177,8 @@ pub enum CompositorCommand {
     ScrollWorkspace(i32),
     /// Switch to the next keyboard layout.
     NextKeyboardLayout,
+    /// Focus a specific window by its `Window.id`.
+    FocusWindow(String),
     /// Custom dispatcher command (dispatcher name, arguments).
     Custom(String, String),
 }

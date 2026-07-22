@@ -213,6 +213,17 @@ pub fn toggle_panel<V: Render + 'static>(
     cx: &mut App,
     build: impl FnOnce(&mut gpui::Context<V>) -> V + 'static,
 ) -> bool {
+    toggle_panel_on_display(panel_id, config, None, cx, build)
+}
+
+/// Open a panel on an explicitly selected output.
+pub fn toggle_panel_on_display<V: Render + 'static>(
+    panel_id: &str,
+    config: PanelConfig,
+    display_id: Option<gpui::DisplayId>,
+    cx: &mut App,
+    build: impl FnOnce(&mut gpui::Context<V>) -> V + 'static,
+) -> bool {
     let mut guard = ACTIVE_PANEL.lock().unwrap();
 
     // Check if any panel is open
@@ -230,6 +241,7 @@ pub fn toggle_panel<V: Render + 'static>(
 
     // Open new panel
     let window_options = WindowOptions {
+        display_id,
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: Point::new(px(0.), px(0.)),
@@ -271,6 +283,17 @@ pub fn close_panel(cx: &mut App) {
         let _ = cx.update_window(handle, |_, window, _cx| {
             window.remove_window();
         });
+    }
+}
+
+/// Forget a panel that has already closed itself through its window lifecycle.
+pub fn forget_panel(panel_id: &str) {
+    let mut guard = ACTIVE_PANEL.lock().unwrap();
+    if guard
+        .as_ref()
+        .is_some_and(|(active_panel_id, _)| active_panel_id == panel_id)
+    {
+        guard.take();
     }
 }
 
