@@ -1,18 +1,29 @@
 //! Slider - a draggable range input for selecting a numeric value.
 //!
-//! The slider is stateless (`RenderOnce`): the parent owns the value and
-//! receives changes via a handler. Drag interaction uses a `canvas` overlay
-//! with `on_mouse_down` / `on_mouse_up` / `on_mouse_move` to track pointer
-//! position, computing the value from the horizontal offset within the
-//! track bounds.
+//! The parent owns the committed value and receives changes via a handler,
+//! but the slider keeps one piece of element-local state: the value being
+//! dragged right now. Two reasons, both learned the hard way:
+//!
+//! * **The thumb must not wait on the owner.** Handlers usually push the
+//!   value through something slow - a subprocess, a D-Bus round-trip - and
+//!   the new value only comes back once that lands. Rendering the thumb
+//!   straight from the prop makes it stutter behind the cursor. The local
+//!   value renders optimistically and yields to the prop the moment the
+//!   drag ends.
+//! * **The drag must survive leaving the track.** `on_mouse_move` only
+//!   fires while the hitbox is hovered, so a drag driven by it dies as soon
+//!   as the pointer slips off the element - which is exactly what users do
+//!   when they slam a volume slider to 0 or 100. Going through gpui's drag
+//!   system (`on_drag` / `on_drag_move`) captures the pointer until mouse-up.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::theme::{ActiveTheme, Color, Spacing};
 use gpui::{
-    App, Bounds, BoxShadow, ElementId, IntoElement, MouseButton, MouseMoveEvent, Pixels,
-    RenderOnce, SharedString, Styled, Window, canvas, div, point, prelude::*, px, relative, size,
+    App, Bounds, BoxShadow, DragMoveEvent, ElementId, EntityId, IntoElement, MouseButton, Pixels,
+    Render, RenderOnce, SharedString, Styled, Window, canvas, div, point, prelude::*, px, relative,
+    size,
 };
 
 use crate::components::label::{Label, LabelCommon};
@@ -20,6 +31,18 @@ use crate::components::stack::h_flex;
 use crate::theme::TextSize;
 use crate::traits::Disableable;
 use crate::traits::handlers::F32Handler;
+
+/// Drag payload identifying which slider is being dragged, so a drag
+/// started on one slider can't drive another one on the same screen.
+#[derive(Clone, Render)]
+pub struct SliderDrag(EntityId);
+
+/// The value currently under the cursor, or `None` when not dragging.
+///
+/// Held per-element via [`Window::use_keyed_state`] so the thumb can render
+/// ahead of the owner's committed value.
+#[derive(Default)]
+struct DragValue(Option<f32>);
 
 /// A horizontal slider for selecting a numeric value within a range.
 #[derive(IntoElement)]
@@ -92,11 +115,18 @@ impl Disableable for Slider {
 }
 
 impl RenderOnce for Slider {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let colors = cx.theme().colors();
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        // An in-progress drag wins over the owner's value, so the thumb
+        // tracks the cursor even while the handler is still in flight.
+        let drag_value = window.use_keyed_state((self.id.clone(), "slider-drag"), cx, |_, _| {
+            DragValue::default()
+        });
+        let displayed = drag_value.read(cx).0.unwrap_or(self.value);
+        let colors = *cx.theme().colors();
+
         let range = self.max - self.min;
         let fraction = if range > 0.0 {
-            ((self.value - self.min) / range).clamp(0.0, 1.0)
+            ((displayed - self.min) / range).clamp(0.0, 1.0)
         } else {
             0.0
         };
@@ -211,37 +241,72 @@ impl RenderOnce for Slider {
                     let min = self.min;
                     let max = self.max;
                     let step = self.step;
-                    let bounds_for_click = track_bounds.clone();
-                    let bounds_for_move = track_bounds;
-                    let move_handler = handler.clone();
-                    this.on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                        let b = bounds_for_click.get();
-                        let w = b.size.width.max(px(1.0));
-                        let x = event.position.x - b.origin.x;
-                        let frac = (x / w).clamp(0.0, 1.0);
-                        let val = value_from_fraction(frac, min, max, step);
-                        handler(val, window, cx);
-                    })
-                    .on_mouse_move(
-                        move |event: &MouseMoveEvent, window, cx| {
-                            if event.pressed_button == Some(MouseButton::Left) {
-                                let b = bounds_for_move.get();
-                                let w = b.size.width.max(px(1.0));
-                                let x = event.position.x - b.origin.x;
-                                let frac = (x / w).clamp(0.0, 1.0);
-                                let val = value_from_fraction(frac, min, max, step);
-                                move_handler(val, window, cx);
+                    let drag_id = drag_value.entity_id();
+
+                    let value_at = move |pos_x: Pixels, bounds: Bounds<Pixels>| {
+                        value_from_position(pos_x, bounds, min, max, step)
+                    };
+
+                    let down_bounds = track_bounds.clone();
+                    let move_bounds = track_bounds;
+                    let down_handler = handler.clone();
+                    let down_state = drag_value.clone();
+                    let move_state = drag_value.clone();
+                    let end_state = drag_value;
+
+                    this
+                        // Click anywhere on the track to jump there.
+                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                            let val = value_at(event.position.x, down_bounds.get());
+                            down_state.update(cx, |state, cx| {
+                                state.0 = Some(val);
+                                cx.notify();
+                            });
+                            down_handler(val, window, cx);
+                        })
+                        // gpui's drag system keeps delivering moves after the
+                        // pointer leaves the track, unlike `on_mouse_move`.
+                        .on_drag(SliderDrag(drag_id), |drag, _, _, cx| {
+                            cx.stop_propagation();
+                            cx.new(|_| drag.clone())
+                        })
+                        .on_drag_move(move |event: &DragMoveEvent<SliderDrag>, window, cx| {
+                            if event.drag(cx).0 != drag_id {
+                                return;
                             }
-                        },
-                    )
+                            let val = value_at(event.event.position.x, move_bounds.get());
+                            // A drag delivers many more moves than distinct
+                            // stepped values, and handlers are often expensive
+                            // (a subprocess, a D-Bus round-trip). Only fire when
+                            // the value actually changes.
+                            let changed = move_state.update(cx, |state, cx| {
+                                if state.0 == Some(val) {
+                                    return false;
+                                }
+                                state.0 = Some(val);
+                                cx.notify();
+                                true
+                            });
+                            if changed {
+                                handler(val, window, cx);
+                            }
+                        })
+                        // Drop back to the owner's value once the drag ends.
+                        .on_mouse_up(MouseButton::Left, move |_, _, cx| {
+                            end_state.update(cx, |state, cx| {
+                                if state.0.take().is_some() {
+                                    cx.notify();
+                                }
+                            });
+                        })
                 },
             );
 
         let value_label = self.show_value.then(|| {
             let text = if self.step.is_some_and(|s| s == s.round()) {
-                format!("{}", self.value as i64)
+                format!("{}", displayed as i64)
             } else {
-                format!("{:.1}", self.value)
+                format!("{:.1}", displayed)
             };
             Label::new(text).size(TextSize::Small).color(label_color)
         });
@@ -255,6 +320,22 @@ impl RenderOnce for Slider {
             .child(track)
             .when_some(value_label, |this, label| this.child(label))
     }
+}
+
+/// Map a pointer X position to a slider value, given the track's bounds.
+///
+/// The fraction is clamped, so dragging past either end of the track pins
+/// the value to `min` / `max` instead of running away.
+fn value_from_position(
+    pos_x: Pixels,
+    bounds: Bounds<Pixels>,
+    min: f32,
+    max: f32,
+    step: Option<f32>,
+) -> f32 {
+    let width = bounds.size.width.max(px(1.0));
+    let frac = ((pos_x - bounds.origin.x) / width).clamp(0.0, 1.0);
+    value_from_fraction(frac, min, max, step)
 }
 
 /// Map a 0..=1 track fraction to a clamped, step-snapped slider value.
@@ -314,6 +395,37 @@ mod tests {
     #[test]
     fn zero_range_returns_min() {
         assert_eq!(value_from_fraction(0.5, 42.0, 42.0, None), 42.0);
+    }
+
+    fn track(origin_x: f32, width: f32) -> Bounds<Pixels> {
+        Bounds {
+            origin: point(px(origin_x), px(0.0)),
+            size: size(px(width), px(4.0)),
+        }
+    }
+
+    #[test]
+    fn position_maps_across_the_track() {
+        let b = track(100.0, 200.0);
+        assert_eq!(value_from_position(px(100.0), b, 0.0, 100.0, None), 0.0);
+        assert_eq!(value_from_position(px(200.0), b, 0.0, 100.0, None), 50.0);
+        assert_eq!(value_from_position(px(300.0), b, 0.0, 100.0, None), 100.0);
+    }
+
+    /// The reason the drag goes through gpui's drag system: the pointer
+    /// routinely leaves the track when a user slams a slider to an end, and
+    /// those positions must pin rather than extrapolate.
+    #[test]
+    fn position_outside_the_track_pins_to_the_ends() {
+        let b = track(100.0, 200.0);
+        assert_eq!(value_from_position(px(-500.0), b, 0.0, 100.0, None), 0.0);
+        assert_eq!(value_from_position(px(9999.0), b, 0.0, 100.0, None), 100.0);
+    }
+
+    #[test]
+    fn zero_width_track_does_not_divide_by_zero() {
+        let val = value_from_position(px(50.0), track(0.0, 0.0), 0.0, 100.0, None);
+        assert!(val.is_finite());
     }
 
     #[test]
