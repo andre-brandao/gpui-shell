@@ -1,16 +1,16 @@
 //! Shared sizing and spacing helpers for bar widgets.
 //!
-//! Font sizes should be accessed from `theme.font_sizes` (xs/sm for vertical, sm/md for horizontal).
+//! Font sizes come from `TextSize` (XSmall/Small for vertical, Small/Medium for horizontal).
 
 use gpui::{AnyElement, Hsla, IntoElement, div, prelude::*, px};
-use ui::{Theme, icon_size, radius, spacing};
+use ui::{IconSize, Radius, Spacing, TextSize, Theme};
 
 use crate::bar::config::BarConfig;
 
 /// Common gap used inside compact bar widgets.
-pub const CHIP_GAP: f32 = spacing::XS;
+pub const CHIP_GAP: f32 = Spacing::XSmall.value();
 /// Tighter gap used inside grouped widgets like workspaces and tray.
-pub const GROUP_GAP: f32 = spacing::XS;
+pub const GROUP_GAP: f32 = Spacing::XSmall.value();
 /// Common vertical padding used inside compact bar widgets.
 pub const CHIP_PADDING_Y: f32 = 3.0;
 /// Shared outer breathing room around each widget shell.
@@ -36,7 +36,11 @@ pub const VERTICAL_TEXT_LINE_WIDTH: f32 = 20.0;
 
 #[inline(always)]
 fn shell_radius(is_vertical: bool) -> f32 {
-    if is_vertical { radius::SM } else { radius::LG }
+    if is_vertical {
+        Radius::Small.value()
+    } else {
+        Radius::Large.value()
+    }
 }
 
 #[inline(always)]
@@ -57,9 +61,9 @@ fn shell_height(is_vertical: bool) -> Option<f32> {
 #[inline(always)]
 pub fn chip_padding_x(is_vertical: bool) -> f32 {
     if is_vertical {
-        spacing::XS
+        Spacing::XSmall.value()
     } else {
-        spacing::SM
+        Spacing::Medium.value()
     }
 }
 
@@ -70,7 +74,11 @@ pub fn group_gap(is_vertical: bool) -> f32 {
 
 #[inline(always)]
 fn group_padding_x(is_vertical: bool) -> f32 {
-    if is_vertical { 2.0 } else { spacing::SM - 1.0 }
+    if is_vertical {
+        2.0
+    } else {
+        Spacing::Medium.value() - 1.0
+    }
 }
 
 #[inline(always)]
@@ -82,21 +90,22 @@ fn widget_outer_margin_x(is_vertical: bool) -> f32 {
 #[inline(always)]
 pub fn icon(is_vertical: bool) -> f32 {
     if is_vertical {
-        icon_size::MD
+        IconSize::Small.value()
     } else {
-        icon_size::LG
+        IconSize::Medium.value()
     }
 }
 
-/// Get the appropriate label font size from theme based on bar orientation.
+/// The label size for the given bar orientation.
 ///
-/// Use `label_size(theme, is_vertical)` instead of the old `style::label()`.
+/// Returns a [`TextSize`] rather than absolute pixels so the label still
+/// scales with the user's configured base font size.
 #[inline(always)]
-pub fn label_size(theme: &ui::Theme, is_vertical: bool) -> gpui::Pixels {
+pub fn label_size(is_vertical: bool) -> TextSize {
     if is_vertical {
-        theme.font_sizes.xs
+        TextSize::XSmall
     } else {
-        theme.font_sizes.sm
+        TextSize::Small
     }
 }
 
@@ -113,18 +122,18 @@ pub fn compact_percent(value: u32, is_vertical: bool) -> String {
 #[inline(always)]
 pub fn widget_background(theme: &Theme, bar: &BarConfig) -> Hsla {
     if bar.widget_background {
-        theme.bg.secondary
+        theme.colors.surface_background
     } else {
-        theme.transparent
+        theme.colors.border_transparent
     }
 }
 
 #[inline(always)]
 pub fn group_background(theme: &Theme, bar: &BarConfig) -> Hsla {
     if bar.widget_background {
-        theme.bg.secondary
+        theme.colors.surface_background
     } else {
-        theme.transparent
+        theme.colors.border_transparent
     }
 }
 
@@ -132,12 +141,12 @@ pub fn group_background(theme: &Theme, bar: &BarConfig) -> Hsla {
 pub fn widget_border(theme: &Theme, bar: &BarConfig, is_vertical: bool) -> Hsla {
     if bar.widget_border {
         if is_vertical {
-            theme.border.subtle.opacity(0.9)
+            theme.colors.border_variant.opacity(0.9)
         } else {
-            theme.border.default
+            theme.colors.border
         }
     } else {
-        theme.transparent
+        theme.colors.border_transparent
     }
 }
 
@@ -150,9 +159,9 @@ pub fn bar_widget_shell(
     content: impl IntoElement,
 ) -> AnyElement {
     let hover_bg = if bar.widget_background {
-        theme.bg.tertiary
+        theme.colors.elevated_surface_background
     } else {
-        theme.interactive.hover
+        theme.colors.element_hover
     };
 
     div()
@@ -206,9 +215,9 @@ pub fn bar_group_shell(
     content: impl IntoElement,
 ) -> AnyElement {
     let hover_bg = if bar.widget_background {
-        theme.bg.tertiary
+        theme.colors.elevated_surface_background
     } else {
-        theme.interactive.hover
+        theme.colors.element_hover
     };
 
     div()
@@ -235,7 +244,7 @@ pub fn bar_group_shell(
 
 /// Render a compact icon/value pair for status widgets.
 pub fn bar_stat(
-    theme: &Theme,
+    _theme: &Theme,
     is_vertical: bool,
     icon_text: &'static str,
     value_text: impl IntoElement,
@@ -258,14 +267,14 @@ pub fn bar_stat(
             vertical_text_line(
                 div()
                     .flex_shrink(1.)
-                    .text_size(label_size(theme, is_vertical))
+                    .text_size(label_size(is_vertical).rems())
                     .text_color(color)
                     .child(value_text),
             )
         } else {
             div()
                 .flex_shrink(1.)
-                .text_size(label_size(theme, is_vertical))
+                .text_size(label_size(is_vertical).rems())
                 .text_color(color)
                 .child(value_text)
                 .into_any_element()

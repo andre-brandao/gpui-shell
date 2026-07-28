@@ -2,9 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, anyhow};
-use ui::Theme;
-
-use super::config::StoredTheme;
+use ui::{StoredTheme, Theme};
 
 pub fn theme_path() -> anyhow::Result<PathBuf> {
     if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
@@ -47,7 +45,7 @@ fn try_load_theme() -> anyhow::Result<Theme> {
         .with_context(|| format!("Failed to read theme file: {}", path.display()))?;
     let parsed = toml::from_str::<StoredTheme>(&raw)
         .with_context(|| format!("Failed to parse theme file: {}", path.display()))?;
-    parsed.to_theme()
+    Ok(parsed.into_theme())
 }
 
 pub fn save_theme(theme: &Theme) -> anyhow::Result<()> {

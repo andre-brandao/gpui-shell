@@ -13,7 +13,7 @@
 //!   the launcher skips the item loop.
 
 use gpui::{AnyElement, App, div, prelude::*, px};
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]
@@ -139,28 +139,28 @@ pub fn is_prefix(query: &str, prefix: &str) -> bool {
 /// Render the default footer action hints.
 pub fn render_footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> AnyElement {
     let theme = cx.theme();
-    let text_muted = theme.text.muted;
-    let interactive_default = theme.interactive.default;
+    let text_muted = theme.colors.text_muted;
+    let interactive_default = theme.colors.element_background;
 
     div()
         .flex()
         .items_center()
-        .gap(px(spacing::LG))
-        .text_size(theme.font_sizes.sm)
+        .gap(Spacing::XLarge.pixels())
+        .text_size(TextSize::Small.rems())
         .text_color(text_muted)
         .children(actions.into_iter().map(|(action, key)| {
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM - 2.0))
+                .gap(px(Spacing::Medium.value() - 2.0))
                 .child(action)
                 .child(
                     div()
-                        .px(px(spacing::SM - 2.0))
+                        .px(px(Spacing::Medium.value() - 2.0))
                         .py(px(2.))
-                        .rounded(px(radius::SM - 1.0))
+                        .rounded(px(Radius::Small.value() - 1.0))
                         .bg(interactive_default)
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .child(key),
                 )
         }))

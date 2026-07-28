@@ -9,6 +9,7 @@ use gpui::{
     prelude::*, px,
 };
 use std::sync::Mutex;
+use ui::ActiveTheme;
 
 use crate::config::BarPosition;
 
@@ -267,7 +268,10 @@ pub fn toggle_panel_on_display<V: Render + 'static>(
         ..Default::default()
     };
 
-    if let Ok(handle) = cx.open_window(window_options, move |_, cx| cx.new(build)) {
+    if let Ok(handle) = cx.open_window(window_options, move |window, cx| {
+        window.set_rem_size(cx.theme().font_size);
+        cx.new(build)
+    }) {
         *guard = Some((panel_id.to_string(), handle.into()));
         true
     } else {

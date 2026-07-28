@@ -14,7 +14,7 @@ use gpui::{
     point, prelude::*, px,
 };
 use std::collections::HashMap;
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use crate::config::{ActiveConfig, Config};
 use crate::state::{AppState, display_id_for_window, record_window_display, watch};
@@ -24,7 +24,7 @@ const INDICATOR_ROW_HEIGHT: f32 = 5.0;
 pub(super) const DOCK_CONTEXT_MENU_WIDTH: f32 = 160.0;
 const DOCK_APP_PICKER_WIDTH: f32 = 240.0;
 pub(super) const DOCK_CONTEXT_MENU_ROW_HEIGHT: f32 = 40.0;
-pub(super) const DOCK_CONTEXT_MENU_VERTICAL_PADDING: f32 = spacing::XS;
+pub(super) const DOCK_CONTEXT_MENU_VERTICAL_PADDING: f32 = Spacing::XSmall.value();
 pub(super) const DOCK_CONTEXT_MENU_GAP: f32 = 2.0;
 pub(super) const DOCK_CONTEXT_MENU_BORDER_WIDTH: f32 = 1.0;
 // GPUI can reserve more vertical space than the nominal row height while it
@@ -87,18 +87,20 @@ fn dock_panel_placement_from_dock_click(
     let max_y = (usable_bottom - menu_height).max(min_y);
 
     let (dock_x, dock_y) = match dock_position {
-        crate::bar::config::BarPosition::Top => {
-            ((display_width - dock_width).max(0.0) / 2.0, spacing::SM)
-        }
+        crate::bar::config::BarPosition::Top => (
+            (display_width - dock_width).max(0.0) / 2.0,
+            Spacing::Medium.value(),
+        ),
         crate::bar::config::BarPosition::Bottom => (
             (display_width - dock_width).max(0.0) / 2.0,
-            display_height - dock_height - spacing::SM,
+            display_height - dock_height - Spacing::Medium.value(),
         ),
-        crate::bar::config::BarPosition::Left => {
-            (spacing::SM, (display_height - dock_height).max(0.0) / 2.0)
-        }
+        crate::bar::config::BarPosition::Left => (
+            Spacing::Medium.value(),
+            (display_height - dock_height).max(0.0) / 2.0,
+        ),
         crate::bar::config::BarPosition::Right => (
-            display_width - dock_width - spacing::SM,
+            display_width - dock_width - Spacing::Medium.value(),
             (display_height - dock_height).max(0.0) / 2.0,
         ),
     };
@@ -228,14 +230,15 @@ fn dock_window_size(
     hover_effect: config::DockHoverEffect,
 ) -> Size<gpui::Pixels> {
     let item_count = item_count.max(1) as f32;
-    let primary_extent = item_count * (icon_size + spacing::SM) + spacing::SM;
+    let primary_extent =
+        item_count * (icon_size + Spacing::Medium.value()) + Spacing::Medium.value();
     let cross_extent = icon_size
         + if position.is_vertical() {
             0.0
         } else {
             INDICATOR_ROW_HEIGHT
         }
-        + spacing::SM * 2.0;
+        + Spacing::Medium.value() * 2.0;
     let magnify_reserve = match hover_effect {
         config::DockHoverEffect::Magnify | config::DockHoverEffect::MagnifyLift => icon_size * 0.3,
         _ => 0.0,
@@ -333,18 +336,18 @@ fn dock_bounds_in_compositor_space(
     let (x, y) = match position {
         crate::bar::config::BarPosition::Top => (
             monitor.x as f32 + (monitor_width - dock_width).max(0.0) / 2.0,
-            monitor.y as f32 + spacing::SM,
+            monitor.y as f32 + Spacing::Medium.value(),
         ),
         crate::bar::config::BarPosition::Bottom => (
             monitor.x as f32 + (monitor_width - dock_width).max(0.0) / 2.0,
-            monitor.y as f32 + monitor_height - dock_height - spacing::SM,
+            monitor.y as f32 + monitor_height - dock_height - Spacing::Medium.value(),
         ),
         crate::bar::config::BarPosition::Left => (
-            monitor.x as f32 + spacing::SM,
+            monitor.x as f32 + Spacing::Medium.value(),
             monitor.y as f32 + (monitor_height - dock_height).max(0.0) / 2.0,
         ),
         crate::bar::config::BarPosition::Right => (
-            monitor.x as f32 + monitor_width - dock_width - spacing::SM,
+            monitor.x as f32 + monitor_width - dock_width - Spacing::Medium.value(),
             monitor.y as f32 + (monitor_height - dock_height).max(0.0) / 2.0,
         ),
     };
@@ -610,7 +613,7 @@ impl Dock {
         let config = &cx.config().dock;
         let icon_size = config.icon_size;
         let hover_effect = config.hover_effect;
-        let accent = theme.accent.primary;
+        let accent = theme.colors.accent;
 
         let mut element = div()
             .relative()
@@ -618,7 +621,7 @@ impl Dock {
             .flex()
             .items_center()
             .justify_center()
-            .rounded(px(radius::MD));
+            .rounded(Radius::Medium.pixels());
 
         element = match hover_effect {
             config::DockHoverEffect::None => element,
@@ -636,7 +639,11 @@ impl Dock {
 
         let is_focused = item.windows.iter().any(|window| window.is_focused);
         let window_count = item.windows.len();
-        let bar_color = if is_focused { accent } else { theme.text.muted };
+        let bar_color = if is_focused {
+            accent
+        } else {
+            theme.colors.text_muted
+        };
         let bar_width = if window_count > 1 { 20.0 } else { 6.0 };
 
         let icon_element = element
@@ -646,8 +653,8 @@ impl Dock {
             .when(item.icon_path.is_none(), |element| {
                 element.child(
                     div()
-                        .text_size(theme.font_sizes.md)
-                        .text_color(theme.text.primary)
+                        .text_size(TextSize::Medium.rems())
+                        .text_color(theme.colors.text)
                         .child(item.name.chars().take(1).collect::<String>()),
                 )
             })
@@ -665,8 +672,8 @@ impl Dock {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(theme.font_sizes.xs)
-                        .text_color(theme.bg.primary)
+                        .text_size(TextSize::XSmall.rems())
+                        .text_color(theme.colors.background)
                         .child(window_count.to_string()),
                 )
             });
@@ -759,6 +766,7 @@ impl Dock {
 impl Render for Dock {
     #[allow(refining_impl_trait)]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        window.set_rem_size(cx.theme().font_size);
         let position = cx.config().dock.position;
         let items = self.items(window, cx);
         let dock_size = dock_window_size(
@@ -803,8 +811,8 @@ impl Render for Dock {
                 .into_any_element();
         }
 
-        let background = cx.theme().bg.primary;
-        let border = cx.theme().border.subtle;
+        let background = cx.theme().colors.background;
+        let border = cx.theme().colors.border_variant;
         let is_vertical = position.is_vertical();
         if window.viewport_size() != dock_size {
             window.resize(dock_size);
@@ -820,10 +828,10 @@ impl Render for Dock {
             .when(is_vertical, |element| element.flex_col())
             .items_center()
             .justify_center()
-            .gap(px(spacing::SM))
-            .px(px(spacing::SM))
-            .py(px(spacing::SM))
-            .rounded(px(radius::LG))
+            .gap(Spacing::Medium.pixels())
+            .px(Spacing::Medium.pixels())
+            .py(Spacing::Medium.pixels())
+            .rounded(Radius::Large.pixels())
             .bg(background)
             .border_1()
             .border_color(border)
@@ -840,10 +848,10 @@ impl Render for Dock {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(px(radius::MD))
+                    .rounded(Radius::Medium.pixels())
                     .cursor_pointer()
-                    .text_color(cx.theme().text.muted)
-                    .hover(|style| style.text_color(cx.theme().text.primary))
+                    .text_color(cx.theme().colors.text_muted)
+                    .hover(|style| style.text_color(cx.theme().colors.text))
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(|_this, event, window, cx| {
@@ -928,10 +936,10 @@ fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
             anchor,
             exclusive_zone: None,
             margin: Some((
-                px(spacing::SM),
-                px(spacing::SM),
-                px(spacing::SM),
-                px(spacing::SM),
+                Spacing::Medium.pixels(),
+                Spacing::Medium.pixels(),
+                Spacing::Medium.pixels(),
+                Spacing::Medium.pixels(),
             )),
             keyboard_interactivity: KeyboardInteractivity::None,
             ..Default::default()

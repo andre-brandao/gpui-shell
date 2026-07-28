@@ -11,7 +11,7 @@ use gpui::{
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use std::sync::Arc;
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::{ActiveConfig, Config};
@@ -114,7 +114,7 @@ impl Tray {
                 let icon_char = get_icon_char("", item.id.as_deref());
                 div()
                     .text_size(px(icon_size))
-                    .text_color(theme.text.secondary)
+                    .text_color(theme.colors.text)
                     .child(icon_char)
                     .into_any_element()
             }
@@ -126,7 +126,7 @@ impl Tray {
             };
             div()
                 .text_size(px(icon_size))
-                .text_color(theme.text.secondary)
+                .text_color(theme.colors.text)
                 .child(icon_char)
                 .into_any_element()
         };
@@ -140,11 +140,11 @@ impl Tray {
             .items_center()
             .justify_center()
             .size(px(item_size))
-            .rounded(px(radius::SM))
+            .rounded(Radius::Small.pixels())
             .cursor_pointer()
-            .bg(theme.transparent)
-            .hover(move |s| s.bg(theme.bg.tertiary))
-            .active(move |s| s.bg(theme.interactive.active))
+            .bg(theme.colors.border_transparent)
+            .hover(move |s| s.bg(theme.colors.elevated_surface_background))
+            .active(move |s| s.bg(theme.colors.element_active))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event, window, cx| {
@@ -323,12 +323,12 @@ impl TrayMenuPanel {
         let mut elements = Vec::new();
 
         // Pre-compute colors for closures
-        let border_subtle = theme.border.subtle;
-        let interactive_hover = theme.interactive.hover;
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-        let text_disabled = theme.text.disabled;
-        let accent_primary = theme.accent.primary;
+        let border_subtle = theme.colors.border_variant;
+        let interactive_hover = theme.colors.element_hover;
+        let text_primary = theme.colors.text;
+        let text_muted = theme.colors.text_muted;
+        let text_disabled = theme.colors.text_disabled;
+        let accent_primary = theme.colors.accent;
 
         for layout in items {
             let MenuLayout(id, props, children) = layout;
@@ -356,7 +356,7 @@ impl TrayMenuPanel {
             let is_enabled = props.enabled.unwrap_or(true);
             let has_submenu = !children.is_empty();
             let is_expanded = has_submenu && self.is_submenu_expanded(menu_id);
-            let indent = depth as f32 * spacing::MD;
+            let indent = depth as f32 * Spacing::Large.value();
 
             elements.push(
                 render_menu_item(
@@ -392,8 +392,8 @@ impl TrayMenuPanel {
 fn render_menu_separator(border_color: gpui::Hsla) -> impl IntoElement {
     div()
         .w_full()
-        .px(px(spacing::SM))
-        .py(px(spacing::XS))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::XSmall.pixels())
         .child(div().h(px(1.)).w_full().bg(border_color))
 }
 
@@ -414,7 +414,7 @@ fn render_menu_item(
     accent_primary: gpui::Hsla,
     cx: &mut Context<TrayMenuPanel>,
 ) -> impl IntoElement {
-    let theme = cx.theme();
+    let _theme = cx.theme();
 
     // Checkbox/radio indicator
     let toggle_indicator = props.toggle_type.as_ref().map(|toggle_type| {
@@ -452,13 +452,13 @@ fn render_menu_item(
         ))))
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
-        .pl(px(spacing::SM + indent))
-        .pr(px(spacing::SM))
-        .py(px(spacing::XS + 2.0))
-        .rounded(px(radius::SM))
-        .mx(px(spacing::XS))
+        .pl(px(Spacing::Medium.value() + indent))
+        .pr(Spacing::Medium.pixels())
+        .py(px(Spacing::XSmall.value() + 2.0))
+        .rounded(Radius::Small.pixels())
+        .mx(Spacing::XSmall.pixels())
         .when(is_enabled, |el| {
             el.cursor_pointer().hover(move |s| s.bg(interactive_hover))
         })
@@ -477,7 +477,7 @@ fn render_menu_item(
         .when_some(toggle_indicator, |el, (icon, is_checked)| {
             el.child(
                 div()
-                    .text_size(theme.font_sizes.sm)
+                    .text_size(TextSize::Small.rems())
                     .text_color(if is_checked {
                         accent_primary
                     } else {
@@ -490,7 +490,7 @@ fn render_menu_item(
         .child(
             div()
                 .flex_1()
-                .text_size(theme.font_sizes.sm)
+                .text_size(TextSize::Small.rems())
                 .text_color(text_color)
                 .overflow_hidden()
                 .text_ellipsis()
@@ -500,7 +500,7 @@ fn render_menu_item(
         .when(has_submenu, |el| {
             el.child(
                 div()
-                    .text_size(theme.font_sizes.xs)
+                    .text_size(TextSize::XSmall.rems())
                     .text_color(text_muted)
                     .child(if is_expanded { "󰅀" } else { "󰅂" }),
             )
@@ -515,17 +515,17 @@ impl Render for TrayMenuPanel {
         div()
             .id("systray-menu-panel")
             .size_full()
-            .bg(theme.bg.primary)
+            .bg(theme.colors.background)
             .border_1()
-            .border_color(theme.border.default)
-            .rounded(px(radius::LG))
-            .text_color(theme.text.primary)
+            .border_color(theme.colors.border)
+            .rounded(Radius::Large.pixels())
+            .text_color(theme.colors.text)
             .overflow_hidden()
             .child(
                 div()
                     .id("systray-menu-scroll")
                     .size_full()
-                    .py(px(spacing::XS))
+                    .py(Spacing::XSmall.pixels())
                     .overflow_y_scroll()
                     .child(div().flex().flex_col().gap(px(1.)).children(menu_items)),
             )

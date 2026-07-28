@@ -3,7 +3,7 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, radius, spacing};
+use ui::{ActiveTheme, Color, Label, LabelCommon, Radius, Spacing, TextSize};
 
 use self::config::{WebConfig, WebProviderConfig};
 use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
@@ -81,10 +81,10 @@ impl LauncherView for WebSearchView {
         let (provider, search_query) = self.parse_query(vx.query);
         let has_query = !search_query.is_empty();
 
-        let bg_secondary = theme.bg.secondary;
-        let interactive_default = theme.interactive.default;
-        let accent_selection = theme.accent.selection;
-        let interactive_hover = theme.interactive.hover;
+        let bg_secondary = theme.colors.surface_background;
+        let interactive_default = theme.colors.element_background;
+        let accent_selection = theme.colors.element_selected;
+        let interactive_hover = theme.colors.element_hover;
 
         let provider_icon = provider.icon.clone();
         let provider_name = provider.name.clone();
@@ -95,17 +95,17 @@ impl LauncherView for WebSearchView {
                 .flex_1()
                 .flex()
                 .flex_col()
-                .gap(px(spacing::MD))
-                .p(px(spacing::MD))
+                .gap(Spacing::Large.pixels())
+                .p(Spacing::Large.pixels())
                 .child(
                     div()
                         .w_full()
-                        .p(px(spacing::MD))
+                        .p(Spacing::Large.pixels())
                         .bg(bg_secondary)
-                        .rounded(px(radius::MD))
+                        .rounded(Radius::Medium.pixels())
                         .flex()
                         .flex_col()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
                                 .flex()
@@ -115,13 +115,13 @@ impl LauncherView for WebSearchView {
                                     div()
                                         .flex()
                                         .items_center()
-                                        .gap(px(spacing::SM))
+                                        .gap(Spacing::Medium.pixels())
                                         .child(
                                             Label::new(provider_icon)
-                                                .size(LabelSize::Large)
+                                                .size(TextSize::Large)
                                                 .color(Color::Default),
                                         )
-                                        .child(Label::new(provider_name).size(LabelSize::Default))
+                                        .child(Label::new(provider_name).size(TextSize::Default))
                                         .child(
                                             div()
                                                 .px(px(6.))
@@ -130,7 +130,7 @@ impl LauncherView for WebSearchView {
                                                 .bg(interactive_default)
                                                 .child(
                                                     Label::new(format!("!{}", provider_shebang))
-                                                        .size(LabelSize::XSmall)
+                                                        .size(TextSize::XSmall)
                                                         .color(Color::Muted),
                                                 ),
                                         ),
@@ -139,10 +139,10 @@ impl LauncherView for WebSearchView {
                                     div()
                                         .flex()
                                         .items_center()
-                                        .gap(px(spacing::SM))
-                                        .px(px(spacing::SM))
+                                        .gap(Spacing::Medium.pixels())
+                                        .px(Spacing::Medium.pixels())
                                         .py(px(4.))
-                                        .rounded(px(radius::SM))
+                                        .rounded(Radius::Small.pixels())
                                         .when(has_query && vx.selected_index == 0, move |el| {
                                             el.bg(accent_selection)
                                         })
@@ -151,10 +151,10 @@ impl LauncherView for WebSearchView {
                                         })
                                         .when(!has_query, |el| el.bg(rgba(0x00000033)))
                                         .child(if has_query {
-                                            Label::new("Search").size(LabelSize::Small)
+                                            Label::new("Search").size(TextSize::Small)
                                         } else {
                                             Label::new("Search")
-                                                .size(LabelSize::Small)
+                                                .size(TextSize::Small)
                                                 .color(Color::Disabled)
                                         })
                                         .child(
@@ -165,11 +165,11 @@ impl LauncherView for WebSearchView {
                                                 .bg(rgba(0x00000044))
                                                 .child(if has_query {
                                                     Label::new("Enter")
-                                                        .size(LabelSize::XSmall)
+                                                        .size(TextSize::XSmall)
                                                         .color(Color::Muted)
                                                 } else {
                                                     Label::new("Enter")
-                                                        .size(LabelSize::XSmall)
+                                                        .size(TextSize::XSmall)
                                                         .color(Color::Disabled)
                                                 }),
                                         ),
@@ -178,10 +178,10 @@ impl LauncherView for WebSearchView {
                         .child(
                             div()
                                 .w_full()
-                                .p(px(spacing::SM))
+                                .p(Spacing::Medium.pixels())
                                 .bg(rgba(0x00000066))
-                                .rounded(px(radius::SM))
-                                .text_size(theme.font_sizes.base)
+                                .rounded(Radius::Small.pixels())
+                                .text_size(TextSize::Default.rems())
                                 .child(if has_query {
                                     Label::new(format!("\"{}\"", search_query))
                                         .color(Color::Default)
@@ -194,69 +194,73 @@ impl LauncherView for WebSearchView {
                 .child(
                     div()
                         .w_full()
-                        .pt(px(spacing::SM))
+                        .pt(Spacing::Medium.pixels())
                         .flex()
                         .flex_col()
-                        .gap(px(spacing::XS))
+                        .gap(Spacing::XSmall.pixels())
                         .child(
                             Label::new("AVAILABLE PROVIDERS")
-                                .size(LabelSize::XSmall)
+                                .size(TextSize::XSmall)
                                 .color(Color::Disabled),
                         )
-                        .child(div().flex().flex_wrap().gap(px(spacing::SM)).children(
-                            self.providers.iter().map(|p| {
-                                let is_active = p.shebang == provider.shebang;
-                                let icon = p.icon.clone();
-                                let shebang = p.shebang.clone();
-                                div()
-                                    .px(px(spacing::SM))
-                                    .py(px(4.))
-                                    .rounded(px(radius::SM))
-                                    .when(is_active, move |el| el.bg(accent_selection))
-                                    .when(!is_active, move |el| el.bg(interactive_default))
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(4.))
-                                    .child(
-                                        Label::new(icon)
-                                            .size(LabelSize::Small)
-                                            .color(Color::Default),
-                                    )
-                                    .child(
-                                        Label::new(format!("!{}", shebang))
-                                            .size(LabelSize::Small)
-                                            .color(Color::Muted),
-                                    )
-                            }),
-                        )),
+                        .child(
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap(Spacing::Medium.pixels())
+                                .children(self.providers.iter().map(|p| {
+                                    let is_active = p.shebang == provider.shebang;
+                                    let icon = p.icon.clone();
+                                    let shebang = p.shebang.clone();
+                                    div()
+                                        .px(Spacing::Medium.pixels())
+                                        .py(px(4.))
+                                        .rounded(Radius::Small.pixels())
+                                        .when(is_active, move |el| el.bg(accent_selection))
+                                        .when(!is_active, move |el| el.bg(interactive_default))
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(4.))
+                                        .child(
+                                            Label::new(icon)
+                                                .size(TextSize::Small)
+                                                .color(Color::Default),
+                                        )
+                                        .child(
+                                            Label::new(format!("!{}", shebang))
+                                                .size(TextSize::Small)
+                                                .color(Color::Muted),
+                                        )
+                                })),
+                        ),
                 )
                 .child(
                     div()
                         .w_full()
-                        .pt(px(spacing::MD))
+                        .pt(Spacing::Large.pixels())
                         .flex()
                         .flex_col()
-                        .gap(px(spacing::XS))
+                        .gap(Spacing::XSmall.pixels())
                         .child(
                             Label::new("USAGE")
-                                .size(LabelSize::XSmall)
+                                .size(TextSize::XSmall)
                                 .color(Color::Disabled),
                         )
                         .child(
                             Label::new("• Type !<shebang> <query> to search specific provider")
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         )
                         .child(
                             Label::new("• Example: !g rust programming, !yt music")
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         )
                         .child(
                             Label::new(
                                 "• Just ! with query uses the default provider (DuckDuckGo)",
                             )
-                            .size(LabelSize::Small)
+                            .size(TextSize::Small)
                             .color(Color::Muted),
                         ),
                 )

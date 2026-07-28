@@ -37,16 +37,24 @@ pub enum Spacing {
 
 impl Spacing {
     pub const fn pixels(self) -> Pixels {
+        px(self.value())
+    }
+
+    /// The raw pixel count.
+    ///
+    /// `Pixels` keeps its inner `f32` private, so call sites doing
+    /// arithmetic - or defining a `const` - need the number itself.
+    pub const fn value(self) -> f32 {
         match self {
-            Self::None => px(0.0),
-            Self::XXSmall => px(2.0),
-            Self::XSmall => px(4.0),
-            Self::Small => px(6.0),
-            Self::Medium => px(8.0),
-            Self::Large => px(12.0),
-            Self::XLarge => px(16.0),
-            Self::XXLarge => px(20.0),
-            Self::XXXLarge => px(24.0),
+            Self::None => 0.0,
+            Self::XXSmall => 2.0,
+            Self::XSmall => 4.0,
+            Self::Small => 6.0,
+            Self::Medium => 8.0,
+            Self::Large => 12.0,
+            Self::XLarge => 16.0,
+            Self::XXLarge => 20.0,
+            Self::XXXLarge => 24.0,
         }
     }
 }
@@ -102,6 +110,48 @@ impl TextSize {
     }
 }
 
+/// Semantic icon size.
+///
+/// Fixed pixels, matching the shell's previous `icon_size::{SM,MD,LG,XL}`
+/// constants (12/14/16/18) with a 10px indicator step below them.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IconSize {
+    /// 10px - status dots and other decorations.
+    Indicator,
+    /// 12px
+    XSmall,
+    /// 14px
+    Small,
+    /// 16px
+    #[default]
+    Medium,
+    /// 18px
+    Large,
+    /// 20px
+    XLarge,
+}
+
+impl IconSize {
+    pub const fn pixels(self) -> Pixels {
+        px(self.value())
+    }
+
+    /// The raw pixel count.
+    ///
+    /// `Pixels` keeps its inner `f32` private, so call sites doing
+    /// arithmetic - or defining a `const` - need the number itself.
+    pub const fn value(self) -> f32 {
+        match self {
+            Self::Indicator => 10.0,
+            Self::XSmall => 12.0,
+            Self::Small => 14.0,
+            Self::Medium => 16.0,
+            Self::Large => 18.0,
+            Self::XLarge => 20.0,
+        }
+    }
+}
+
 /// Semantic border radius.
 ///
 /// The ladder covers both the shell's previous `radius::{SM,MD,LG}`
@@ -127,14 +177,22 @@ pub enum Radius {
 
 impl Radius {
     pub const fn pixels(self) -> Pixels {
+        px(self.value())
+    }
+
+    /// The raw pixel count.
+    ///
+    /// `Pixels` keeps its inner `f32` private, so call sites doing
+    /// arithmetic - or defining a `const` - need the number itself.
+    pub const fn value(self) -> f32 {
         match self {
-            Self::None => px(0.0),
-            Self::XSmall => px(2.0),
-            Self::Small => px(4.0),
-            Self::Medium => px(6.0),
-            Self::Large => px(8.0),
-            Self::XLarge => px(12.0),
-            Self::Full => px(9999.0),
+            Self::None => 0.0,
+            Self::XSmall => 2.0,
+            Self::Small => 4.0,
+            Self::Medium => 6.0,
+            Self::Large => 8.0,
+            Self::XLarge => 12.0,
+            Self::Full => 9999.0,
         }
     }
 }

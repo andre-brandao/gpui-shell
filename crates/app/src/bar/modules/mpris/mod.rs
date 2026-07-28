@@ -126,7 +126,7 @@ impl Mpris {
                 div()
                     .flex_shrink_0()
                     .text_size(px(style::icon(is_vertical)))
-                    .text_color(theme.text.primary)
+                    .text_color(theme.colors.text)
                     .child(icon),
             )
             .when_some(label, |el, label| {
@@ -135,8 +135,8 @@ impl Mpris {
                         .flex_shrink(1.)
                         .overflow_hidden()
                         .text_ellipsis()
-                        .text_size(style::label_size(theme, is_vertical))
-                        .text_color(theme.text.secondary)
+                        .text_size(style::label_size(is_vertical).rems())
+                        .text_color(theme.colors.text)
                         .child(label),
                 )
             })

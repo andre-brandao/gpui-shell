@@ -5,12 +5,12 @@ pub use config::ActiveWindowConfig;
 
 use gpui::{AnyElement, Context, Render, Window, div, prelude::*, px};
 use services::CompositorState;
-use ui::ActiveTheme;
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
+use ui::ActiveTheme;
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
@@ -225,8 +225,8 @@ impl BarWidget for ActiveWindow {
         }
 
         let vertical_lines = self.vertical_lines(15);
-        let text_primary = theme.text.primary;
-        let text_secondary = theme.text.secondary;
+        let text_primary = theme.colors.text;
+        let text_secondary = theme.colors.text;
 
         div()
             .id("active-window")
@@ -241,7 +241,7 @@ impl BarWidget for ActiveWindow {
                     .map(move |(idx, line)| {
                         style::vertical_text_line(
                             div()
-                                .text_size(style::label_size(theme, true))
+                                .text_size(style::label_size(true).rems())
                                 .text_color(if idx == 0 {
                                     text_primary
                                 } else {
@@ -281,7 +281,7 @@ impl BarWidget for ActiveWindow {
                     div()
                         .flex_shrink_0()
                         .text_size(px(style::icon(false)))
-                        .text_color(theme.text.secondary)
+                        .text_color(theme.colors.text)
                         .child(icon),
                 )
             })
@@ -290,8 +290,8 @@ impl BarWidget for ActiveWindow {
                     .flex_shrink(1.)
                     .overflow_hidden()
                     .text_ellipsis()
-                    .text_size(style::label_size(theme, false))
-                    .text_color(theme.text.primary)
+                    .text_size(style::label_size(false).rems())
+                    .text_color(theme.colors.text)
                     .child(title),
             )
             .into_any_element()

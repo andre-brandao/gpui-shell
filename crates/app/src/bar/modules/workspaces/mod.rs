@@ -5,7 +5,7 @@ pub use config::WorkspacesConfig;
 
 use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, radius};
+use ui::{ActiveTheme, Radius};
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
@@ -153,20 +153,20 @@ impl Workspaces {
                 px(style::WORKSPACE_PILL_WIDTH_HORIZONTAL)
             })
             .h(px(style::WORKSPACE_PILL_HEIGHT))
-            .rounded(px(radius::SM))
+            .rounded(Radius::Small.pixels())
             .cursor_pointer()
             .bg(if is_active {
-                theme.accent.primary
+                theme.colors.accent
             } else if has_windows {
-                theme.bg.tertiary
+                theme.colors.elevated_surface_background
             } else {
                 gpui::transparent_black()
             })
             .hover(move |s| {
                 if is_active {
-                    s.bg(theme.accent.hover)
+                    s.bg(theme.colors.accent)
                 } else {
-                    s.bg(theme.interactive.hover)
+                    s.bg(theme.colors.element_hover)
                 }
             })
             .on_mouse_down(
@@ -178,13 +178,13 @@ impl Workspaces {
             .when(!label.is_empty(), |this| {
                 this.child(
                     div()
-                        .text_size(style::label_size(theme, is_vertical))
+                        .text_size(style::label_size(is_vertical).rems())
                         .text_color(if is_active {
-                            theme.bg.primary
+                            theme.colors.background
                         } else if has_windows {
-                            theme.text.secondary
+                            theme.colors.text
                         } else {
-                            theme.text.muted
+                            theme.colors.text_muted
                         })
                         .child(label),
                 )

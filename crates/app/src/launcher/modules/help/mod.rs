@@ -4,8 +4,7 @@ pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px};
 use ui::{
-    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, icon_size,
-    spacing,
+    ActiveTheme, Color, IconSize, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, TextSize,
 };
 
 use self::config::HelpConfig;
@@ -52,8 +51,8 @@ impl HelpView {
 
         let cpu_usage = sysinfo.cpu_usage;
         let memory_usage = sysinfo.memory_usage;
-        let cpu_color = theme.status.from_percentage(cpu_usage);
-        let memory_color = theme.status.from_percentage(memory_usage);
+        let cpu_color = theme.colors.status.from_percentage(cpu_usage);
+        let memory_color = theme.colors.status.from_percentage(memory_usage);
 
         let cpu_icon = if cpu_usage >= 90 {
             icons::CPU_HIGH
@@ -78,13 +77,13 @@ impl HelpView {
             String::new()
         };
 
-        let text_muted = theme.text.muted;
+        let text_muted = theme.colors.text_muted;
 
         div()
             .w_full()
-            .px(px(spacing::MD))
-            .py(px(spacing::SM))
-            .bg(theme.bg.secondary)
+            .px(Spacing::Large.pixels())
+            .py(Spacing::Medium.pixels())
+            .bg(theme.colors.surface_background)
             .rounded(px(8.))
             .flex()
             .items_center()
@@ -96,13 +95,13 @@ impl HelpView {
                     .gap(px(4.))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(IconSize::Small.pixels())
                             .text_color(cpu_color)
                             .child(cpu_icon),
                     )
                     .child(
                         div()
-                            .text_size(theme.font_sizes.sm)
+                            .text_size(TextSize::Small.rems())
                             .text_color(cpu_color)
                             .child(format!("{}%", cpu_usage)),
                     ),
@@ -114,13 +113,13 @@ impl HelpView {
                     .gap(px(4.))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(IconSize::Small.pixels())
                             .text_color(memory_color)
                             .child(icons::MEMORY),
                     )
                     .child(
                         div()
-                            .text_size(theme.font_sizes.sm)
+                            .text_size(TextSize::Small.rems())
                             .text_color(memory_color)
                             .child(format!("{}%", memory_usage)),
                     ),
@@ -132,13 +131,13 @@ impl HelpView {
                     .gap(px(4.))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(IconSize::Small.pixels())
                             .text_color(text_muted)
                             .child(icons::TEMP),
                     )
                     .child(
                         div()
-                            .text_size(theme.font_sizes.sm)
+                            .text_size(TextSize::Small.rems())
                             .text_color(text_muted)
                             .child(temp_text),
                     ),
@@ -150,14 +149,14 @@ impl HelpView {
                     .gap(px(4.))
                     .child(
                         div()
-                            .text_size(px(icon_size::MD))
+                            .text_size(IconSize::Small.pixels())
                             .text_color(text_muted)
                             .child(battery_icon),
                     )
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
                             div()
-                                .text_size(theme.font_sizes.sm)
+                                .text_size(TextSize::Small.rems())
                                 .text_color(text_muted)
                                 .child(battery_text.clone()),
                         )
@@ -243,7 +242,7 @@ impl LauncherView for HelpView {
         };
 
         let theme = cx.theme();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
 
         ListItem::new(format!("cmd-{}", entry.prefix))
             .spacing(ListItemSpacing::Sparse)
@@ -257,7 +256,7 @@ impl LauncherView for HelpView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(theme.font_sizes.lg)
+                    .text_size(TextSize::Large.rems())
                     .child(entry.icon.clone()),
             )
             .child(
@@ -269,7 +268,7 @@ impl LauncherView for HelpView {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .child(
                                 div()
                                     .px(px(6.))
@@ -278,15 +277,15 @@ impl LauncherView for HelpView {
                                     .bg(interactive_default)
                                     .child(
                                         Label::new(entry.prefix.clone())
-                                            .size(LabelSize::Small)
+                                            .size(TextSize::Small)
                                             .color(Color::Muted),
                                     ),
                             )
-                            .child(Label::new(entry.name.clone()).size(LabelSize::Default)),
+                            .child(Label::new(entry.name.clone()).size(TextSize::Default)),
                     )
                     .child(
                         Label::new(entry.description.clone())
-                            .size(LabelSize::Small)
+                            .size(TextSize::Small)
                             .color(Color::Muted),
                     ),
             )
@@ -298,13 +297,13 @@ impl LauncherView for HelpView {
             div()
                 .flex()
                 .flex_col()
-                .gap(px(spacing::LG))
-                .p(px(spacing::SM))
+                .gap(Spacing::XLarge.pixels())
+                .p(Spacing::Medium.pixels())
                 .child(self.render_system_info(vx, cx))
                 .child(
-                    div().px(px(spacing::SM)).child(
+                    div().px(Spacing::Medium.pixels()).child(
                         Label::new("COMMANDS")
-                            .size(LabelSize::XSmall)
+                            .size(TextSize::XSmall)
                             .color(Color::Disabled),
                     ),
                 )
@@ -315,30 +314,30 @@ impl LauncherView for HelpView {
     fn render_footer(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
         Some(
             div()
-                .px(px(spacing::SM))
-                .pt(px(spacing::SM))
-                .pb(px(spacing::SM))
+                .px(Spacing::Medium.pixels())
+                .pt(Spacing::Medium.pixels())
+                .pb(Spacing::Medium.pixels())
                 .flex()
                 .flex_col()
-                .gap(px(spacing::XS))
+                .gap(Spacing::XSmall.pixels())
                 .child(
                     Label::new("USAGE")
-                        .size(LabelSize::XSmall)
+                        .size(TextSize::XSmall)
                         .color(Color::Disabled),
                 )
                 .child(
                     Label::new("• Type a prefix (like @, $, !) to switch to that view")
-                        .size(LabelSize::Small)
+                        .size(TextSize::Small)
                         .color(Color::Muted),
                 )
                 .child(
                     Label::new("• Type without prefix to search apps directly")
-                        .size(LabelSize::Small)
+                        .size(TextSize::Small)
                         .color(Color::Muted),
                 )
                 .child(
                     Label::new("• Press ? anytime to return to this help")
-                        .size(LabelSize::Small)
+                        .size(TextSize::Small)
                         .color(Color::Muted),
                 )
                 .into_any_element(),

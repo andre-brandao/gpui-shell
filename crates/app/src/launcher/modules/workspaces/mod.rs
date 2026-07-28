@@ -4,7 +4,7 @@ pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px};
 use services::CompositorCommand;
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
+use ui::{ActiveTheme, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize};
 
 use self::config::WorkspacesConfig;
 use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
@@ -85,7 +85,7 @@ impl LauncherView for WorkspacesView {
         let subtitle = format!("{} windows on {}", ws.windows, ws.monitor);
         let ws_id = ws.id;
         let compositor_clone = AppState::compositor(cx).clone();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
         let icon = self.icon();
 
         ListItem::new(format!("ws-{}", ws.id))
@@ -111,10 +111,10 @@ impl LauncherView for WorkspacesView {
                     .flex()
                     .flex_col()
                     .gap(px(1.))
-                    .child(Label::new(title).size(LabelSize::Default))
+                    .child(Label::new(title).size(TextSize::Default))
                     .child(
                         Label::new(subtitle)
-                            .size(LabelSize::Small)
+                            .size(TextSize::Small)
                             .color(Color::Muted),
                     ),
             )

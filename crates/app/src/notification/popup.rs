@@ -9,7 +9,7 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationSubscriber};
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::AppState;
@@ -41,7 +41,8 @@ impl NotificationPopupStack {
 }
 
 impl Render for NotificationPopupStack {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        window.set_rem_size(cx.theme().font_size);
         let theme = cx.theme();
         let config = &cx.config().notification;
         let items = self.notifications.clone();
@@ -49,27 +50,27 @@ impl Render for NotificationPopupStack {
         div()
             .id("notification-popup-stack")
             .size_full()
-            .p(px(spacing::SM))
+            .p(Spacing::Medium.pixels())
             .child(
                 div()
                     .size_full()
                     .flex()
                     .flex_col()
-                    .gap(px(spacing::XS))
+                    .gap(Spacing::XSmall.pixels())
                     .children(items.into_iter().map(|notification| {
                         let dismiss_subscriber = self.subscriber.clone();
                         let id = notification.id;
 
                         div()
                             .overflow_hidden()
-                            .bg(theme.bg.primary)
+                            .bg(theme.colors.background)
                             .border_1()
-                            .border_color(theme.border.default)
-                            .rounded(px(radius::LG))
-                            .p(px(spacing::SM))
+                            .border_color(theme.colors.border)
+                            .rounded(Radius::Large.pixels())
+                            .p(Spacing::Medium.pixels())
                             .hover(move |el| {
-                                el.bg(theme.interactive.hover)
-                                    .border_color(theme.accent.primary)
+                                el.bg(theme.colors.element_hover)
+                                    .border_color(theme.colors.accent)
                             })
                             .child(notification_card_body(
                                 &notification,
@@ -83,8 +84,8 @@ impl Render for NotificationPopupStack {
                                     .top(px(8.0))
                                     .right(px(8.0))
                                     .cursor_pointer()
-                                    .text_size(theme.font_sizes.sm)
-                                    .text_color(theme.text.muted)
+                                    .text_size(TextSize::Small.rems())
+                                    .text_color(theme.colors.text_muted)
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(move |_, _, _, _cx| {

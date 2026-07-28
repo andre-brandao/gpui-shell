@@ -64,11 +64,11 @@ impl Clock {
             .children(lines.into_iter().enumerate().map(|(idx, line)| {
                 style::vertical_text_line(
                     div()
-                        .text_size(style::label_size(theme, true))
+                        .text_size(style::label_size(true).rems())
                         .text_color(if idx == 0 {
-                            theme.text.secondary
+                            theme.colors.text_muted
                         } else {
-                            theme.text.primary
+                            theme.colors.text
                         })
                         .child(line),
                 )
@@ -82,8 +82,8 @@ impl Clock {
             .flex()
             .items_center()
             .gap(px(style::CHIP_GAP))
-            .text_size(style::label_size(theme, false))
-            .text_color(theme.text.primary)
+            .text_size(style::label_size(false).rems())
+            .text_color(theme.colors.text)
             .child(self.formatted_time_horizontal(format))
             .into_any_element()
     }

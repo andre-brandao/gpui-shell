@@ -1,6 +1,6 @@
 use gpui::{AnyElement, App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::ActiveTheme;
+use ui::{ActiveTheme, TextSize};
 
 use crate::bar::modules::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -62,7 +62,7 @@ impl NotificationWidget {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let unread = self.data.unread_count;
-        let badge_color = theme.accent.primary;
+        let badge_color = theme.colors.accent;
 
         div()
             .id("notification-widget")
@@ -80,9 +80,9 @@ impl NotificationWidget {
                     .flex_shrink_0()
                     .text_size(px(style::icon(is_vertical)))
                     .text_color(if self.data.dnd {
-                        theme.text.muted
+                        theme.colors.text_muted
                     } else {
-                        theme.text.primary
+                        theme.colors.text
                     })
                     .child(icon),
             )
@@ -90,7 +90,7 @@ impl NotificationWidget {
                 el.child(
                     div()
                         .flex_shrink_0()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(badge_color)
                         .child(unread.to_string()),
                 )

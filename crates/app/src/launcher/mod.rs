@@ -17,7 +17,7 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use modules::{HelpView, all_views};
-use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_input_line, spacing};
+use ui::{ActiveTheme, IconSize, InputBuffer, Radius, Spacing, TextSize, render_input_line};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 
 use crate::config::Config;
@@ -332,6 +332,8 @@ impl Focusable for Launcher {
 
 impl Render for Launcher {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_rem_size(cx.theme().font_size);
+
         // Always keep the launcher focused
         if !self.focus_handle.is_focused(window) {
             self.focus_handle.focus(window, cx);
@@ -363,13 +365,13 @@ impl Render for Launcher {
         let content = current_view.render_content(&vx, cx);
 
         // Pre-compute colors for closures
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-        let text_secondary = theme.text.secondary;
-        let text_disabled = theme.text.disabled;
-        let bg_primary = theme.bg.primary;
-        let border_default = theme.border.default;
-        let interactive_default = theme.interactive.default;
+        let text_primary = theme.colors.text;
+        let text_muted = theme.colors.text_muted;
+        let text_secondary = theme.colors.text;
+        let text_disabled = theme.colors.text_disabled;
+        let bg_primary = theme.colors.background;
+        let border_default = theme.colors.border;
+        let interactive_default = theme.colors.element_background;
 
         div()
             .id("launcher")
@@ -486,7 +488,7 @@ impl Render for Launcher {
             .bg(bg_primary)
             .border_1()
             .border_color(border_default)
-            .rounded(px(radius::LG))
+            .rounded(Radius::Large.pixels())
             .text_color(text_primary)
             .flex()
             .flex_col()
@@ -495,15 +497,15 @@ impl Render for Launcher {
             .child(
                 div()
                     .w_full()
-                    .px(px(spacing::LG))
-                    .py(px(spacing::MD))
+                    .px(Spacing::XLarge.pixels())
+                    .py(Spacing::Large.pixels())
                     .flex()
                     .items_center()
-                    .gap(px(spacing::MD))
+                    .gap(Spacing::Large.pixels())
                     // Search icon
                     .child(
                         div()
-                            .text_size(px(icon_size::LG))
+                            .text_size(IconSize::Medium.pixels())
                             .text_color(text_muted)
                             .child(""),
                     )
@@ -511,18 +513,18 @@ impl Render for Launcher {
                     .child(
                         div()
                             .flex_1()
-                            .text_size(theme.font_sizes.md)
+                            .text_size(TextSize::Medium.rems())
                             .text_color(text_primary)
                             .child(render_input_line(&self.input, &placeholder, cx)),
                     )
                     // View badge (right side)
                     .child(
                         div()
-                            .px(px(spacing::SM))
+                            .px(Spacing::Medium.pixels())
                             .py(px(3.))
-                            .rounded(px(radius::SM))
+                            .rounded(Radius::Small.pixels())
                             .bg(interactive_default)
-                            .text_size(theme.font_sizes.sm)
+                            .text_size(TextSize::Small.rems())
                             .text_color(text_secondary)
                             .child(view_name),
                     ),
@@ -539,7 +541,7 @@ impl Render for Launcher {
                     .flex_col()
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll_handle)
-                    .py(px(spacing::XS))
+                    .py(Spacing::XSmall.pixels())
                     .when_some(header, |el, h| el.child(h))
                     .map(|el| {
                         if let Some(content) = content {
@@ -559,8 +561,8 @@ impl Render for Launcher {
             .child(
                 div()
                     .w_full()
-                    .px(px(spacing::LG))
-                    .py(px(spacing::SM))
+                    .px(Spacing::XLarge.pixels())
+                    .py(Spacing::Medium.pixels())
                     .flex()
                     .items_center()
                     .justify_between()
@@ -569,8 +571,8 @@ impl Render for Launcher {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
-                            .text_size(theme.font_sizes.xs)
+                            .gap(Spacing::Medium.pixels())
+                            .text_size(TextSize::XSmall.rems())
                             .text_color(text_disabled)
                             .child(div().flex().items_center().gap(px(4.)).child(prefix_hints)),
                     )

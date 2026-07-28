@@ -1,8 +1,8 @@
 use gpui::{AnyElement, Context, Window};
-use ui::ActiveTheme;
 
 use super::style;
 use crate::config::ActiveConfig;
+use ui::ActiveTheme;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

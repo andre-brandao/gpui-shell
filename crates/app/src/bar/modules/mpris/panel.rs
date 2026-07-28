@@ -2,7 +2,7 @@
 
 use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
@@ -115,15 +115,15 @@ impl MprisPanel {
         on_click: impl Fn(&mut App) + 'static,
     ) -> impl IntoElement {
         let theme = cx.theme();
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let text_primary = theme.text.primary;
+        let interactive_default = theme.colors.element_background;
+        let interactive_hover = theme.colors.element_hover;
+        let text_primary = theme.colors.text;
 
         div()
             .id(id.into())
             .w(px(28.))
             .h(px(24.))
-            .rounded(px(radius::SM))
+            .rounded(Radius::Small.pixels())
             .cursor_pointer()
             .flex()
             .items_center()
@@ -133,7 +133,7 @@ impl MprisPanel {
             .on_mouse_down(MouseButton::Left, move |_, _, cx| on_click(cx))
             .child(
                 div()
-                    .text_size(px(icon_size::SM))
+                    .text_size(IconSize::XSmall.pixels())
                     .text_color(text_primary)
                     .child(label),
             )
@@ -158,9 +158,9 @@ impl MprisPanel {
         let show_cover = cx.config().bar.modules.mpris.show_cover;
 
         let status_color = match player.state {
-            PlaybackStatus::Playing => theme.status.success,
-            PlaybackStatus::Paused => theme.status.warning,
-            PlaybackStatus::Stopped => theme.text.muted,
+            PlaybackStatus::Playing => theme.colors.status.success,
+            PlaybackStatus::Paused => theme.colors.status.warning,
+            PlaybackStatus::Stopped => theme.colors.text_muted,
         };
 
         let volume = player
@@ -190,26 +190,26 @@ impl MprisPanel {
 
         div()
             .w_full()
-            .p(px(spacing::SM))
-            .bg(theme.bg.secondary)
-            .rounded(px(radius::MD))
+            .p(Spacing::Medium.pixels())
+            .bg(theme.colors.surface_background)
+            .rounded(Radius::Medium.pixels())
             .border_1()
-            .border_color(theme.border.subtle)
+            .border_color(theme.colors.border_variant)
             .flex()
             .flex_col()
-            .gap(px(spacing::SM))
+            .gap(Spacing::Medium.pixels())
             .child(
                 div()
                     .w_full()
                     .flex()
                     .items_center()
                     .justify_between()
-                    .gap(px(spacing::SM))
+                    .gap(Spacing::Medium.pixels())
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .child(if show_cover {
                                 player
                                     .art_url
@@ -217,27 +217,27 @@ impl MprisPanel {
                                     .map(|source| {
                                         div()
                                             .size(px(34.0))
-                                            .rounded(px(radius::SM))
+                                            .rounded(Radius::Small.pixels())
                                             .overflow_hidden()
                                             .border_1()
-                                            .border_color(theme.border.subtle)
+                                            .border_color(theme.colors.border_variant)
                                             .child(img(source).size_full())
                                             .into_any_element()
                                     })
                                     .unwrap_or_else(|| {
                                         div()
                                             .size(px(34.0))
-                                            .rounded(px(radius::SM))
-                                            .bg(theme.bg.tertiary)
+                                            .rounded(Radius::Small.pixels())
+                                            .bg(theme.colors.elevated_surface_background)
                                             .border_1()
-                                            .border_color(theme.border.subtle)
+                                            .border_color(theme.colors.border_variant)
                                             .flex()
                                             .items_center()
                                             .justify_center()
                                             .child(
                                                 div()
-                                                    .text_size(px(icon_size::SM))
-                                                    .text_color(theme.text.primary)
+                                                    .text_size(IconSize::XSmall.pixels())
+                                                    .text_color(theme.colors.text)
                                                     .child(icons::PLAYER),
                                             )
                                             .into_any_element()
@@ -245,17 +245,17 @@ impl MprisPanel {
                             } else {
                                 div()
                                     .size(px(34.0))
-                                    .rounded(px(radius::SM))
-                                    .bg(theme.bg.tertiary)
+                                    .rounded(Radius::Small.pixels())
+                                    .bg(theme.colors.elevated_surface_background)
                                     .border_1()
-                                    .border_color(theme.border.subtle)
+                                    .border_color(theme.colors.border_variant)
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .child(
                                         div()
-                                            .text_size(px(icon_size::SM))
-                                            .text_color(theme.text.primary)
+                                            .text_size(IconSize::XSmall.pixels())
+                                            .text_color(theme.colors.text)
                                             .child(icons::PLAYER),
                                     )
                                     .into_any_element()
@@ -267,8 +267,8 @@ impl MprisPanel {
                                     .overflow_hidden()
                                     .child(
                                         div()
-                                            .text_size(theme.font_sizes.sm)
-                                            .text_color(theme.text.primary)
+                                            .text_size(TextSize::Small.rems())
+                                            .text_color(theme.colors.text)
                                             .font_weight(FontWeight::MEDIUM)
                                             .overflow_hidden()
                                             .text_ellipsis()
@@ -276,8 +276,8 @@ impl MprisPanel {
                                     )
                                     .child(
                                         div()
-                                            .text_size(theme.font_sizes.xs)
-                                            .text_color(theme.text.secondary)
+                                            .text_size(TextSize::XSmall.rems())
+                                            .text_color(theme.colors.text)
                                             .overflow_hidden()
                                             .text_ellipsis()
                                             .child(subtitle),
@@ -286,7 +286,7 @@ impl MprisPanel {
                     )
                     .child(
                         div()
-                            .text_size(theme.font_sizes.xs)
+                            .text_size(TextSize::XSmall.rems())
                             .text_color(status_color)
                             .child(format!("{}  {}", Self::status_text(player.state), volume)),
                     ),
@@ -297,17 +297,17 @@ impl MprisPanel {
                         .w_full()
                         .flex()
                         .items_center()
-                        .gap(px(spacing::XS))
+                        .gap(Spacing::XSmall.pixels())
                         .child(
                             div()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.muted)
+                                .text_size(TextSize::XSmall.rems())
+                                .text_color(theme.colors.text_muted)
                                 .child(icons::DURATION),
                         )
                         .child(
                             div()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.muted)
+                                .text_size(TextSize::XSmall.rems())
+                                .text_color(theme.colors.text_muted)
                                 .child(duration),
                         ),
                 )
@@ -318,17 +318,17 @@ impl MprisPanel {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .gap(px(spacing::XS))
+                    .gap(Spacing::XSmall.pixels())
                     .child(
                         div()
-                            .text_size(theme.font_sizes.xs)
-                            .text_color(theme.text.muted)
+                            .text_size(TextSize::XSmall.rems())
+                            .text_color(theme.colors.text_muted)
                             .child(service_short),
                     )
                     .child(
                         div()
                             .flex()
-                            .gap(px(spacing::XS))
+                            .gap(Spacing::XSmall.pixels())
                             .when(can_control, |el| {
                                 el.child(Self::render_control_button(
                                     format!("mpris-prev-{}", service_name),
@@ -419,11 +419,11 @@ impl Render for MprisPanel {
             .id("mpris-panel")
             .w_full()
             .h_full()
-            .p(px(spacing::LG))
-            .bg(theme.bg.primary)
+            .p(Spacing::XLarge.pixels())
+            .bg(theme.colors.background)
             .border_1()
-            .border_color(theme.border.default)
-            .rounded(px(radius::LG))
+            .border_color(theme.colors.border)
+            .rounded(Radius::Large.pixels())
             .overflow_hidden()
             .child(
                 div()
@@ -431,22 +431,22 @@ impl Render for MprisPanel {
                     .h_full()
                     .flex()
                     .flex_col()
-                    .gap(px(spacing::MD))
+                    .gap(Spacing::Large.pixels())
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .child(
                                 div()
-                                    .text_size(px(icon_size::XL))
-                                    .text_color(theme.text.primary)
+                                    .text_size(IconSize::Large.pixels())
+                                    .text_color(theme.colors.text)
                                     .child(icons::HEADER),
                             )
                             .child(
                                 div()
-                                    .text_size(theme.font_sizes.lg)
-                                    .text_color(theme.text.primary)
+                                    .text_size(TextSize::Large.rems())
+                                    .text_color(theme.colors.text)
                                     .font_weight(FontWeight::BOLD)
                                     .child("Media Players"),
                             ),
@@ -458,8 +458,8 @@ impl Render for MprisPanel {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .text_size(theme.font_sizes.sm)
-                                .text_color(theme.text.muted)
+                                .text_size(TextSize::Small.rems())
+                                .text_color(theme.colors.text_muted)
                                 .child("No MPRIS players detected"),
                         )
                     })
@@ -470,7 +470,7 @@ impl Render for MprisPanel {
                                 .overflow_hidden()
                                 .flex()
                                 .flex_col()
-                                .gap(px(spacing::SM))
+                                .gap(Spacing::Medium.pixels())
                                 .children(players.into_iter().map(|player| {
                                     self.render_player_card(player, cx).into_any_element()
                                 })),

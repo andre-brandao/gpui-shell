@@ -6,7 +6,7 @@ use super::icons;
 use crate::state::watch;
 use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanel {
@@ -39,30 +39,30 @@ impl SysInfoPanel {
         cx: &App,
     ) -> impl IntoElement {
         let theme = cx.theme();
-        let text_color = color.unwrap_or(theme.text.primary);
+        let text_color = color.unwrap_or(theme.colors.text);
 
         div()
             .w_full()
             .flex()
             .items_center()
-            .py(px(spacing::SM))
+            .py(Spacing::Medium.pixels())
             .child(
                 div()
                     .w(px(32.))
-                    .text_size(px(icon_size::XL))
+                    .text_size(IconSize::Large.pixels())
                     .text_color(text_color)
                     .child(icon.to_string()),
             )
             .child(
                 div()
                     .flex_1()
-                    .text_size(theme.font_sizes.base)
-                    .text_color(theme.text.primary)
+                    .text_size(TextSize::Default.rems())
+                    .text_color(theme.colors.text)
                     .child(label.to_string()),
             )
             .child(
                 div()
-                    .text_size(theme.font_sizes.base)
+                    .text_size(TextSize::Default.rems())
                     .text_color(text_color)
                     .font_weight(FontWeight::MEDIUM)
                     .child(value.to_string()),
@@ -71,14 +71,14 @@ impl SysInfoPanel {
 
     fn render_progress_bar(usage: u32, cx: &App) -> impl IntoElement {
         let theme = cx.theme();
-        let color = theme.status.from_percentage(usage);
+        let color = theme.colors.status.from_percentage(usage);
         let width_percent = usage.min(100) as f32;
 
         div()
             .w_full()
             .h(px(4.))
             .rounded(px(2.))
-            .bg(theme.bg.tertiary)
+            .bg(theme.colors.elevated_surface_background)
             .child(
                 div()
                     .h_full()
@@ -96,16 +96,16 @@ impl SysInfoPanel {
         cx: &App,
     ) -> impl IntoElement {
         let theme = cx.theme();
-        let color = theme.status.from_percentage(usage);
+        let color = theme.colors.status.from_percentage(usage);
 
         div()
             .w_full()
-            .p(px(spacing::MD))
-            .bg(theme.bg.secondary)
-            .rounded(px(radius::MD))
+            .p(Spacing::Large.pixels())
+            .bg(theme.colors.surface_background)
+            .rounded(Radius::Medium.pixels())
             .flex()
             .flex_col()
-            .gap(px(spacing::SM))
+            .gap(Spacing::Medium.pixels())
             .child(
                 div()
                     .flex()
@@ -115,24 +115,24 @@ impl SysInfoPanel {
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .child(
                                 div()
-                                    .text_size(px(icon_size::LG))
-                                    .text_color(theme.text.primary)
+                                    .text_size(IconSize::Medium.pixels())
+                                    .text_color(theme.colors.text)
                                     .child(icon.to_string()),
                             )
                             .child(
                                 div()
-                                    .text_size(theme.font_sizes.base)
-                                    .text_color(theme.text.primary)
+                                    .text_size(TextSize::Default.rems())
+                                    .text_color(theme.colors.text)
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(title.to_string()),
                             ),
                     )
                     .child(
                         div()
-                            .text_size(theme.font_sizes.md)
+                            .text_size(TextSize::Medium.rems())
                             .font_weight(FontWeight::BOLD)
                             .text_color(color)
                             .child(format!("{}%", usage)),
@@ -141,8 +141,8 @@ impl SysInfoPanel {
             .child(Self::render_progress_bar(usage, cx))
             .child(
                 div()
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(theme.text.secondary)
+                    .text_size(TextSize::Small.rems())
+                    .text_color(theme.colors.text)
                     .child(details.to_string()),
             )
     }
@@ -161,7 +161,10 @@ impl Render for SysInfoPanel {
         );
 
         let (temp_str, temp_color) = match self.data.temperature {
-            Some(t) => (format!("{}°C", t), Some(theme.status.from_temperature(t))),
+            Some(t) => (
+                format!("{}°C", t),
+                Some(theme.colors.status.from_temperature(t)),
+            ),
             None => ("N/A".to_string(), None),
         };
 
@@ -198,41 +201,41 @@ impl Render for SysInfoPanel {
         let disks = self.data.disks.clone();
 
         // Pre-compute theme colors for closures
-        let text_primary = theme.text.primary;
-        let text_secondary = theme.text.secondary;
-        let bg_secondary = theme.bg.secondary;
-        let bg_tertiary = theme.bg.tertiary;
+        let text_primary = theme.colors.text;
+        let text_secondary = theme.colors.text;
+        let bg_secondary = theme.colors.surface_background;
+        let bg_tertiary = theme.colors.elevated_surface_background;
 
         div()
             .id("sysinfo-panel")
             .w_full()
             .h_full()
-            .p(px(spacing::LG))
-            .bg(theme.bg.primary)
+            .p(Spacing::XLarge.pixels())
+            .bg(theme.colors.background)
             .border_1()
-            .border_color(theme.border.default)
-            .rounded(px(radius::LG))
+            .border_color(theme.colors.border)
+            .rounded(Radius::Large.pixels())
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
             .flex()
             .flex_col()
-            .gap(px(spacing::MD))
+            .gap(Spacing::Large.pixels())
             // Header
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(spacing::SM))
+                    .gap(Spacing::Medium.pixels())
                     .child(
                         div()
-                            .text_size(px(icon_size::XL))
-                            .text_color(theme.text.primary)
+                            .text_size(IconSize::Large.pixels())
+                            .text_color(theme.colors.text)
                             .child(icons::SYSTEM),
                     )
                     .child(
                         div()
-                            .text_size(theme.font_sizes.lg)
-                            .text_color(theme.text.primary)
+                            .text_size(TextSize::Large.rems())
+                            .text_color(theme.colors.text)
                             .font_weight(FontWeight::BOLD)
                             .child("System Information"),
                     ),
@@ -264,7 +267,7 @@ impl Render for SysInfoPanel {
                 ))
             })
             // Divider
-            .child(div().w_full().h(px(1.)).bg(theme.border.default))
+            .child(div().w_full().h(px(1.)).bg(theme.colors.border))
             // Temperature
             .child(Self::render_info_row(
                 temp_icon,
@@ -277,27 +280,27 @@ impl Render for SysInfoPanel {
             .child(
                 div()
                     .w_full()
-                    .p(px(spacing::MD))
-                    .bg(theme.bg.secondary)
-                    .rounded(px(radius::MD))
+                    .p(Spacing::Large.pixels())
+                    .bg(theme.colors.surface_background)
+                    .rounded(Radius::Medium.pixels())
                     .flex()
                     .flex_col()
-                    .gap(px(spacing::SM))
+                    .gap(Spacing::Medium.pixels())
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .child(
                                 div()
-                                    .text_size(px(icon_size::LG))
-                                    .text_color(theme.text.primary)
+                                    .text_size(IconSize::Medium.pixels())
+                                    .text_color(theme.colors.text)
                                     .child(icons::NETWORK),
                             )
                             .child(
                                 div()
-                                    .text_size(theme.font_sizes.base)
-                                    .text_color(theme.text.primary)
+                                    .text_size(TextSize::Default.rems())
+                                    .text_color(theme.colors.text)
                                     .font_weight(FontWeight::MEDIUM)
                                     .child("Network"),
                             ),
@@ -329,26 +332,26 @@ impl Render for SysInfoPanel {
                 el.child(
                     div()
                         .w_full()
-                        .p(px(spacing::MD))
+                        .p(Spacing::Large.pixels())
                         .bg(bg_secondary)
-                        .rounded(px(radius::MD))
+                        .rounded(Radius::Medium.pixels())
                         .flex()
                         .flex_col()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(spacing::SM))
+                                .gap(Spacing::Medium.pixels())
                                 .child(
                                     div()
-                                        .text_size(px(icon_size::LG))
+                                        .text_size(IconSize::Medium.pixels())
                                         .text_color(text_primary)
                                         .child(icons::DISK),
                                 )
                                 .child(
                                     div()
-                                        .text_size(theme.font_sizes.base)
+                                        .text_size(TextSize::Default.rems())
                                         .text_color(text_primary)
                                         .font_weight(FontWeight::MEDIUM)
                                         .child("Disks"),
@@ -357,36 +360,37 @@ impl Render for SysInfoPanel {
                         .children(disks.iter().map(|disk| {
                             let details =
                                 format!("{:.1} GB / {:.1} GB", disk.used_gb, disk.total_gb);
-                            let disk_color = theme.status.from_percentage(disk.usage_percent);
+                            let disk_color =
+                                theme.colors.status.from_percentage(disk.usage_percent);
                             let width_percent = disk.usage_percent.min(100) as f32;
 
                             div()
                                 .flex()
                                 .flex_col()
-                                .gap(px(spacing::XS))
+                                .gap(Spacing::XSmall.pixels())
                                 .child(
                                     div()
                                         .w_full()
                                         .flex()
                                         .items_center()
-                                        .py(px(spacing::SM))
+                                        .py(Spacing::Medium.pixels())
                                         .child(
                                             div()
                                                 .w(px(32.))
-                                                .text_size(px(icon_size::XL))
+                                                .text_size(IconSize::Large.pixels())
                                                 .text_color(disk_color)
                                                 .child(icons::DISK_FOLDER),
                                         )
                                         .child(
                                             div()
                                                 .flex_1()
-                                                .text_size(theme.font_sizes.base)
+                                                .text_size(TextSize::Default.rems())
                                                 .text_color(text_primary)
                                                 .child(disk.mount_point.clone()),
                                         )
                                         .child(
                                             div()
-                                                .text_size(theme.font_sizes.base)
+                                                .text_size(TextSize::Default.rems())
                                                 .text_color(disk_color)
                                                 .font_weight(FontWeight::MEDIUM)
                                                 .child(format!("{}%", disk.usage_percent)),
@@ -411,7 +415,7 @@ impl Render for SysInfoPanel {
                                 .child(
                                     div()
                                         .pl(px(32.))
-                                        .text_size(theme.font_sizes.sm)
+                                        .text_size(TextSize::Small.rems())
                                         .text_color(text_secondary)
                                         .child(details),
                                 )

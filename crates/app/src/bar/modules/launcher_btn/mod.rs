@@ -51,7 +51,7 @@ impl LauncherBtn {
                 div().flex().items_center().justify_center().child(
                     div()
                         .text_size(px(style::icon(is_vertical)))
-                        .text_color(theme.text.primary)
+                        .text_color(theme.colors.text)
                         .child(icon),
                 ),
             )

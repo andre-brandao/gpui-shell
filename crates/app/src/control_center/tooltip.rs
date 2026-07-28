@@ -1,6 +1,6 @@
-use gpui::{AnyView, App, Render, SharedString, Window, div, prelude::*, px};
+use gpui::{AnyView, App, Render, SharedString, Window, div, prelude::*};
 
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 pub fn control_center_tooltip(
     text: impl Into<SharedString>,
@@ -21,13 +21,13 @@ impl Render for ControlCenterTooltip {
         let theme = cx.theme();
 
         div()
-            .px(px(spacing::SM))
-            .py(px(spacing::XS))
-            .bg(theme.bg.elevated)
-            .rounded(px(radius::SM))
+            .px(Spacing::Medium.pixels())
+            .py(Spacing::XSmall.pixels())
+            .bg(theme.colors.elevated_surface_background)
+            .rounded(Radius::Small.pixels())
             .shadow_md()
-            .text_size(theme.font_sizes.xs)
-            .text_color(theme.text.primary)
+            .text_size(TextSize::XSmall.rems())
+            .text_color(theme.colors.text)
             .child(self.text.clone())
     }
 }

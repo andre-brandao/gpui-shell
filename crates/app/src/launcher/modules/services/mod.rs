@@ -5,8 +5,7 @@ pub mod config;
 use gpui::{AnyElement, App, div, prelude::*, px};
 use services::ServiceStatus;
 use ui::{
-    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, icon_size,
-    spacing,
+    ActiveTheme, Color, IconSize, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, TextSize,
 };
 
 use self::config::ServicesConfig;
@@ -140,10 +139,10 @@ impl LauncherView for ServicesView {
 
         let theme = cx.theme();
         let status_color = match &service.status {
-            ServiceStatus::Active => theme.status.success,
-            ServiceStatus::Initializing => theme.status.info,
-            ServiceStatus::Error(_) => theme.status.error,
-            ServiceStatus::Unavailable => theme.text.disabled,
+            ServiceStatus::Active => theme.colors.status.success,
+            ServiceStatus::Initializing => theme.colors.status.info,
+            ServiceStatus::Error(_) => theme.colors.status.error,
+            ServiceStatus::Unavailable => theme.colors.text_disabled,
         };
 
         let mut item = ListItem::new(format!("service-{}", service.name))
@@ -153,16 +152,16 @@ impl LauncherView for ServicesView {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(spacing::SM))
+                    .gap(Spacing::Medium.pixels())
                     .child(
                         div()
-                            .text_size(px(icon_size::LG))
-                            .text_color(theme.text.primary)
+                            .text_size(IconSize::Medium.pixels())
+                            .text_color(theme.colors.text)
                             .child(service.icon),
                     )
                     .child(
                         div()
-                            .text_size(px(icon_size::SM))
+                            .text_size(IconSize::XSmall.pixels())
                             .text_color(status_color)
                             .child(service.status.icon()),
                     ),
@@ -172,11 +171,11 @@ impl LauncherView for ServicesView {
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(spacing::SM))
-                        .child(Label::new(service.name).size(LabelSize::Default))
+                        .gap(Spacing::Medium.pixels())
+                        .child(Label::new(service.name).size(TextSize::Default))
                         .child(
                             Label::new(service.status.label())
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         ),
                 ),
@@ -186,7 +185,7 @@ impl LauncherView for ServicesView {
         if let Some(error_msg) = service.status.error_message() {
             item = item.child(
                 Label::new(format!("Error: {}", error_msg))
-                    .size(LabelSize::Small)
+                    .size(TextSize::Small)
                     .color(Color::Error),
             );
         }
@@ -216,45 +215,45 @@ impl LauncherView for ServicesView {
         };
 
         let status_color = if errors > 0 {
-            theme.status.error
+            theme.colors.status.error
         } else if active == total {
-            theme.status.success
+            theme.colors.status.success
         } else {
-            theme.status.warning
+            theme.colors.status.warning
         };
 
         Some(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(spacing::SM))
-                .p(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
+                .p(Spacing::Medium.pixels())
                 .child(
                     div()
-                        .px(px(spacing::MD))
-                        .py(px(spacing::SM))
-                        .bg(theme.bg.secondary)
+                        .px(Spacing::Large.pixels())
+                        .py(Spacing::Medium.pixels())
+                        .bg(theme.colors.surface_background)
                         .rounded(px(8.))
                         .flex()
                         .items_center()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
-                                .text_size(px(icon_size::MD))
+                                .text_size(IconSize::Small.pixels())
                                 .text_color(status_color)
                                 .child("󰓅"),
                         )
                         .child(
                             div()
-                                .text_size(theme.font_sizes.sm)
+                                .text_size(TextSize::Small.rems())
                                 .text_color(status_color)
                                 .child(status_text),
                         ),
                 )
                 .child(
-                    div().px(px(spacing::SM)).child(
+                    div().px(Spacing::Medium.pixels()).child(
                         Label::new("SERVICES")
-                            .size(LabelSize::XSmall)
+                            .size(TextSize::XSmall)
                             .color(Color::Disabled),
                     ),
                 )

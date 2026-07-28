@@ -5,7 +5,7 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
-use ui::{ActiveTheme, InputBuffer, icon_size, radius, render_masked_input_line, spacing};
+use ui::{ActiveTheme, IconSize, InputBuffer, Radius, Spacing, TextSize, render_masked_input_line};
 
 use crate::state::AppState;
 
@@ -57,8 +57,8 @@ pub fn render_wifi_section(
 ) -> impl IntoElement {
     let theme = cx.theme();
     let network = AppState::network(cx).get();
-    let list_bg = theme.bg.primary;
-    let list_border = theme.border.subtle;
+    let list_bg = theme.colors.background;
+    let list_border = theme.colors.border_variant;
 
     // Get current connected WiFi SSID
     let connected_name = network.active_connections.iter().find_map(|c| {
@@ -86,32 +86,32 @@ pub fn render_wifi_section(
         .w_full()
         .flex()
         .flex_col()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .child(
             // Section header
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .child(
                     div()
-                        .text_size(px(icon_size::SM))
-                        .text_color(theme.text.muted)
+                        .text_size(IconSize::XSmall.pixels())
+                        .text_color(theme.colors.text)
                         .child(icons::WIFI),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_size(theme.font_sizes.sm)
-                        .text_color(theme.text.secondary)
+                        .text_size(TextSize::Small.rems())
+                        .text_color(theme.colors.text)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child("WiFi"),
                 )
                 .when_some(connected_name.clone(), |el, name| {
                     el.child(
                         div()
-                            .text_size(theme.font_sizes.xs)
-                            .text_color(theme.text.muted)
+                            .text_size(TextSize::XSmall.rems())
+                            .text_color(theme.colors.text)
                             .child(format!("- {}", name)),
                     )
                 })
@@ -120,9 +120,9 @@ pub fn render_wifi_section(
         .when(!wifi_enabled, |el| {
             el.child(
                 div()
-                    .py(px(spacing::MD))
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(theme.text.muted)
+                    .py(Spacing::Large.pixels())
+                    .text_size(TextSize::Small.rems())
+                    .text_color(theme.colors.text_muted)
                     .text_center()
                     .child("WiFi is off"),
             )
@@ -130,9 +130,9 @@ pub fn render_wifi_section(
         .when(wifi_enabled && aps.is_empty(), |el| {
             el.child(
                 div()
-                    .py(px(spacing::MD))
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(theme.text.muted)
+                    .py(Spacing::Large.pixels())
+                    .text_size(TextSize::Small.rems())
+                    .text_color(theme.colors.text_muted)
                     .text_center()
                     .child("No networks found"),
             )
@@ -149,8 +149,8 @@ pub fn render_wifi_section(
                     .bg(list_bg)
                     .border_1()
                     .border_color(list_border)
-                    .rounded(px(radius::SM))
-                    .py(px(spacing::XS))
+                    .rounded(Radius::Small.pixels())
+                    .py(Spacing::XSmall.pixels())
                     .children(aps.into_iter().enumerate().map(|(idx, ap)| {
                         let is_connected = connected_name.as_ref() == Some(&ap.ssid);
                         let is_entering_password = password_state.is_entering_for(&ap.ssid);
@@ -243,12 +243,12 @@ fn render_network_item(
     };
 
     // Pre-compute colors for closures
-    let accent_selection = theme.accent.selection;
-    let interactive_hover = theme.interactive.hover;
-    let accent_primary = theme.accent.primary;
-    let text_muted = theme.text.muted;
-    let text_primary = theme.text.primary;
-    let status_success = theme.status.success;
+    let accent_selection = theme.colors.element_selected;
+    let interactive_hover = theme.colors.element_hover;
+    let accent_primary = theme.colors.accent;
+    let text_muted = theme.colors.text_muted;
+    let text_primary = theme.colors.text;
+    let status_success = theme.colors.status.success;
 
     div()
         .id(ElementId::Name(SharedString::from(format!(
@@ -257,11 +257,11 @@ fn render_network_item(
         ))))
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
-        .px(px(spacing::SM))
-        .py(px(spacing::XS))
-        .rounded(px(radius::SM))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::XSmall.pixels())
+        .rounded(Radius::Small.pixels())
         .cursor_pointer()
         .when(connected, move |el| el.bg(accent_selection))
         .when(!connected, move |el| {
@@ -274,7 +274,7 @@ fn render_network_item(
         .child(
             div()
                 .id(format!("wifi-signal-{}", index))
-                .text_size(px(icon_size::SM))
+                .text_size(IconSize::XSmall.pixels())
                 .text_color(if connected {
                     accent_primary
                 } else {
@@ -290,7 +290,7 @@ fn render_network_item(
         .child(
             div()
                 .flex_1()
-                .text_size(theme.font_sizes.sm)
+                .text_size(TextSize::Small.rems())
                 .text_color(text_primary)
                 .overflow_hidden()
                 .child(ssid.to_string()),
@@ -299,7 +299,7 @@ fn render_network_item(
             el.child(
                 div()
                     .id(format!("wifi-known-{}", index))
-                    .text_size(px(icon_size::SM))
+                    .text_size(IconSize::XSmall.pixels())
                     .text_color(status_success)
                     .child(icons::CHECK)
                     .tooltip(control_center_tooltip("Saved network")),
@@ -310,7 +310,7 @@ fn render_network_item(
             el.child(
                 div()
                     .id(format!("wifi-lock-{}", index))
-                    .text_size(px(icon_size::SM))
+                    .text_size(IconSize::XSmall.pixels())
                     .text_color(if known { status_success } else { text_muted })
                     .child(icons::LOCK)
                     .tooltip(control_center_tooltip(lock_tooltip)),
@@ -320,7 +320,7 @@ fn render_network_item(
             el.child(
                 div()
                     .id(format!("wifi-connect-{}", index))
-                    .text_size(px(icon_size::SM))
+                    .text_size(IconSize::XSmall.pixels())
                     .text_color(text_muted)
                     .child(icons::CHEVRON_RIGHT)
                     .tooltip(control_center_tooltip("Connect")),
@@ -336,7 +336,7 @@ fn render_network_item(
                     ))))
                     .w(px(22.))
                     .h(px(22.))
-                    .rounded(px(radius::SM))
+                    .rounded(Radius::Small.pixels())
                     .flex()
                     .items_center()
                     .justify_center()
@@ -350,7 +350,7 @@ fn render_network_item(
                     })
                     .child(
                         div()
-                            .text_size(px(icon_size::SM))
+                            .text_size(IconSize::XSmall.pixels())
                             .text_color(status_success)
                             .child(icons::CLOSE),
                     ),
@@ -375,13 +375,13 @@ fn render_password_input(
     let password_line = render_masked_input_line(current_password, "Type password...", '•', cx);
 
     // Pre-compute colors for closures
-    let bg_tertiary = theme.bg.tertiary;
-    let bg_primary = theme.bg.primary;
-    let accent_primary = theme.accent.primary;
-    let accent_hover = theme.accent.hover;
-    let text_primary = theme.text.primary;
-    let text_muted = theme.text.muted;
-    let status_error = theme.status.error;
+    let bg_tertiary = theme.colors.elevated_surface_background;
+    let bg_primary = theme.colors.background;
+    let accent_primary = theme.colors.accent;
+    let accent_hover = theme.colors.accent;
+    let text_primary = theme.colors.text;
+    let text_muted = theme.colors.text_muted;
+    let status_error = theme.colors.status.error;
 
     div()
         .id(ElementId::Name(SharedString::from(format!(
@@ -390,28 +390,28 @@ fn render_password_input(
         ))))
         .flex()
         .flex_col()
-        .gap(px(spacing::XS))
+        .gap(Spacing::XSmall.pixels())
         .w_full()
-        .px(px(spacing::SM))
-        .py(px(spacing::SM))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::Medium.pixels())
         .bg(bg_tertiary)
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         // Network name header
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .child(
                     div()
-                        .text_size(px(icon_size::SM))
+                        .text_size(IconSize::XSmall.pixels())
                         .text_color(accent_primary)
                         .child(icons::WIFI_LOCK),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_size(theme.font_sizes.sm)
+                        .text_size(TextSize::Small.rems())
                         .text_color(text_primary)
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(ssid.to_string()),
@@ -419,7 +419,7 @@ fn render_password_input(
                 .child(
                     div()
                         .id(format!("wifi-cancel-{}", index))
-                        .text_size(px(icon_size::SM))
+                        .text_size(IconSize::XSmall.pixels())
                         .text_color(text_muted)
                         .cursor_pointer()
                         .hover(move |s| s.text_color(text_primary))
@@ -434,19 +434,19 @@ fn render_password_input(
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .child(
                     div()
                         .flex_1()
-                        .px(px(spacing::SM))
-                        .py(px(spacing::XS))
+                        .px(Spacing::Medium.pixels())
+                        .py(Spacing::XSmall.pixels())
                         .bg(bg_primary)
-                        .rounded(px(radius::SM))
+                        .rounded(Radius::Small.pixels())
                         .border_1()
                         .border_color(accent_primary)
                         .child(
                             div()
-                                .text_size(theme.font_sizes.sm)
+                                .text_size(TextSize::Small.rems())
                                 .text_color(text_primary)
                                 .child(password_line),
                         ),
@@ -454,10 +454,10 @@ fn render_password_input(
                 .child(
                     div()
                         .id(format!("wifi-connect-{}", index))
-                        .px(px(spacing::MD))
-                        .py(px(spacing::XS))
+                        .px(Spacing::Large.pixels())
+                        .py(Spacing::XSmall.pixels())
                         .bg(accent_primary)
-                        .rounded(px(radius::SM))
+                        .rounded(Radius::Small.pixels())
                         .cursor_pointer()
                         .hover(move |s| s.bg(accent_hover))
                         .when(connecting, |el| el.opacity(0.7))
@@ -468,7 +468,7 @@ fn render_password_input(
                         })
                         .child(
                             div()
-                                .text_size(theme.font_sizes.sm)
+                                .text_size(TextSize::Small.rems())
                                 .text_color(bg_primary)
                                 .child(if connecting {
                                     "Connecting..."
@@ -481,7 +481,7 @@ fn render_password_input(
         // Keyboard hints
         .child(
             div()
-                .text_size(theme.font_sizes.xs)
+                .text_size(TextSize::XSmall.rems())
                 .text_color(text_muted)
                 .child("Press Enter to connect, Escape to cancel"),
         )
@@ -489,7 +489,7 @@ fn render_password_input(
         .when_some(error, |el, err| {
             el.child(
                 div()
-                    .text_size(theme.font_sizes.xs)
+                    .text_size(TextSize::XSmall.rems())
                     .text_color(status_error)
                     .child(err.to_string()),
             )
@@ -502,9 +502,9 @@ pub fn render_refresh_button(cx: &App) -> impl IntoElement {
     let services = AppState::network(cx).clone();
 
     // Pre-compute colors for closures
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let text_muted = theme.text.muted;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let text_muted = theme.colors.text_muted;
 
     div()
         .id("wifi-refresh")
@@ -513,7 +513,7 @@ pub fn render_refresh_button(cx: &App) -> impl IntoElement {
         .justify_center()
         .w(px(24.))
         .h(px(24.))
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         .cursor_pointer()
         .bg(interactive_default)
         .hover(move |s| s.bg(interactive_hover))
@@ -526,7 +526,7 @@ pub fn render_refresh_button(cx: &App) -> impl IntoElement {
         })
         .child(
             div()
-                .text_size(px(icon_size::SM))
+                .text_size(IconSize::XSmall.pixels())
                 .text_color(text_muted)
                 .child(icons::REFRESH),
         )

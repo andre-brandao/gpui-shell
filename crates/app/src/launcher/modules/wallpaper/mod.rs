@@ -11,8 +11,8 @@ use std::sync::{
 use gpui::{AnyElement, App, div, img, prelude::*, px};
 use services::WallpaperCommand;
 use ui::{
-    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, Switch,
-    SwitchSize, spacing,
+    ActiveTheme, Color, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, Switch, SwitchSize,
+    TextSize,
 };
 
 use self::config::WallpaperConfig;
@@ -63,7 +63,7 @@ impl WallpaperView {
         matugen_source_color_index: usize,
         cx: &mut App,
     ) {
-        use ui::{Base16Colors, Theme};
+        use ui::{Base16Palette, Theme};
 
         // Always set the wallpaper first
         AppState::wallpaper(cx).dispatch(WallpaperCommand::SetWallpaper(path.clone()));
@@ -82,7 +82,7 @@ impl WallpaperView {
                 let result = cx
                     .background_executor()
                     .spawn(async move {
-                        Base16Colors::generate_from_wallpaper(
+                        Base16Palette::generate_from_wallpaper(
                             &path,
                             mode,
                             &scheme_type,
@@ -92,10 +92,13 @@ impl WallpaperView {
                     .await;
 
                 match result {
-                    Ok(theme) => {
-                        tracing::debug!("Matugen theme generated for: {}", path_display);
-                        // Apply the generated theme
+                    Ok(palette) => {
+                        tracing::debug!("Matugen palette generated for: {}", path_display);
+                        // Swap in the generated palette, keeping the user's
+                        // font size and any token overrides.
                         cx.update(|cx| {
+                            let mut theme = cx.theme().clone();
+                            theme.set_palette("Wallpaper", palette);
                             Theme::set(theme, cx);
                         });
                     }
@@ -188,11 +191,11 @@ impl LauncherView for WallpaperView {
 
     fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
         let theme = cx.theme();
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-        let accent_primary = theme.accent.primary;
-        let bg_secondary = theme.bg.secondary;
-        let border = theme.border.default;
+        let text_primary = theme.colors.text;
+        let text_muted = theme.colors.text_muted;
+        let accent_primary = theme.colors.accent;
+        let bg_secondary = theme.colors.surface_background;
+        let border = theme.colors.border;
 
         let enabled = self.matugen_enabled.load(Ordering::Relaxed);
         let dark_mode = self.matugen_dark_mode.load(Ordering::Relaxed);
@@ -213,13 +216,13 @@ impl LauncherView for WallpaperView {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .px(px(spacing::LG))
-                        .py(px(spacing::MD))
+                        .px(Spacing::XLarge.pixels())
+                        .py(Spacing::Large.pixels())
                         .child(
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(spacing::MD))
+                                .gap(Spacing::Large.pixels())
                                 // Icon indicator
                                 .child(
                                     div()
@@ -232,10 +235,10 @@ impl LauncherView for WallpaperView {
                                         .bg(if enabled {
                                             accent_primary
                                         } else {
-                                            theme.interactive.default
+                                            theme.colors.element_background
                                         })
                                         .text_color(if enabled {
-                                            theme.bg.primary
+                                            theme.colors.background
                                         } else {
                                             text_muted
                                         })
@@ -277,19 +280,23 @@ impl LauncherView for WallpaperView {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .px(px(spacing::LG))
-                            .pb(px(spacing::MD))
-                            .pt(px(spacing::XS))
+                            .px(Spacing::XLarge.pixels())
+                            .pb(Spacing::Large.pixels())
+                            .pt(Spacing::XSmall.pixels())
                             .child(
-                                div().flex().items_center().gap(px(spacing::SM)).child(
-                                    div().text_color(text_muted).text_xs().child("Theme Mode"),
-                                ),
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(Spacing::Medium.pixels())
+                                    .child(
+                                        div().text_color(text_muted).text_xs().child("Theme Mode"),
+                                    ),
                             )
                             .child(
                                 div()
                                     .flex()
                                     .items_center()
-                                    .gap(px(spacing::SM))
+                                    .gap(Spacing::Medium.pixels())
                                     .child(
                                         div()
                                             .text_color(if dark_mode {
@@ -335,7 +342,7 @@ impl LauncherView for WallpaperView {
         let theme = cx.theme();
         let path_for_click = entry.path.clone();
         let preview_path = entry.path.clone();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
 
         // Clone Arc fields for closure
         let matugen_enabled = Arc::clone(&self.matugen_enabled);
@@ -377,10 +384,10 @@ impl LauncherView for WallpaperView {
                     .flex()
                     .flex_col()
                     .gap(px(1.))
-                    .child(Label::new(entry.name.clone()).size(LabelSize::Default))
+                    .child(Label::new(entry.name.clone()).size(TextSize::Default))
                     .child(
                         Label::new(extension)
-                            .size(LabelSize::XSmall)
+                            .size(TextSize::XSmall)
                             .color(Color::Muted),
                     ),
             )

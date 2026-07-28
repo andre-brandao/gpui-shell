@@ -7,7 +7,7 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     point, prelude::*, px,
 };
-use ui::{ActiveTheme, spacing};
+use ui::{ActiveTheme, Spacing, TextSize};
 
 use super::config::BarPosition;
 use super::modules::{Widget, style};
@@ -86,7 +86,8 @@ impl Bar {
 }
 
 impl Render for Bar {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_rem_size(cx.theme().font_size);
         let theme = cx.theme();
         let bar = &cx.config().bar;
         let is_vertical = self.position.is_vertical();
@@ -100,17 +101,17 @@ impl Render for Bar {
         let root = div()
             .size_full()
             .flex()
-            .text_size(theme.font_sizes.sm)
+            .text_size(TextSize::Small.rems())
             .font_weight(FontWeight::MEDIUM)
-            .text_color(theme.text.primary)
-            .bg(theme.bg.primary)
-            .border_color(theme.border.default);
+            .text_color(theme.colors.text)
+            .bg(theme.colors.background)
+            .border_color(theme.colors.border);
 
         if is_vertical {
             root.flex_col()
                 .items_center()
                 .px(px(1.0))
-                .py(px(spacing::SM))
+                .py(Spacing::Medium.pixels())
                 .when(
                     bar.show_border && matches!(self.position, BarPosition::Left),
                     |this| this.border_r_1(),

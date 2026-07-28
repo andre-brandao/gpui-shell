@@ -19,7 +19,7 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     prelude::*, px,
 };
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::{ActiveTheme, IconSize, Radius, Spacing};
 
 use crate::config::Config;
 use crate::control_center::icons;
@@ -92,19 +92,19 @@ impl OsdView {
         let (icon, level, muted) = self.icon_and_level();
 
         let fill_color = if muted {
-            theme.status.error
+            theme.colors.status.error
         } else if level > 100 {
-            theme.status.warning
+            theme.colors.status.warning
         } else {
-            theme.accent.primary
+            theme.colors.accent
         };
 
         let bar_fill_pct = (level as f32 / 100.0).min(1.0);
 
         let icon_color = if muted {
-            theme.status.error
+            theme.colors.status.error
         } else {
-            theme.text.primary
+            theme.colors.text
         };
 
         div()
@@ -116,17 +116,17 @@ impl OsdView {
                 div()
                     .w(px(OSD_LONG - 16.0))
                     .h(px(OSD_SHORT - 16.0))
-                    .px(px(spacing::MD))
-                    .bg(theme.bg.primary)
+                    .px(Spacing::Large.pixels())
+                    .bg(theme.colors.background)
                     .border_1()
-                    .border_color(theme.border.default)
-                    .rounded(px(radius::LG))
+                    .border_color(theme.colors.border)
+                    .rounded(Radius::Large.pixels())
                     .flex()
                     .items_center()
-                    .gap(px(spacing::MD))
+                    .gap(Spacing::Large.pixels())
                     .child(
                         div()
-                            .text_size(px(icon_size::XL))
+                            .text_size(IconSize::Large.pixels())
                             .text_color(icon_color)
                             .child(icon),
                     )
@@ -134,7 +134,7 @@ impl OsdView {
                         div()
                             .flex_1()
                             .h(px(6.0))
-                            .bg(theme.bg.tertiary)
+                            .bg(theme.colors.elevated_surface_background)
                             .rounded(px(3.0))
                             .overflow_hidden()
                             .child(
@@ -149,7 +149,7 @@ impl OsdView {
                         div()
                             .w(px(36.0))
                             .text_size(px(12.0))
-                            .text_color(theme.text.secondary)
+                            .text_color(theme.colors.text)
                             .text_right()
                             .child(format!("{}%", level)),
                     ),
@@ -161,19 +161,19 @@ impl OsdView {
         let (icon, level, muted) = self.icon_and_level();
 
         let fill_color = if muted {
-            theme.status.error
+            theme.colors.status.error
         } else if level > 100 {
-            theme.status.warning
+            theme.colors.status.warning
         } else {
-            theme.accent.primary
+            theme.colors.accent
         };
 
         let bar_fill_pct = (level as f32 / 100.0).min(1.0);
 
         let icon_color = if muted {
-            theme.status.error
+            theme.colors.status.error
         } else {
-            theme.text.primary
+            theme.colors.text
         };
 
         div()
@@ -185,20 +185,20 @@ impl OsdView {
                 div()
                     .w(px(OSD_SHORT - 16.0))
                     .h(px(OSD_LONG - 16.0))
-                    .py(px(spacing::MD))
-                    .bg(theme.bg.primary)
+                    .py(Spacing::Large.pixels())
+                    .bg(theme.colors.background)
                     .border_1()
-                    .border_color(theme.border.default)
-                    .rounded(px(radius::LG))
+                    .border_color(theme.colors.border)
+                    .rounded(Radius::Large.pixels())
                     .flex()
                     .flex_col()
                     .items_center()
-                    .gap(px(spacing::MD))
+                    .gap(Spacing::Large.pixels())
                     // Percentage at top
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(theme.text.secondary)
+                            .text_color(theme.colors.text)
                             .child(format!("{}%", level)),
                     )
                     // Vertical progress bar (grows upward from bottom)
@@ -206,7 +206,7 @@ impl OsdView {
                         div()
                             .flex_1()
                             .w(px(6.0))
-                            .bg(theme.bg.tertiary)
+                            .bg(theme.colors.elevated_surface_background)
                             .rounded(px(3.0))
                             .overflow_hidden()
                             .flex()
@@ -223,7 +223,7 @@ impl OsdView {
                     // Icon at bottom
                     .child(
                         div()
-                            .text_size(px(icon_size::XL))
+                            .text_size(IconSize::Large.pixels())
                             .text_color(icon_color)
                             .child(icon),
                     ),
@@ -232,7 +232,8 @@ impl OsdView {
 }
 
 impl Render for OsdView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_rem_size(cx.theme().font_size);
         if self.position.is_vertical() {
             self.render_vertical(cx).into_any_element()
         } else {

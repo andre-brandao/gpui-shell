@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{Context, MouseButton, Render, ScrollHandle, Window, div, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
@@ -49,11 +49,11 @@ impl Render for NotificationCenter {
                     div()
                         .relative()
                         .w_full()
-                        .p(px(spacing::SM))
-                        .rounded(px(radius::LG))
-                        .bg(theme.bg.primary)
+                        .p(Spacing::Medium.pixels())
+                        .rounded(Radius::Large.pixels())
+                        .bg(theme.colors.background)
                         .border_1()
-                        .border_color(theme.border.default)
+                        .border_color(theme.colors.border)
                         .child(notification_card_body(&item, cx, true, &self.subscriber))
                         .child(
                             div()
@@ -61,8 +61,8 @@ impl Render for NotificationCenter {
                                 .top(px(8.0))
                                 .right(px(8.0))
                                 .cursor_pointer()
-                                .text_size(theme.font_sizes.sm)
-                                .text_color(theme.text.muted)
+                                .text_size(TextSize::Small.rems())
+                                .text_color(theme.colors.text_muted)
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |_, _, _, _cx| {
@@ -78,9 +78,9 @@ impl Render for NotificationCenter {
                 .into_any_element()
         } else {
             div()
-                .py(px(spacing::XL))
-                .text_size(theme.font_sizes.sm)
-                .text_color(theme.text.muted)
+                .py(Spacing::XXXLarge.pixels())
+                .text_size(TextSize::Small.rems())
+                .text_color(theme.colors.text_muted)
                 .text_center()
                 .child("No notifications")
                 .into_any_element()
@@ -89,14 +89,14 @@ impl Render for NotificationCenter {
         div()
             .id("notification-center")
             .size_full()
-            .bg(theme.bg.primary)
+            .bg(theme.colors.background)
             .border_1()
-            .border_color(theme.border.default)
-            .rounded(px(radius::LG))
-            .p(px(spacing::SM))
+            .border_color(theme.colors.border)
+            .rounded(Radius::Large.pixels())
+            .p(Spacing::Medium.pixels())
             .flex()
             .flex_col()
-            .gap(px(spacing::SM))
+            .gap(Spacing::Medium.pixels())
             .child(
                 div()
                     .flex()
@@ -104,23 +104,23 @@ impl Render for NotificationCenter {
                     .justify_between()
                     .child(
                         div()
-                            .text_size(theme.font_sizes.sm)
-                            .text_color(theme.text.primary)
+                            .text_size(TextSize::Small.rems())
+                            .text_color(theme.colors.text)
                             .child("Notifications"),
                     )
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .child(
                                 div()
                                     .cursor_pointer()
-                                    .text_size(theme.font_sizes.sm)
+                                    .text_size(TextSize::Small.rems())
                                     .text_color(if dnd_enabled {
-                                        theme.accent.primary
+                                        theme.colors.accent
                                     } else {
-                                        theme.text.secondary
+                                        theme.colors.text
                                     })
                                     .on_mouse_down(
                                         MouseButton::Left,
@@ -136,8 +136,8 @@ impl Render for NotificationCenter {
                             .child(
                                 div()
                                     .cursor_pointer()
-                                    .text_size(theme.font_sizes.sm)
-                                    .text_color(theme.text.secondary)
+                                    .text_size(TextSize::Small.rems())
+                                    .text_color(theme.colors.text)
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(move |_, _, _, _cx| {
@@ -159,7 +159,7 @@ impl Render for NotificationCenter {
                     .track_scroll(&self.scroll_handle)
                     .flex()
                     .flex_col()
-                    .gap(px(spacing::XS))
+                    .gap(Spacing::XSmall.pixels())
                     .child(list_content),
             )
     }

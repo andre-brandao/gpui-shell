@@ -59,19 +59,19 @@ impl Battery {
         match &self.data.battery {
             Some(battery) => {
                 if battery.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if battery.is_low() {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else if matches!(
                     battery.state,
                     BatteryState::Charging | BatteryState::FullyCharged
                 ) {
-                    theme.status.success
+                    theme.colors.status.success
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             }
-            None => theme.text.muted,
+            None => theme.colors.text_muted,
         }
     }
 
@@ -79,16 +79,16 @@ impl Battery {
         match &self.data.battery {
             Some(battery) => {
                 if battery.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if battery.is_low() {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else if battery.is_charging() {
-                    theme.status.info
+                    theme.colors.status.info
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             }
-            None => theme.text.muted,
+            None => theme.colors.text_muted,
         }
     }
 
@@ -107,7 +107,7 @@ impl Battery {
 
     fn render_battery_content(
         &self,
-        theme: &ui::Theme,
+        _theme: &ui::Theme,
         view: BatteryView,
         is_vertical: bool,
     ) -> AnyElement {
@@ -129,13 +129,13 @@ impl Battery {
                 this.child(if is_vertical {
                     style::vertical_text_line(
                         div()
-                            .text_size(style::label_size(theme, is_vertical))
+                            .text_size(style::label_size(is_vertical).rems())
                             .text_color(view.text_color)
                             .child(view.text),
                     )
                 } else {
                     div()
-                        .text_size(style::label_size(theme, is_vertical))
+                        .text_size(style::label_size(is_vertical).rems())
                         .text_color(view.text_color)
                         .child(view.text)
                         .into_any_element()

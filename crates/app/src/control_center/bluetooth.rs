@@ -5,7 +5,7 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{BluetoothCommand, BluetoothDevice};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 use crate::state::AppState;
 use zbus::zvariant::OwnedObjectPath;
@@ -18,8 +18,8 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
     let bluetooth = AppState::bluetooth(cx).get();
     let services_clone = AppState::bluetooth(cx).clone();
     let discovering = bluetooth.discovering;
-    let list_bg = theme.bg.primary;
-    let list_border = theme.border.subtle;
+    let list_bg = theme.colors.background;
+    let list_border = theme.colors.border_variant;
 
     // Sort devices: connected first, then by name
     let mut devices: Vec<BluetoothDevice> = bluetooth.devices.clone();
@@ -40,7 +40,7 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
         .w_full()
         .flex()
         .flex_col()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .child(
             // Section header
             div()
@@ -51,17 +51,17 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
-                                .text_size(px(icon_size::SM))
-                                .text_color(theme.text.muted)
+                                .text_size(IconSize::XSmall.pixels())
+                                .text_color(theme.colors.text)
                                 .child(icons::BLUETOOTH),
                         )
                         .child(
                             div()
-                                .text_size(theme.font_sizes.sm)
-                                .text_color(theme.text.secondary)
+                                .text_size(TextSize::Small.rems())
+                                .text_color(theme.colors.text)
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .child("Bluetooth"),
                         ),
@@ -71,17 +71,17 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
         .when(discovering, |el| {
             el.child(
                 div()
-                    .text_size(theme.font_sizes.xs)
-                    .text_color(theme.text.muted)
+                    .text_size(TextSize::XSmall.rems())
+                    .text_color(theme.colors.text_muted)
                     .child("Scanning..."),
             )
         })
         .when(devices.is_empty(), |el| {
             el.child(
                 div()
-                    .py(px(spacing::MD))
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(theme.text.muted)
+                    .py(Spacing::Large.pixels())
+                    .text_size(TextSize::Small.rems())
+                    .text_color(theme.colors.text_muted)
                     .text_center()
                     .child("No paired devices"),
             )
@@ -98,8 +98,8 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                     .bg(list_bg)
                     .border_1()
                     .border_color(list_border)
-                    .rounded(px(radius::SM))
-                    .py(px(spacing::XS))
+                    .rounded(Radius::Small.pixels())
+                    .py(Spacing::XSmall.pixels())
                     .children(devices.into_iter().enumerate().map(|(idx, device)| {
                         let services_connect = services_clone.clone();
                         let services_disconnect = services_clone.clone();
@@ -165,12 +165,12 @@ fn render_device_item(
     let paired = device.paired;
 
     // Pre-compute colors for use in closures
-    let accent_selection = theme.accent.selection;
-    let interactive_hover = theme.interactive.hover;
-    let accent_primary = theme.accent.primary;
-    let text_muted = theme.text.muted;
-    let text_primary = theme.text.primary;
-    let status_success = theme.status.success;
+    let accent_selection = theme.colors.element_selected;
+    let interactive_hover = theme.colors.element_hover;
+    let accent_primary = theme.colors.accent;
+    let text_muted = theme.colors.text_muted;
+    let text_primary = theme.colors.text;
+    let status_success = theme.colors.status.success;
 
     let on_connect_click = on_connect.clone();
     let on_pair_click = on_pair.clone();
@@ -182,11 +182,11 @@ fn render_device_item(
         ))))
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
-        .px(px(spacing::SM))
-        .py(px(spacing::XS))
-        .rounded(px(radius::SM))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::XSmall.pixels())
+        .rounded(Radius::Small.pixels())
         .cursor_pointer()
         .when(connected, |el| el.bg(accent_selection))
         .when(!connected, |el| el.hover(move |s| s.bg(interactive_hover)))
@@ -208,7 +208,7 @@ fn render_device_item(
         .child(
             div()
                 .id(format!("bt-device-icon-{}", index))
-                .text_size(px(icon_size::SM))
+                .text_size(IconSize::XSmall.pixels())
                 .text_color(if connected {
                     accent_primary
                 } else {
@@ -221,7 +221,7 @@ fn render_device_item(
         .child(
             div()
                 .flex_1()
-                .text_size(theme.font_sizes.sm)
+                .text_size(TextSize::Small.rems())
                 .text_color(text_primary)
                 .overflow_hidden()
                 .child(name),
@@ -230,7 +230,7 @@ fn render_device_item(
             el.child(
                 div()
                     .id(format!("bt-paired-{}", index))
-                    .text_size(px(icon_size::SM))
+                    .text_size(IconSize::XSmall.pixels())
                     .text_color(status_success)
                     .child(icons::CHECK)
                     .tooltip(control_center_tooltip("Paired")),
@@ -280,7 +280,7 @@ fn render_device_actions(
             .id(ElementId::Name(SharedString::from(id)))
             .w(px(22.))
             .h(px(22.))
-            .rounded(px(radius::SM))
+            .rounded(Radius::Small.pixels())
             .flex()
             .items_center()
             .justify_center()
@@ -291,7 +291,7 @@ fn render_device_actions(
             })
             .child(
                 div()
-                    .text_size(px(icon_size::SM))
+                    .text_size(IconSize::XSmall.pixels())
                     .text_color(color)
                     .child(icon),
             )
@@ -360,11 +360,11 @@ fn render_device_actions(
 fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let color = if level <= 20 {
-        theme.status.error
+        theme.colors.status.error
     } else if level <= 40 {
-        theme.status.warning
+        theme.colors.status.warning
     } else {
-        theme.text.muted
+        theme.colors.text_muted
     };
 
     let icon = icons::battery_icon(level, false);
@@ -377,13 +377,13 @@ fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoEleme
         .tooltip(control_center_tooltip(format!("Battery: {}%", level)))
         .child(
             div()
-                .text_size(px(icon_size::SM))
+                .text_size(IconSize::XSmall.pixels())
                 .text_color(color)
                 .child(icon),
         )
         .child(
             div()
-                .text_size(theme.font_sizes.xs)
+                .text_size(TextSize::XSmall.rems())
                 .text_color(color)
                 .child(format!("{}%", level)),
         )
@@ -455,12 +455,12 @@ fn render_scan_button(discovering: bool, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let services = AppState::bluetooth(cx).clone();
 
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let interactive_toggle_on = theme.interactive.toggle_on;
-    let interactive_toggle_on_hover = theme.interactive.toggle_on_hover;
-    let bg_primary = theme.bg.primary;
-    let text_muted = theme.text.muted;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let interactive_toggle_on = theme.colors.accent;
+    let interactive_toggle_on_hover = theme.colors.accent;
+    let bg_primary = theme.colors.background;
+    let text_muted = theme.colors.text_muted;
 
     let bg_color = if discovering {
         interactive_toggle_on
@@ -481,7 +481,7 @@ fn render_scan_button(discovering: bool, cx: &App) -> impl IntoElement {
         .justify_center()
         .w(px(24.))
         .h(px(24.))
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         .cursor_pointer()
         .bg(bg_color)
         .hover(move |s| s.bg(hover_color))
@@ -498,7 +498,7 @@ fn render_scan_button(discovering: bool, cx: &App) -> impl IntoElement {
         })
         .child(
             div()
-                .text_size(px(icon_size::SM))
+                .text_size(IconSize::XSmall.pixels())
                 .text_color(icon_color)
                 .child(icons::REFRESH),
         )

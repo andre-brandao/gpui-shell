@@ -31,7 +31,7 @@ use gpui::{
 };
 use services::{AudioCommand, BrightnessCommand, NetworkCommand, UPowerCommand};
 use std::rc::Rc;
-use ui::{ActiveTheme, Slider, SliderEvent, icon_size, radius, spacing};
+use ui::{ActiveTheme, IconSize, Radius, Slider, SliderEvent, Spacing, TextSize};
 
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
@@ -297,7 +297,7 @@ impl Render for ControlCenter {
             let bounds = display.visible_bounds();
             let visible_width: f32 = bounds.size.width.into();
             let visible_height: f32 = bounds.size.height.into();
-            let gutter = spacing::SM * 2.0;
+            let gutter = Spacing::Medium.value() * 2.0;
             let max_width = (visible_width - gutter).max(240.0);
             let max_height_value = (visible_height - gutter).max(240.0);
 
@@ -311,13 +311,13 @@ impl Render for ControlCenter {
             let upower = AppState::upower(cx).get();
             let brightness_state = AppState::brightness(cx).get();
             let show_brightness = brightness_state.max != 0;
-            let bg_secondary = theme.bg.secondary;
-            let border_subtle = theme.border.subtle;
-            let interactive_default = theme.interactive.default;
-            let interactive_hover = theme.interactive.hover;
-            let text_primary = theme.text.primary;
-            let text_muted = theme.text.muted;
-            let accent_primary = theme.accent.primary;
+            let bg_secondary = theme.colors.surface_background;
+            let border_subtle = theme.colors.border_variant;
+            let interactive_default = theme.colors.element_background;
+            let interactive_hover = theme.colors.element_hover;
+            let text_primary = theme.colors.text;
+            let text_muted = theme.colors.text_muted;
+            let accent_primary = theme.colors.accent;
 
             let battery = upower.battery.as_ref();
             let battery_icon = battery.map(|b| b.icon()).unwrap_or(icons::BATTERY_FULL);
@@ -341,16 +341,16 @@ impl Render for ControlCenter {
                 .unwrap_or_else(|| "No battery".to_string());
             let battery_color = if let Some(b) = battery {
                 if b.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if b.is_charging() {
-                    theme.status.success
+                    theme.colors.status.success
                 } else if b.percentage <= 20 {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             } else {
-                theme.text.muted
+                theme.colors.text_muted
             };
 
             let on_toggle_section_cb = {
@@ -395,15 +395,15 @@ impl Render for ControlCenter {
                 .track_focus(&self.focus_handle)
                 .key_context("ControlCenter")
                 .w_full()
-                .p(px(spacing::MD))
-                .bg(theme.bg.primary)
+                .p(Spacing::Large.pixels())
+                .bg(theme.colors.background)
                 .border_1()
-                .border_color(theme.border.default)
-                .rounded(px(radius::LG))
-                .text_color(theme.text.primary)
+                .border_color(theme.colors.border)
+                .rounded(Radius::Large.pixels())
+                .text_color(theme.colors.text)
                 .flex()
                 .flex_col()
-                .gap(px(spacing::MD))
+                .gap(Spacing::Large.pixels())
                 // Keyboard event handling for password input
                 .on_action({
                     let entity = entity.clone();
@@ -621,28 +621,28 @@ impl Render for ControlCenter {
                         .id("control-center-header")
                         .flex()
                         .items_center()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
                                 .flex_1()
                                 .flex()
                                 .items_center()
-                                .gap(px(spacing::SM))
-                                .px(px(spacing::SM))
-                                .py(px(spacing::XS))
+                                .gap(Spacing::Medium.pixels())
+                                .px(Spacing::Medium.pixels())
+                                .py(Spacing::XSmall.pixels())
                                 .bg(bg_secondary)
                                 .border_1()
                                 .border_color(border_subtle)
-                                .rounded(px(radius::MD))
+                                .rounded(Radius::Medium.pixels())
                                 .child(
                                     div()
                                         .flex_1()
                                         .flex()
                                         .items_center()
-                                        .gap(px(spacing::SM))
+                                        .gap(Spacing::Medium.pixels())
                                         .child(
                                             div()
-                                                .text_size(px(icon_size::LG))
+                                                .text_size(IconSize::Medium.pixels())
                                                 .text_color(battery_color)
                                                 .child(battery_icon),
                                         )
@@ -653,13 +653,13 @@ impl Render for ControlCenter {
                                                 .gap(px(2.))
                                                 .child(
                                                     div()
-                                                        .text_size(theme.font_sizes.sm)
+                                                        .text_size(TextSize::Small.rems())
                                                         .text_color(text_primary)
                                                         .child(battery_line),
                                                 )
                                                 .child(
                                                     div()
-                                                        .text_size(theme.font_sizes.xs)
+                                                        .text_size(TextSize::XSmall.rems())
                                                         .text_color(text_muted)
                                                         .child(battery_sub),
                                                 ),
@@ -676,7 +676,7 @@ impl Render for ControlCenter {
                                         .bg(interactive_default)
                                         .border_1()
                                         .border_color(border_subtle)
-                                        .rounded(px(radius::MD))
+                                        .rounded(Radius::Medium.pixels())
                                         .cursor_pointer()
                                         .hover(move |s| s.bg(interactive_hover))
                                         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -684,7 +684,7 @@ impl Render for ControlCenter {
                                         })
                                         .child(
                                             div()
-                                                .text_size(px(icon_size::SM))
+                                                .text_size(IconSize::XSmall.pixels())
                                                 .text_color(text_primary)
                                                 .child(upower.power_profile.icon()),
                                         ),
@@ -713,7 +713,7 @@ impl Render for ControlCenter {
                                 })
                                 .child(
                                     div()
-                                        .text_size(px(icon_size::MD))
+                                        .text_size(IconSize::Small.pixels())
                                         .text_color(text_primary)
                                         .child(icons::POWER_BUTTON),
                                 ),
@@ -722,22 +722,22 @@ impl Render for ControlCenter {
                 .child(
                     div()
                         .id("control-center-volume")
-                        .p(px(spacing::SM))
+                        .p(Spacing::Medium.pixels())
                         .bg(bg_secondary)
                         .border_1()
                         .border_color(border_subtle)
-                        .rounded(px(radius::MD))
+                        .rounded(Radius::Medium.pixels())
                         .child(sliders::render_volume_slider(&self.volume_slider, cx)),
                 )
                 .when(show_brightness, |el| {
                     el.child(
                         div()
                             .id("control-center-brightness")
-                            .p(px(spacing::SM))
+                            .p(Spacing::Medium.pixels())
                             .bg(bg_secondary)
                             .border_1()
                             .border_color(border_subtle)
-                            .rounded(px(radius::MD))
+                            .rounded(Radius::Medium.pixels())
                             .child(sliders::render_brightness_slider(
                                 &self.brightness_slider,
                                 cx,
@@ -754,14 +754,14 @@ impl Render for ControlCenter {
                         div()
                             .id("control-center-dropdown")
                             .w_full()
-                            .p(px(spacing::SM))
+                            .p(Spacing::Medium.pixels())
                             .bg(bg_secondary)
                             .border_1()
                             .border_color(border_subtle)
-                            .rounded(px(radius::MD))
+                            .rounded(Radius::Medium.pixels())
                             .flex()
                             .flex_col()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .when(expanded == ExpandedSection::WiFi, |el| {
                                 el.child(wifi::render_wifi_section(
                                     &self.wifi_password,

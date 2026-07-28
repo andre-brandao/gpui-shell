@@ -3,7 +3,7 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, img, prelude::*, px};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
+use ui::{ActiveTheme, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize};
 
 use self::config::AppsConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
@@ -57,7 +57,7 @@ impl LauncherView for AppsView {
 
         let theme = cx.theme();
         let exec = app.exec.clone();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
         let fallback_icon = self.icon();
         ListItem::new(format!("app-{}", app.name))
             .spacing(ListItemSpacing::Sparse)
@@ -88,11 +88,11 @@ impl LauncherView for AppsView {
                     .flex()
                     .flex_col()
                     .gap(px(1.))
-                    .child(Label::new(app.name.clone()).size(LabelSize::Default))
+                    .child(Label::new(app.name.clone()).size(TextSize::Default))
                     .when_some(app.description.as_ref(), |el, desc| {
                         el.child(
                             Label::new(desc.clone())
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         )
                     }),

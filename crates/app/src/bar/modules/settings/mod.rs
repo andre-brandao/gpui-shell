@@ -258,16 +258,16 @@ impl Settings {
         match &self.upower.battery {
             Some(battery) => {
                 if battery.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if battery.is_low() {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else if battery.is_charging() {
-                    theme.status.success
+                    theme.colors.status.success
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             }
-            None => theme.text.muted,
+            None => theme.colors.text_muted,
         }
     }
 
@@ -298,7 +298,7 @@ impl Settings {
 
     fn render_battery_block(
         &self,
-        theme: &ui::Theme,
+        _theme: &ui::Theme,
         view: &SettingsView,
         is_vertical: bool,
     ) -> AnyElement {
@@ -317,13 +317,13 @@ impl Settings {
                 el.child(if is_vertical {
                     style::vertical_text_line(
                         div()
-                            .text_size(style::label_size(theme, is_vertical))
+                            .text_size(style::label_size(is_vertical).rems())
                             .text_color(view.battery_color)
                             .child(view.battery_text.clone()),
                     )
                 } else {
                     div()
-                        .text_size(style::label_size(theme, is_vertical))
+                        .text_size(style::label_size(is_vertical).rems())
                         .text_color(view.battery_color)
                         .child(view.battery_text.clone())
                         .into_any_element()
@@ -357,37 +357,30 @@ impl BarWidget for Settings {
                 }),
             )
             // Privacy icons (red, only shown when active)
-            .children(
-                view.privacy_icons
-                    .iter()
-                    .copied()
-                    .map(move |icon| Self::render_status_icon(icon, icon_size, theme.status.error)),
-            )
+            .children(view.privacy_icons.iter().copied().map(move |icon| {
+                Self::render_status_icon(icon, icon_size, theme.colors.status.error)
+            }))
             // Volume icon
             .child(Self::render_status_icon(
                 view.volume_icon,
                 icon_size,
-                theme.text.primary,
+                theme.colors.text,
             ))
             // Network icon
             .child(Self::render_status_icon(
                 view.network_icon,
                 icon_size,
-                theme.text.primary,
+                theme.colors.text,
             ))
             // Bluetooth icon (only when connected)
             .when_some(view.bluetooth_icon, |el, icon| {
-                el.child(Self::render_status_icon(
-                    icon,
-                    icon_size,
-                    theme.text.primary,
-                ))
+                el.child(Self::render_status_icon(icon, icon_size, theme.colors.text))
             })
             // Power profile icon
             .child(Self::render_status_icon(
                 view.power_profile_icon,
                 icon_size,
-                theme.text.primary,
+                theme.colors.text,
             ))
             // Battery icon and percentage
             .child(self.render_battery_block(theme, &view, true))
@@ -413,31 +406,24 @@ impl BarWidget for Settings {
                     this.toggle_panel(event, window, cx);
                 }),
             )
-            .children(
-                view.privacy_icons
-                    .iter()
-                    .copied()
-                    .map(move |icon| Self::render_status_icon(icon, icon_size, theme.status.error)),
-            )
+            .children(view.privacy_icons.iter().copied().map(move |icon| {
+                Self::render_status_icon(icon, icon_size, theme.colors.status.error)
+            }))
             .when(!view.privacy_icons.is_empty(), |el| {
                 el.child(style::section_divider(divider_color))
             })
             .child(Self::render_status_icon(
                 view.volume_icon,
                 icon_size,
-                theme.text.primary,
+                theme.colors.text,
             ))
             .child(Self::render_status_icon(
                 view.network_icon,
                 icon_size,
-                theme.text.primary,
+                theme.colors.text,
             ))
             .when_some(view.bluetooth_icon, |el, icon| {
-                el.child(Self::render_status_icon(
-                    icon,
-                    icon_size,
-                    theme.text.primary,
-                ))
+                el.child(Self::render_status_icon(icon, icon_size, theme.colors.text))
             })
             .child(style::section_divider(divider_color))
             .child(self.render_battery_block(theme, &view, false))

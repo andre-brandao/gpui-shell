@@ -51,7 +51,7 @@ pub use base16::Base16Palette;
 pub use colors::{Color, StatusColors, ThemeColors};
 pub use refinement::{StatusColorsRefinement, ThemeColorsRefinement};
 pub use schemes::{ThemeScheme, builtin_schemes};
-pub use tokens::{Radius, Spacing, TextSize};
+pub use tokens::{IconSize, Radius, Spacing, TextSize};
 
 /// Whether a theme is a light or a dark variant.
 ///

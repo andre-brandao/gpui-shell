@@ -17,7 +17,7 @@ pub use traits::styled_ext::StyledExt;
 
 // Theme
 pub use theme::{
-    ActiveTheme, Appearance, Base16Palette, Color, Radius, Spacing, StatusColors,
+    ActiveTheme, Appearance, Base16Palette, Color, IconSize, Radius, Spacing, StatusColors,
     StatusColorsRefinement, StoredTheme, TextSize, Theme, ThemeColors, ThemeColorsRefinement,
     ThemeScheme, builtin_schemes,
 };

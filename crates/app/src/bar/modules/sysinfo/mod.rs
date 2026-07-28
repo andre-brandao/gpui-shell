@@ -129,7 +129,7 @@ impl SysInfo {
             stats.push(SysInfoStat {
                 icon: self.cpu_icon(),
                 text: Self::usage_text(cpu_usage, is_vertical),
-                color: theme.status.from_percentage(cpu_usage),
+                color: theme.colors.status.from_percentage(cpu_usage),
             });
         }
 
@@ -138,7 +138,7 @@ impl SysInfo {
             stats.push(SysInfoStat {
                 icon: self.memory_icon(),
                 text: Self::usage_text(memory_usage, is_vertical),
-                color: theme.status.from_percentage(memory_usage),
+                color: theme.colors.status.from_percentage(memory_usage),
             });
         }
 
@@ -156,7 +156,7 @@ impl SysInfo {
                 } else {
                     format!("{temp}°C")
                 },
-                color: theme.status.from_temperature(temp),
+                color: theme.colors.status.from_temperature(temp),
             });
         }
 

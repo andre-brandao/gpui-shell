@@ -6,7 +6,9 @@ use std::sync::Mutex;
 
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
 use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
-use ui::{ActiveTheme, Base16Colors, Theme, ThemeScheme, builtin_schemes, radius, spacing};
+use ui::{
+    ActiveTheme, Base16Palette, Radius, Spacing, TextSize, Theme, ThemeScheme, builtin_schemes,
+};
 
 use self::config::ThemesConfig;
 use crate::config::Config;
@@ -60,18 +62,18 @@ impl LauncherView for ThemeView {
 
     fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
         let theme = cx.theme();
-        let current_accent = theme.accent.primary;
-        let current_bg = theme.bg.primary;
+        let current_accent = theme.colors.accent;
+        let current_bg = theme.colors.background;
 
         let mut header = div()
             .flex()
             .flex_col()
-            .gap(px(spacing::SM))
-            .p(px(spacing::SM));
+            .gap(Spacing::Medium.pixels())
+            .p(Spacing::Medium.pixels());
 
         if let Some(stylix) = stylix_scheme() {
-            let is_active = colors_match(stylix.theme.accent.primary, current_accent)
-                && colors_match(stylix.theme.bg.primary, current_bg);
+            let is_active = colors_match(stylix.palette.base0d, current_accent)
+                && colors_match(stylix.palette.base00, current_bg);
             header = header.child(render_stylix_card(&stylix, is_active, theme));
         }
 
@@ -86,12 +88,12 @@ impl LauncherView for ThemeView {
     fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
         let theme = cx.theme();
         let schemes = Self::visible_schemes(vx.query);
-        let current_accent = theme.accent.primary;
-        let current_bg = theme.bg.primary;
+        let current_accent = theme.colors.accent;
+        let current_bg = theme.colors.background;
 
         if let Some(scheme) = schemes.get(index) {
-            let is_active = colors_match(scheme.theme.accent.primary, current_accent)
-                && colors_match(scheme.theme.bg.primary, current_bg);
+            let is_active = colors_match(scheme.palette.base0d, current_accent)
+                && colors_match(scheme.palette.base00, current_bg);
             render_theme_card(scheme, selected, is_active, theme)
         } else {
             div().into_any_element()
@@ -101,11 +103,10 @@ impl LauncherView for ThemeView {
     fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
         let schemes = Self::visible_schemes(vx.query);
         if let Some(scheme) = schemes.get(index) {
-            // Preserve current font size when changing themes
-            let current_font_size = cx.theme().font_sizes.base_value();
-
-            let mut new_theme = scheme.theme.clone();
-            new_theme.font_sizes = ui::FontSizes::new(current_font_size);
+            // Swapping only the palette keeps the user's font size and any
+            // token overrides intact.
+            let mut new_theme = cx.theme().clone();
+            new_theme.set_palette(scheme.name.clone(), scheme.palette);
 
             Theme::set(new_theme, cx);
             if let Err(err) = Config::save_theme(cx) {
@@ -123,17 +124,17 @@ impl LauncherView for ThemeView {
 fn stylix_scheme() -> Option<ThemeScheme> {
     let b16 = load_stylix_scheme()?;
     let p = &b16.palette;
-    let colors = Base16Colors::from_hex(&[
+    let palette = Base16Palette::from_hex(&[
         &p.base00, &p.base01, &p.base02, &p.base03, &p.base04, &p.base05, &p.base06, &p.base07,
         &p.base08, &p.base09, &p.base0a, &p.base0b, &p.base0c, &p.base0d, &p.base0e, &p.base0f,
     ])
     .ok()?;
 
-    Some(ThemeScheme {
-        name: Box::leak(b16.name.into_boxed_str()),
-        description: Box::leak(format!("Stylix — {}", b16.author).into_boxed_str()),
-        theme: colors.to_theme(),
-    })
+    Some(ThemeScheme::new(
+        b16.name,
+        format!("Stylix — {}", b16.author),
+        palette,
+    ))
 }
 
 fn build_schemes() -> Vec<ThemeScheme> {
@@ -143,7 +144,7 @@ fn build_schemes() -> Vec<ThemeScheme> {
         let repo = ThemeRepository::new(provider);
         for b16 in repo.load_cached() {
             let p = &b16.palette;
-            let colors = match Base16Colors::from_hex(&[
+            let palette = match Base16Palette::from_hex(&[
                 &p.base00, &p.base01, &p.base02, &p.base03, &p.base04, &p.base05, &p.base06,
                 &p.base07, &p.base08, &p.base09, &p.base0a, &p.base0b, &p.base0c, &p.base0d,
                 &p.base0e, &p.base0f,
@@ -152,13 +153,11 @@ fn build_schemes() -> Vec<ThemeScheme> {
                 Err(_) => continue,
             };
 
-            schemes.push(ThemeScheme {
-                name: Box::leak(b16.name.into_boxed_str()),
-                description: Box::leak(
-                    format!("{} — {}", provider.name, b16.author).into_boxed_str(),
-                ),
-                theme: colors.to_theme(),
-            });
+            schemes.push(ThemeScheme::new(
+                b16.name,
+                format!("{} — {}", provider.name, b16.author),
+                palette,
+            ));
         }
     }
 
@@ -194,23 +193,26 @@ fn colors_match(a: gpui::Hsla, b: gpui::Hsla) -> bool {
 }
 
 fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> AnyElement {
-    let bg_secondary = theme.bg.secondary;
-    let bg_primary = theme.bg.primary;
-    let text_primary = theme.text.primary;
-    let text_disabled = theme.text.disabled;
-    let accent_primary = theme.accent.primary;
+    let bg_secondary = theme.colors.surface_background;
+    let bg_primary = theme.colors.background;
+    let text_primary = theme.colors.text;
+    let text_disabled = theme.colors.text_disabled;
+    let accent_primary = theme.colors.accent;
     let preview_colors = scheme.preview_colors();
-    let stylix_theme = scheme.theme.clone();
+    let stylix_theme = (scheme.name.clone(), scheme.palette);
 
     div()
         .id("stylix-card")
         .w_full()
-        .p(px(spacing::MD))
-        .rounded(px(radius::LG))
+        .p(Spacing::Large.pixels())
+        .rounded(Radius::Large.pixels())
         .bg(bg_secondary)
         .cursor_pointer()
         .on_click(move |_, _, cx| {
-            Theme::set(stylix_theme.clone(), cx);
+            let (name, palette) = stylix_theme.clone();
+            let mut new_theme = cx.theme().clone();
+            new_theme.set_palette(name, palette);
+            Theme::set(new_theme, cx);
             if let Err(err) = Config::save_theme(cx) {
                 tracing::warn!("Failed to persist selected theme: {}", err);
             }
@@ -222,10 +224,10 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .child(
                     div()
-                        .text_size(theme.font_sizes.lg)
+                        .text_size(TextSize::Large.rems())
                         .text_color(accent_primary)
                         .child(THEME_ICON),
                 )
@@ -236,16 +238,16 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                         .gap(px(1.))
                         .child(
                             div()
-                                .text_size(theme.font_sizes.md)
+                                .text_size(TextSize::Medium.rems())
                                 .text_color(text_primary)
                                 .font_weight(FontWeight::MEDIUM)
-                                .child(scheme.name),
+                                .child(scheme.name.clone()),
                         )
                         .child(
                             div()
-                                .text_size(theme.font_sizes.xs)
+                                .text_size(TextSize::XSmall.rems())
                                 .text_color(text_disabled)
-                                .child(scheme.description),
+                                .child(scheme.description.clone()),
                         ),
                 ),
         )
@@ -253,16 +255,16 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .child(render_color_strip(&preview_colors))
                 .when(is_active, move |el| {
                     el.child(
                         div()
-                            .px(px(spacing::SM))
+                            .px(Spacing::Medium.pixels())
                             .py(px(2.))
-                            .rounded(px(radius::SM))
+                            .rounded(Radius::Small.pixels())
                             .bg(accent_primary)
-                            .text_size(theme.font_sizes.xs)
+                            .text_size(TextSize::XSmall.rems())
                             .text_color(bg_primary)
                             .font_weight(FontWeight::BOLD)
                             .child("Active"),
@@ -277,11 +279,11 @@ fn render_provider_card(
     is_downloaded: bool,
     theme: &Theme,
 ) -> AnyElement {
-    let bg_secondary = theme.bg.secondary;
-    let text_primary = theme.text.primary;
-    let text_disabled = theme.text.disabled;
-    let accent_primary = theme.accent.primary;
-    let interactive_hover = theme.interactive.hover;
+    let bg_secondary = theme.colors.surface_background;
+    let text_primary = theme.colors.text;
+    let text_disabled = theme.colors.text_disabled;
+    let accent_primary = theme.colors.accent;
+    let interactive_hover = theme.colors.element_hover;
 
     let (icon, action) = if is_downloaded {
         ("󰚰", format!("Update {}", provider.name))
@@ -294,9 +296,9 @@ fn render_provider_card(
     div()
         .id(format!("provider-{}", provider_id))
         .w_full()
-        .px(px(spacing::MD))
-        .py(px(spacing::SM))
-        .rounded(px(radius::LG))
+        .px(Spacing::Large.pixels())
+        .py(Spacing::Medium.pixels())
+        .rounded(Radius::Large.pixels())
         .bg(bg_secondary)
         .cursor_pointer()
         .hover(move |s| s.bg(interactive_hover))
@@ -317,10 +319,10 @@ fn render_provider_card(
         })
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .child(
             div()
-                .text_size(theme.font_sizes.lg)
+                .text_size(TextSize::Large.rems())
                 .text_color(accent_primary)
                 .child(icon),
         )
@@ -331,14 +333,14 @@ fn render_provider_card(
                 .gap(px(1.))
                 .child(
                     div()
-                        .text_size(theme.font_sizes.sm)
+                        .text_size(TextSize::Small.rems())
                         .text_color(text_primary)
                         .font_weight(FontWeight::MEDIUM)
                         .child(action),
                 )
                 .child(
                     div()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(text_disabled)
                         .child(provider.repo),
                 ),
@@ -352,29 +354,32 @@ fn render_theme_card(
     is_active: bool,
     theme: &Theme,
 ) -> AnyElement {
-    let accent_selection = theme.accent.selection;
-    let interactive_hover = theme.interactive.hover;
-    let bg_primary = theme.bg.primary;
-    let text_primary = theme.text.primary;
-    let text_disabled = theme.text.disabled;
-    let border_default = theme.border.default;
-    let accent_primary = theme.accent.primary;
+    let accent_selection = theme.colors.element_selected;
+    let interactive_hover = theme.colors.element_hover;
+    let bg_primary = theme.colors.background;
+    let text_primary = theme.colors.text;
+    let text_disabled = theme.colors.text_disabled;
+    let border_default = theme.colors.border;
+    let accent_primary = theme.colors.accent;
 
     let preview_colors = scheme.preview_colors();
-    let name = scheme.name;
-    let description = scheme.description;
-    let card_theme = scheme.theme.clone();
+    let name = scheme.name.clone();
+    let description = scheme.description.clone();
+    let card_theme = (scheme.name.clone(), scheme.palette);
 
     div()
         .id(format!("theme-{}", name))
         .w_full()
-        .px(px(spacing::MD))
-        .py(px(spacing::SM))
-        .rounded(px(radius::LG))
+        .px(Spacing::Large.pixels())
+        .py(Spacing::Medium.pixels())
+        .rounded(Radius::Large.pixels())
         .border_1()
         .cursor_pointer()
         .on_click(move |_, _, cx| {
-            Theme::set(card_theme.clone(), cx);
+            let (name, palette) = card_theme.clone();
+            let mut new_theme = cx.theme().clone();
+            new_theme.set_palette(name, palette);
+            Theme::set(new_theme, cx);
             if let Err(err) = Config::save_theme(cx) {
                 tracing::warn!("Failed to persist selected theme: {}", err);
             }
@@ -396,14 +401,14 @@ fn render_theme_card(
                 .gap(px(1.))
                 .child(
                     div()
-                        .text_size(theme.font_sizes.sm)
+                        .text_size(TextSize::Small.rems())
                         .text_color(text_primary)
                         .font_weight(FontWeight::MEDIUM)
                         .child(name),
                 )
                 .child(
                     div()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(text_disabled)
                         .child(description),
                 ),
@@ -412,16 +417,16 @@ fn render_theme_card(
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .child(render_color_strip(&preview_colors))
                 .when(is_active, move |el| {
                     el.child(
                         div()
-                            .px(px(spacing::SM))
+                            .px(Spacing::Medium.pixels())
                             .py(px(2.))
-                            .rounded(px(radius::SM))
+                            .rounded(Radius::Small.pixels())
                             .bg(accent_primary)
-                            .text_size(theme.font_sizes.xs)
+                            .text_size(TextSize::XSmall.rems())
                             .text_color(bg_primary)
                             .font_weight(FontWeight::BOLD)
                             .child("Active"),

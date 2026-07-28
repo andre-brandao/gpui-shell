@@ -2,7 +2,7 @@
 
 use gpui::{App, Entity, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BrightnessCommand};
-use ui::{ActiveTheme, Slider, icon_size, radius, spacing};
+use ui::{ActiveTheme, IconSize, Radius, Slider, Spacing, TextSize};
 
 use crate::state::AppState;
 
@@ -23,7 +23,7 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
     div()
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
         // Icon (click to toggle mute)
         .child(render_slider_icon(
@@ -69,13 +69,13 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
     let services_inc = AppState::brightness(cx).clone();
 
     // Pre-compute colors
-    let interactive_default = theme.interactive.default;
-    let text_primary = theme.text.primary;
+    let interactive_default = theme.colors.element_background;
+    let text_primary = theme.colors.text;
 
     div()
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
         // Icon
         .child(
@@ -83,14 +83,14 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
                 .id("brightness-icon")
                 .w(px(28.))
                 .h(px(28.))
-                .rounded(px(radius::SM))
+                .rounded(Radius::Small.pixels())
                 .flex()
                 .items_center()
                 .justify_center()
                 .bg(interactive_default)
                 .child(
                     div()
-                        .text_size(px(icon_size::SM))
+                        .text_size(IconSize::XSmall.pixels())
                         .text_color(text_primary)
                         .child(icon),
                 ),
@@ -132,10 +132,10 @@ fn render_slider_icon(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let status_error = theme.status.error;
-    let text_primary = theme.text.primary;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let status_error = theme.colors.status.error;
+    let text_primary = theme.colors.text;
 
     let icon_color = if is_muted { status_error } else { text_primary };
 
@@ -143,7 +143,7 @@ fn render_slider_icon(
         .id(id)
         .w(px(28.))
         .h(px(28.))
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         .flex()
         .items_center()
         .justify_center()
@@ -155,7 +155,7 @@ fn render_slider_icon(
         })
         .child(
             div()
-                .text_size(px(icon_size::SM))
+                .text_size(IconSize::XSmall.pixels())
                 .text_color(icon_color)
                 .child(icon),
         )
@@ -167,8 +167,8 @@ fn render_percentage_label(percent: u8, cx: &App) -> impl IntoElement {
 
     div()
         .w(px(32.))
-        .text_size(theme.font_sizes.xs)
-        .text_color(theme.text.muted)
+        .text_size(TextSize::XSmall.rems())
+        .text_color(theme.colors.text_muted)
         .text_right()
         .child(format!("{}%", percent))
 }
@@ -207,15 +207,15 @@ fn render_adjustment_button(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let text_muted = theme.text.muted;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let text_muted = theme.colors.text_muted;
 
     div()
         .id(id.into())
         .w(px(20.))
         .h(px(20.))
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         .flex()
         .items_center()
         .justify_center()
@@ -227,7 +227,7 @@ fn render_adjustment_button(
         })
         .child(
             div()
-                .text_size(theme.font_sizes.xs)
+                .text_size(TextSize::XSmall.rems())
                 .text_color(text_muted)
                 .child(label),
         )
