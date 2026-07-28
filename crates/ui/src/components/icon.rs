@@ -107,6 +107,11 @@ impl IconSize {
 /// Lucide `search`, [`Self::Warning`] -> Lucide `triangle-alert`,
 /// [`Self::XCircle`] -> Lucide `circle-x`). [`Self::StarFilled`] is a
 /// derivative of Lucide's `star` with `fill="currentColor"`.
+///
+/// The set also carries the status vocabulary a desktop shell needs -
+/// battery and Wi-Fi signal ladders, Bluetooth states, Ethernet, and
+/// sensor icons - which a general-purpose UI catalogue has no reason to
+/// ship.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, IntoStaticStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum IconName {
@@ -252,6 +257,37 @@ pub enum IconName {
     VolumeOff,
     Warning,
     XCircle,
+    ArrowDownUp,
+    Battery,
+    BatteryCharging,
+    BatteryFull,
+    BatteryLow,
+    BatteryMedium,
+    BatteryNone,
+    BatteryWarning,
+    Bluetooth,
+    BluetoothConnected,
+    BluetoothOff,
+    BookOpen,
+    ChartPie,
+    Ethernet,
+    Gauge,
+    Github,
+    HardDrive,
+    Inbox,
+    Map,
+    MemoryStick,
+    Network,
+    Palette,
+    ScreenShare,
+    SquareTerminal,
+    Thermometer,
+    Webcam,
+    Wifi,
+    WifiHigh,
+    WifiLow,
+    WifiOff,
+    WifiZero,
     Zap,
 }
 
