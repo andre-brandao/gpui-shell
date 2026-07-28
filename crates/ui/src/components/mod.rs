@@ -94,7 +94,7 @@ pub use spinner::Spinner;
 pub use squircle::{Squircle, SquircleFill};
 pub use stack::{h_flex, v_flex};
 pub use stepper::Stepper;
-pub use switch::Switch;
+pub use switch::{Switch, SwitchSize};
 pub use tab::{Tab, TabBar};
 pub use text_field::{TextField, TextFieldSubmitEvent, text_field};
 pub use tooltip::Tooltip;

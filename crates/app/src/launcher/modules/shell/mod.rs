@@ -159,10 +159,13 @@ impl LauncherView for ShellView {
                                 .font_family("monospace")
                                 .text_size(TextSize::Default.rems())
                                 .child(if has_command {
-                                    Label::new(query.to_string()).color(Color::Default)
+                                    Label::new(query.to_string())
+                                        .color(Color::Default)
+                                        .size(TextSize::Default)
                                 } else {
                                     Label::new("Type a command to execute...")
                                         .color(Color::Placeholder)
+                                        .size(TextSize::Default)
                                 }),
                         ),
                 )

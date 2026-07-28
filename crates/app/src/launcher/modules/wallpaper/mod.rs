@@ -12,7 +12,7 @@ use gpui::{AnyElement, App, div, img, prelude::*, px};
 use services::WallpaperCommand;
 use ui::{
     ActiveTheme, Clickable, Color, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, Switch,
-    TextSize, Toggleable,
+    SwitchSize, TextSize, Toggleable,
 };
 
 use self::config::WallpaperConfig;
@@ -264,11 +264,14 @@ impl LauncherView for WallpaperView {
                                         ),
                                 ),
                         )
-                        .child(Switch::new("matugen-toggle", enabled).on_click(
-                            move |checked, _, _cx| {
-                                matugen_enabled_atomic.store(checked.selected(), Ordering::Relaxed);
-                            },
-                        )),
+                        .child(
+                            Switch::new("matugen-toggle", enabled)
+                                .size(SwitchSize::Medium)
+                                .on_click(move |checked, _, _cx| {
+                                    matugen_enabled_atomic
+                                        .store(checked.selected(), Ordering::Relaxed);
+                                }),
+                        ),
                 )
                 // Dark/Light mode selector (animated collapse)
                 .when(enabled, |this| {
@@ -306,6 +309,7 @@ impl LauncherView for WallpaperView {
                                     )
                                     .child(
                                         Switch::new("matugen-dark-mode-toggle", dark_mode)
+                                            .size(SwitchSize::Small)
                                             .on_click(move |checked, _, _cx| {
                                                 matugen_dark_mode_atomic
                                                     .store(checked.selected(), Ordering::Relaxed);

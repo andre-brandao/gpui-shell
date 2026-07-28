@@ -185,9 +185,11 @@ impl LauncherView for WebSearchView {
                                 .child(if has_query {
                                     Label::new(format!("\"{}\"", search_query))
                                         .color(Color::Default)
+                                        .size(TextSize::Default)
                                 } else {
                                     Label::new("Type your search query...")
                                         .color(Color::Placeholder)
+                                        .size(TextSize::Default)
                                 }),
                         ),
                 )

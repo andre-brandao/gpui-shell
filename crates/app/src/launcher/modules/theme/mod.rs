@@ -7,8 +7,7 @@ use std::sync::Mutex;
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
 use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
 use ui::{
-    ActiveTheme, Base16Palette, Radius, Spacing, TextSize, Theme, ThemeScheme,
-    builtin_schemes,
+    ActiveTheme, Base16Palette, Radius, Spacing, TextSize, Theme, ThemeScheme, builtin_schemes,
 };
 
 use self::config::ThemesConfig;
