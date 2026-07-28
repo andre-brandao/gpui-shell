@@ -1,44 +1,29 @@
-//! Every [`IconName`] must resolve to a real SVG in the asset bundle.
+//! Every [`IconName`] must resolve through the [`AssetSource`] the app
+//! actually registers.
 //!
-//! Icon lookup failures are invisible at compile time and nearly invisible at
-//! runtime - gpui just paints nothing where the icon should be - so a missing
-//! or misnamed file otherwise ships as a silently blank button.
-//!
-//! The icons live in the sibling `assets` crate (it owns the `AssetSource`
-//! the app registers), so this walks the workspace layout directly rather
-//! than going through gpui.
+//! This deliberately goes through `assets::Assets` rather than looking at the
+//! filesystem. A file can be present on disk and still be unreachable at
+//! runtime - if the embed root and [`IconName::path`]'s prefix disagree, every
+//! lookup returns `None` and gpui silently paints nothing where the icon
+//! should be. An earlier version of this test checked the directory instead,
+//! and missed exactly that.
 
-use std::path::PathBuf;
-
+use gpui::AssetSource;
 use strum::IntoEnumIterator;
 use ui::IconName;
 
-fn icons_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("crates/ui has a parent")
-        .join("assets/icons")
-}
-
 #[test]
-fn every_icon_name_has_an_svg() {
-    let dir = icons_dir();
-    assert!(dir.is_dir(), "icon bundle not found at {}", dir.display());
-
-    let missing: Vec<_> = IconName::iter()
+fn every_icon_name_resolves_through_the_asset_source() {
+    let missing: Vec<String> = IconName::iter()
         .filter(|name| {
-            let stem: &'static str = (*name).into();
-            !dir.join(format!("{stem}.svg")).is_file()
+            !matches!(assets::Assets.load(&name.path()), Ok(Some(bytes)) if !bytes.is_empty())
         })
-        .map(|name| {
-            let stem: &'static str = name.into();
-            format!("{name:?} -> icons/{stem}.svg")
-        })
+        .map(|name| format!("{name:?} -> {}", name.path()))
         .collect();
 
     assert!(
         missing.is_empty(),
-        "{} IconName variant(s) have no SVG:\n  {}",
+        "{} IconName variant(s) do not resolve:\n  {}",
         missing.len(),
         missing.join("\n  ")
     );
@@ -47,31 +32,44 @@ fn every_icon_name_has_an_svg() {
 /// The reverse direction: an SVG nobody can name is dead weight in the
 /// binary. Not fatal, but it should be a deliberate choice.
 #[test]
-fn every_svg_is_reachable_from_an_icon_name() {
+fn every_embedded_svg_is_reachable_from_an_icon_name() {
     let named: Vec<String> = IconName::iter()
-        .map(|name| {
-            let stem: &'static str = name.into();
-            stem.to_string()
-        })
+        .map(|name| name.path().to_string())
         .collect();
 
-    let orphans: Vec<String> = std::fs::read_dir(icons_dir())
-        .expect("icon bundle is readable")
-        .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            if path.extension()? != "svg" {
-                return None;
-            }
-            let stem = path.file_stem()?.to_str()?.to_string();
-            (!named.contains(&stem)).then_some(stem)
-        })
+    let orphans: Vec<String> = assets::Assets
+        .list("icons/")
+        .expect("icon bundle lists")
+        .into_iter()
+        .map(|path| path.to_string())
+        .filter(|path| path.ends_with(".svg") && !named.contains(path))
         .collect();
 
     assert!(
         orphans.is_empty(),
-        "{} SVG(s) are not reachable from any IconName:\n  {}",
+        "{} embedded SVG(s) are not reachable from any IconName:\n  {}",
         orphans.len(),
         orphans.join("\n  ")
+    );
+}
+
+/// Icons are tinted from the theme, which only works if they carry
+/// `stroke="currentColor"` rather than a baked-in color.
+#[test]
+fn every_icon_inherits_its_color() {
+    let hardcoded: Vec<String> = IconName::iter()
+        .filter_map(|name| {
+            let bytes = assets::Assets.load(&name.path()).ok()??;
+            let svg = String::from_utf8_lossy(&bytes);
+            let tintable = svg.contains("currentColor");
+            (!tintable).then(|| format!("{name:?}"))
+        })
+        .collect();
+
+    assert!(
+        hardcoded.is_empty(),
+        "{} icon(s) have no `currentColor`, so the theme can't tint them:\n  {}",
+        hardcoded.len(),
+        hardcoded.join("\n  ")
     );
 }

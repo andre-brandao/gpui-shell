@@ -9,6 +9,10 @@
 
 use gpui::{Pixels, Rems, px, rems};
 
+/// gpui's default rem size. Used only to convert [`IconSize`] presets
+/// between their nominal pixel ladder and rems.
+const NOMINAL_REM_PX: f32 = 16.0;
+
 /// Semantic spacing step used for gaps, padding, and margins.
 ///
 /// Fixed pixels on purpose: spacing should not grow with the font size, or
@@ -115,7 +119,7 @@ impl TextSize {
 /// Fixed pixels, matching the shell's previous `icon_size::{SM,MD,LG,XL}`
 /// constants (12/14/16/18), with a 10px indicator step below them and two
 /// larger steps for empty-state and hero icons.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum IconSize {
     /// 10px - status dots and other decorations.
     Indicator,
@@ -132,19 +136,35 @@ pub enum IconSize {
     XLarge,
     /// 48px
     XXLarge,
+    /// A caller-specified size in [`Rems`], bypassing the preset ladder.
+    Custom(Rems),
 }
 
 impl IconSize {
-    pub const fn pixels(self) -> Pixels {
-        px(self.value())
+    pub fn pixels(self) -> Pixels {
+        match self {
+            // `Custom` is authored in rems; converting back assumes the
+            // nominal 16px rem. Prefer `rems()` when going through a
+            // rem-aware API.
+            Self::Custom(r) => px(r.0 * NOMINAL_REM_PX),
+            other => px(other.value()),
+        }
     }
 
-    /// The raw pixel count.
-    ///
-    /// `Pixels` keeps its inner `f32` private, so call sites doing
-    /// arithmetic - or defining a `const` - need the number itself.
+    /// Size in rems, so icons scale with the window's rem size the way
+    /// text does.
+    pub fn rems(self) -> Rems {
+        match self {
+            Self::Custom(r) => r,
+            other => rems(other.value() / NOMINAL_REM_PX),
+        }
+    }
+
+    /// The raw pixel count of a preset. [`Self::Custom`] has no fixed
+    /// pixel size, so it reports the nominal rem conversion.
     pub const fn value(self) -> f32 {
         match self {
+            Self::Custom(_) => NOMINAL_REM_PX,
             Self::Indicator => 10.0,
             Self::XSmall => 12.0,
             Self::Small => 14.0,

@@ -1,5 +1,7 @@
 [workspace]
 members = ["crates/*"]
+# `story` is a dev tool, not part of the shell binary.
+default-members = ["crates/app"]
 resolver = "3"
 
 [workspace.dependencies]

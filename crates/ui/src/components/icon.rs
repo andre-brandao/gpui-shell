@@ -26,76 +26,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::theme::{ActiveTheme, Color};
-use gpui::{
-    App, IntoElement, Pixels, Rems, RenderOnce, SharedString, Window, img, prelude::*, px, rems,
-    svg,
-};
+use gpui::{App, IntoElement, RenderOnce, SharedString, Window, img, prelude::*, svg};
 use strum::{EnumIter, IntoStaticStr};
 
-/// Conversion constant between [`Pixels`] and [`Rems`]. Matches gpui's
-/// default rem size. Used only for the `IconSize` preset -> `Rems` conversion
-/// so the fixed-pixel presets round-trip to reasonable rem values.
-const BASE_REM_SIZE_PX: f32 = 16.0;
-
-/// Size of an [`Icon`].
-///
-/// The fixed presets mirror zed's `IconSize` with one engram divergence:
-/// [`IconSize::XLarge`] (20px) - zed dropped it, engram keeps it because 20px
-/// is a real size in the engram visual language and removing it is churn
-/// for parity's sake. [`IconSize::Custom`] takes a [`Rems`] value so callers
-/// with specific layout needs can bypass the preset ramp without jumping to
-/// raw `svg()`.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub enum IconSize {
-    /// 10px
-    Indicator,
-    /// 12px
-    XSmall,
-    /// 14px
-    Small,
-    /// 16px (default)
-    #[default]
-    Medium,
-    /// 20px - engram divergence from zed.
-    Large,
-    /// 48px
-    XLarge,
-    /// A caller-specified size in [`Rems`].
-    Custom(Rems),
-}
-
-impl IconSize {
-    /// Pixel size of the preset. For [`IconSize::Custom`], converts back to
-    /// pixels assuming the default 16px rem - a best-effort approximation
-    /// for call sites that still want a `Pixels` value (e.g. banner layout
-    /// indents). Use [`IconSize::rems`] instead when you're going through a
-    /// `Styled`/`svg()` API, which is rem-aware.
-    pub fn pixels(self) -> Pixels {
-        match self {
-            Self::Indicator => px(10.0),
-            Self::XSmall => px(12.0),
-            Self::Small => px(14.0),
-            Self::Medium => px(16.0),
-            Self::Large => px(20.0),
-            Self::XLarge => px(48.0),
-            Self::Custom(r) => px(r.0 * BASE_REM_SIZE_PX),
-        }
-    }
-
-    /// Rem size of the preset. Used by [`Icon::render`] so custom sizes
-    /// flow through gpui's `svg().size(...)` without a pixel round-trip.
-    pub fn rems(self) -> Rems {
-        match self {
-            Self::Indicator => rems(10.0 / BASE_REM_SIZE_PX),
-            Self::XSmall => rems(12.0 / BASE_REM_SIZE_PX),
-            Self::Small => rems(14.0 / BASE_REM_SIZE_PX),
-            Self::Medium => rems(16.0 / BASE_REM_SIZE_PX),
-            Self::Large => rems(20.0 / BASE_REM_SIZE_PX),
-            Self::XLarge => rems(48.0 / BASE_REM_SIZE_PX),
-            Self::Custom(r) => r,
-        }
-    }
-}
+pub use crate::theme::IconSize;
 
 /// Catalogue of every icon shipped with engram-ui. Each variant resolves to
 /// `icons/<snake_case>.svg` via [`IconName::path`].

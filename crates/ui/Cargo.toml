@@ -21,3 +21,6 @@ lyon = "1.0"
 [dev-dependencies]
 toml = "1.1"
 strum = { version = "0.27", features = ["derive"] }
+# Icon resolution is tested through the AssetSource the app registers,
+# not against the filesystem.
+assets.workspace = true
