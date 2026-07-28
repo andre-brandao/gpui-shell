@@ -1,48 +1,16 @@
-use gpui::{App, IntoElement, RenderOnce, SharedString, Window, div, prelude::*};
+//! Label family: text [`Label`], typographic [`Headline`], and the shared
+//! [`LabelLike`] chrome they both compose.
+//!
+//! See `label/label_like.rs` for the architectural notes - this file is
+//! just the module wiring.
 
-use crate::{ActiveTheme, Color, TextSize};
+mod headline;
+mod highlighted_label;
+#[allow(clippy::module_inception)]
+mod label;
+mod label_like;
 
-/// Trait for label-like elements that support size and color.
-pub trait LabelCommon: Sized {
-    fn size(self, size: TextSize) -> Self;
-    fn color(self, color: Color) -> Self;
-}
-
-/// A text label component.
-#[derive(IntoElement)]
-pub struct Label {
-    label: SharedString,
-    size: TextSize,
-    color: Color,
-}
-
-impl Label {
-    pub fn new(label: impl Into<SharedString>) -> Self {
-        Self {
-            label: label.into(),
-            size: TextSize::Default,
-            color: Color::Default,
-        }
-    }
-}
-
-impl LabelCommon for Label {
-    fn size(mut self, size: TextSize) -> Self {
-        self.size = size;
-        self
-    }
-
-    fn color(mut self, color: Color) -> Self {
-        self.color = color;
-        self
-    }
-}
-
-impl RenderOnce for Label {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
-            .text_size(self.size.rems())
-            .text_color(self.color.hsla(cx.theme().colors()))
-            .child(self.label)
-    }
-}
+pub use headline::{Headline, HeadlineSize};
+pub use highlighted_label::HighlightedLabel;
+pub use label::Label;
+pub use label_like::{LabelCommon, LabelLike, LineHeightStyle};

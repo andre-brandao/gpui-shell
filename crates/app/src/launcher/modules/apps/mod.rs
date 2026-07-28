@@ -3,7 +3,10 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, img, prelude::*, px};
-use ui::{ActiveTheme, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize};
+use ui::{
+    ActiveTheme, Clickable, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize,
+    Toggleable,
+};
 
 use self::config::AppsConfig;
 use crate::launcher::view::{LauncherView, ViewContext};

@@ -1,6 +1,6 @@
 //! Volume and brightness slider components for the Control Center.
 
-use gpui::{App, Entity, MouseButton, div, prelude::*, px};
+use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BrightnessCommand};
 use ui::{ActiveTheme, IconSize, Radius, Slider, Spacing, TextSize};
 
@@ -9,7 +9,7 @@ use crate::state::AppState;
 use super::icons;
 
 /// Render the volume slider row
-pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl IntoElement {
+pub fn render_volume_slider(cx: &App) -> impl IntoElement {
     let audio = AppState::audio(cx).get();
     let volume = audio.sink_volume;
     let muted = audio.sink_muted;
@@ -17,6 +17,7 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
     let icon = icons::volume_icon(volume, muted);
 
     let services_toggle = AppState::audio(cx).clone();
+    let services_slider = AppState::audio(cx).clone();
     let services_dec = AppState::audio(cx).clone();
     let services_inc = AppState::audio(cx).clone();
 
@@ -36,7 +37,17 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
             },
         ))
         // Slider
-        .child(div().flex_1().child(volume_slider.clone()))
+        .child(
+            div().flex_1().child(
+                Slider::new("volume-slider", volume as f32)
+                    .min(0.0)
+                    .max(100.0)
+                    .step(1.0)
+                    .on_change(move |value, _window, _cx| {
+                        services_slider.dispatch(AudioCommand::SetSinkVolume(value as u8));
+                    }),
+            ),
+        )
         // Percent
         .child(render_percentage_label(volume, cx))
         // +/- buttons
@@ -53,7 +64,7 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
 }
 
 /// Render the brightness slider row (returns empty if no brightness control available)
-pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) -> impl IntoElement {
+pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let brightness = AppState::brightness(cx).get();
 
@@ -65,6 +76,7 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
 
     let icon = icons::brightness_icon(percent);
 
+    let services_slider = AppState::brightness(cx).clone();
     let services_dec = AppState::brightness(cx).clone();
     let services_inc = AppState::brightness(cx).clone();
 
@@ -96,7 +108,25 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
                 ),
         )
         // Slider
-        .child(div().flex_1().child(brightness_slider.clone()))
+        .child(
+            div().flex_1().child(
+                Slider::new("brightness-slider", percent as f32)
+                    .min(0.0)
+                    .max(100.0)
+                    .step(1.0)
+                    .on_change(move |value, _window, cx| {
+                        // Brightness writes go through logind, so the dispatch
+                        // is async - unlike the audio one.
+                        let services = services_slider.clone();
+                        cx.spawn(async move |_| {
+                            let _ = services
+                                .dispatch(BrightnessCommand::SetPercent(value as u8))
+                                .await;
+                        })
+                        .detach();
+                    }),
+            ),
+        )
         // Percent
         .child(render_percentage_label(percent, cx))
         // +/- buttons

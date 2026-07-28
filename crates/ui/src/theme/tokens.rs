@@ -113,7 +113,8 @@ impl TextSize {
 /// Semantic icon size.
 ///
 /// Fixed pixels, matching the shell's previous `icon_size::{SM,MD,LG,XL}`
-/// constants (12/14/16/18) with a 10px indicator step below them.
+/// constants (12/14/16/18), with a 10px indicator step below them and two
+/// larger steps for empty-state and hero icons.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IconSize {
     /// 10px - status dots and other decorations.
@@ -129,6 +130,8 @@ pub enum IconSize {
     Large,
     /// 20px
     XLarge,
+    /// 48px
+    XXLarge,
 }
 
 impl IconSize {
@@ -148,6 +151,7 @@ impl IconSize {
             Self::Medium => 16.0,
             Self::Large => 18.0,
             Self::XLarge => 20.0,
+            Self::XXLarge => 48.0,
         }
     }
 }

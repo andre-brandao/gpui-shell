@@ -1,23 +1,40 @@
-//! Shared UI layer for the shell: the theme system and the component set
-//! built on top of it.
+//! Shared UI layer for the shell: the base16 theme system and the
+//! component set built on top of it.
+//!
+//! Components read semantic tokens ([`ThemeColors`], [`TextSize`],
+//! [`Spacing`], [`Radius`], [`IconSize`]) rather than palette slots, so a
+//! Base16 scheme, a Stylix palette, and a matugen-derived palette all drive
+//! the same widgets.
 
-mod components;
+pub mod components;
+pub mod styles;
 mod theme;
-mod traits;
+pub mod traits;
 
-// Components
-pub use components::{
-    CursorPlacement, EmptyMessage, InputBuffer, Label, LabelCommon, LabelSide, List, ListItem,
-    ListItemSpacing, ListSeparator, MaskedRenderParts, PlainRenderParts, Slider, SliderEvent,
-    Switch, SwitchSize, h_flex, render_input_line, render_masked_input_line, v_flex,
-};
-
-// Traits
-pub use traits::styled_ext::StyledExt;
-
-// Theme
+pub use components::*;
+pub use styles::ElevationIndex;
 pub use theme::{
     ActiveTheme, Appearance, Base16Palette, Color, IconSize, Radius, Spacing, StatusColors,
     StatusColorsRefinement, StoredTheme, TextSize, Theme, ThemeColors, ThemeColorsRefinement,
     ThemeScheme, builtin_schemes,
 };
+pub use traits::*;
+
+/// Register the default keybindings for components that need them -
+/// [`TextField`] (navigation, selection, clipboard, submit) and [`Menu`]
+/// (arrow navigation, Enter / Escape).
+///
+/// Call once at startup, after the theme is installed. Idempotent.
+pub fn init(cx: &mut gpui::App) {
+    use components::{menu, text_field};
+
+    if cx.has_global::<UiInitialized>() {
+        return;
+    }
+    text_field::bind_text_field_keys(cx);
+    menu::bind_menu_keys(cx);
+    cx.set_global(UiInitialized);
+}
+
+struct UiInitialized;
+impl gpui::Global for UiInitialized {}

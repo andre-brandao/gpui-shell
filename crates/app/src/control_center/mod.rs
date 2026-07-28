@@ -26,12 +26,12 @@ mod wifi;
 pub use config::{ControlCenterConfig, PowerActionsConfig};
 
 use gpui::{
-    App, AvailableSpace, Context, Entity, FocusHandle, Focusable, MouseButton, Size, Window, div,
+    App, AvailableSpace, Context, FocusHandle, Focusable, MouseButton, Size, Window, div,
     prelude::*, px,
 };
-use services::{AudioCommand, BrightnessCommand, NetworkCommand, UPowerCommand};
+use services::{NetworkCommand, UPowerCommand};
 use std::rc::Rc;
-use ui::{ActiveTheme, IconSize, Radius, Slider, SliderEvent, Spacing, TextSize};
+use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
@@ -58,9 +58,7 @@ pub struct ControlCenter {
     /// Focus handle for keyboard navigation
     focus_handle: FocusHandle,
     /// Volume slider entity
-    volume_slider: Entity<Slider>,
     /// Brightness slider entity
-    brightness_slider: Entity<Slider>,
     /// WiFi password input state
     wifi_password: WifiPasswordState,
 }
@@ -70,97 +68,32 @@ impl ControlCenter {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        // Create volume slider
-        let audio = AppState::audio(cx).get();
-        let volume_slider = cx.new(|_| {
-            Slider::new()
-                .min(0.0)
-                .max(100.0)
-                .step(1.0)
-                .default_value(audio.sink_volume as f32)
-        });
-
-        // Create brightness slider
-        let brightness = AppState::brightness(cx).get();
-        let brightness_slider = cx.new(|_| {
-            Slider::new()
-                .min(0.0)
-                .max(100.0)
-                .step(1.0)
-                .default_value(brightness.percentage() as f32)
-        });
-
-        // Subscribe to slider events
-        let audio_services = AppState::audio(cx).clone();
-        cx.subscribe(
-            &volume_slider,
-            move |_this, _slider, event: &SliderEvent, _cx| {
-                let SliderEvent::Change(value) = event;
-                let target = *value as u8;
-                audio_services.dispatch(AudioCommand::SetSinkVolume(target));
-            },
-        )
-        .detach();
-
-        let brightness_services = AppState::brightness(cx).clone();
-        cx.subscribe(
-            &brightness_slider,
-            move |_this, _slider, event: &SliderEvent, cx| {
-                let SliderEvent::Change(value) = event;
-                let target = *value as u8;
-                let s = brightness_services.clone();
-                cx.spawn(async move |_, _| {
-                    let _ = s.dispatch(BrightnessCommand::SetPercent(target)).await;
-                })
-                .detach();
-            },
-        )
-        .detach();
-
         // Subscribe to service updates
         Self::subscribe_to_services(cx);
 
         ControlCenter {
             expanded: ExpandedSection::None,
             focus_handle,
-            volume_slider,
-            brightness_slider,
             wifi_password: WifiPasswordState::default(),
         }
     }
 
     /// Subscribe to service updates to keep UI in sync
     fn subscribe_to_services(cx: &mut Context<Self>) {
-        // Audio - sync volume slider
-        watch(
-            cx,
-            AppState::audio(cx).subscribe(),
-            |control_center, data, cx| {
-                let volume = data.sink_volume as f32;
-                control_center.volume_slider.update(cx, |slider, cx| {
-                    slider.set_value(volume, cx);
-                });
-                cx.notify();
-            },
-        );
+        // Audio
+        watch(cx, AppState::audio(cx).subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
         // Bluetooth
         watch(cx, AppState::bluetooth(cx).subscribe(), |_, _, cx| {
             cx.notify();
         });
 
-        // Brightness - sync brightness slider
-        watch(
-            cx,
-            AppState::brightness(cx).subscribe(),
-            |control_center, data, cx| {
-                let percent = data.percentage() as f32;
-                control_center.brightness_slider.update(cx, |slider, cx| {
-                    slider.set_value(percent, cx);
-                });
-                cx.notify();
-            },
-        );
+        // Brightness
+        watch(cx, AppState::brightness(cx).subscribe(), |_, _, cx| {
+            cx.notify();
+        });
 
         // Network
         watch(cx, AppState::network(cx).subscribe(), |_, _, cx| {
@@ -727,7 +660,7 @@ impl Render for ControlCenter {
                         .border_1()
                         .border_color(border_subtle)
                         .rounded(Radius::Medium.pixels())
-                        .child(sliders::render_volume_slider(&self.volume_slider, cx)),
+                        .child(sliders::render_volume_slider(cx)),
                 )
                 .when(show_brightness, |el| {
                     el.child(
@@ -738,10 +671,7 @@ impl Render for ControlCenter {
                             .border_1()
                             .border_color(border_subtle)
                             .rounded(Radius::Medium.pixels())
-                            .child(sliders::render_brightness_slider(
-                                &self.brightness_slider,
-                                cx,
-                            )),
+                            .child(sliders::render_brightness_slider(cx)),
                     )
                 })
                 .child(quick_toggles::render_quick_toggles(

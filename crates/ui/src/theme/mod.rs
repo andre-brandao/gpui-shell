@@ -119,6 +119,12 @@ impl Theme {
         &self.colors
     }
 
+    /// Whether this theme is light or dark.
+    #[inline(always)]
+    pub fn appearance(&self) -> Appearance {
+        self.appearance
+    }
+
     /// Swap the palette, keeping the current overrides and font size.
     ///
     /// This is the "user picked a different scheme" path, and the

@@ -5,6 +5,7 @@ pub mod config;
 use gpui::{AnyElement, App, div, prelude::*, px};
 use ui::{
     ActiveTheme, Color, IconSize, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, TextSize,
+    Toggleable,
 };
 
 use self::config::HelpConfig;

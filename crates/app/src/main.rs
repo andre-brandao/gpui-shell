@@ -53,6 +53,8 @@ async fn main() {
     let app = application().with_assets(Assets {});
     app.run(move |cx| {
         config::Config::init(cx);
+        // Registers the TextField / Menu keybindings the component set needs.
+        ui::init(cx);
         state::AppState::init(services, cx);
 
         // Register keybindings

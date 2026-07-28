@@ -4,7 +4,10 @@ pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px};
 use services::CompositorCommand;
-use ui::{ActiveTheme, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize};
+use ui::{
+    ActiveTheme, Clickable, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize,
+    Toggleable,
+};
 
 use self::config::WorkspacesConfig;
 use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
