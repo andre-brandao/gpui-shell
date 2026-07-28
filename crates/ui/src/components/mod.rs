@@ -9,7 +9,7 @@ pub use input::{
     CursorPlacement, InputBuffer, MaskedRenderParts, PlainRenderParts, render_input_line,
     render_masked_input_line,
 };
-pub use label::{Color, Label, LabelCommon, LabelSize};
+pub use label::{Label, LabelCommon};
 pub use list::{EmptyMessage, List, ListItem, ListItemSpacing, ListSeparator};
 pub use slider::{Slider, SliderEvent};
 pub use stack::{h_flex, v_flex};

@@ -1,51 +1,56 @@
-//! Built-in theme schemes.
+//! A named, selectable Base16 palette.
 //!
-//! Each scheme provides a complete `Theme` with all color groups defined.
-//! Themes are also loaded from Stylix and downloaded from GitHub.
+//! Schemes are what the theme launcher lists: a palette plus enough
+//! metadata to render a card for it. They carry the *palette*, not a
+//! resolved [`Theme`](super::Theme), so the user's font size and any token
+//! overrides stay independent of which scheme is picked.
 
-use gpui::Hsla;
+use gpui::{Hsla, SharedString};
 
-use super::Theme;
+use super::base16::Base16Palette;
 
-/// A named theme scheme.
-#[derive(Clone)]
+/// A named Base16 scheme - built in, from Stylix, or fetched from a
+/// Tinted Theming repository.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ThemeScheme {
     /// Display name.
-    pub name: &'static str,
-    /// Short description.
-    pub description: &'static str,
-    /// The full theme.
-    pub theme: Theme,
+    pub name: SharedString,
+    /// Short description (typically `"<provider> — <author>"`).
+    pub description: SharedString,
+    /// The 16 colors this scheme is made of.
+    pub palette: Base16Palette,
 }
 
 impl ThemeScheme {
-    /// Extract a representative set of colors for preview swatches.
+    pub fn new(
+        name: impl Into<SharedString>,
+        description: impl Into<SharedString>,
+        palette: Base16Palette,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            palette,
+        }
+    }
+
+    /// Colors for the preview strip on a scheme card: the surface ramp
+    /// followed by the eight accents.
     pub fn preview_colors(&self) -> Vec<Hsla> {
-        let t = &self.theme;
+        let p = &self.palette;
         vec![
-            t.bg.primary,
-            t.bg.secondary,
-            t.bg.elevated,
-            t.accent.primary,
-            t.accent.hover,
-            t.status.success,
-            t.status.warning,
-            t.status.error,
-            t.text.primary,
-            t.text.muted,
+            p.base00, p.base01, p.base02, p.base05, p.base08, p.base09, p.base0a, p.base0b,
+            p.base0c, p.base0d, p.base0e, p.base0f,
         ]
     }
 }
 
-/// Return all built-in theme schemes.
+/// The schemes that ship with the shell, available before any theme
+/// repository has been cloned.
 pub fn builtin_schemes() -> Vec<ThemeScheme> {
-    vec![default_scheme()]
-}
-
-fn default_scheme() -> ThemeScheme {
-    ThemeScheme {
-        name: "Default",
-        description: "Dark theme with blue accents",
-        theme: Theme::default(),
-    }
+    vec![ThemeScheme::new(
+        "Default Dark",
+        "Built-in — the canonical Base16 dark scheme",
+        Base16Palette::default(),
+    )]
 }

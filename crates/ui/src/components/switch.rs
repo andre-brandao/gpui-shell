@@ -114,14 +114,14 @@ impl RenderOnce for Switch {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         // Extract theme colors before mutable borrow of cx
         let (toggle_on, bg_primary, bg_tertiary, bg_elevated, text_disabled, text_primary) = {
-            let theme = cx.theme();
+            let colors = cx.theme().colors();
             (
-                theme.interactive.toggle_on,
-                theme.bg.primary,
-                theme.bg.tertiary,
-                theme.bg.elevated,
-                theme.text.disabled,
-                theme.text.primary,
+                colors.accent,
+                colors.background,
+                colors.element_background,
+                colors.element_hover,
+                colors.text_disabled,
+                colors.text,
             )
         };
 

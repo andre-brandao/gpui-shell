@@ -1,7 +1,7 @@
-use gpui::{AnyElement, App, IntoElement, RenderOnce, SharedString, Window, prelude::*, px};
+use gpui::{AnyElement, App, IntoElement, RenderOnce, SharedString, Window, prelude::*};
 
-use crate::components::label::{Color, Label, LabelCommon};
-use crate::{spacing, v_flex};
+use crate::components::label::{Label, LabelCommon};
+use crate::{Color, Spacing, v_flex};
 
 /// Message displayed when a list has no children.
 pub enum EmptyMessage {
@@ -79,14 +79,14 @@ impl RenderOnce for List {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         v_flex()
             .w_full()
-            .py(px(spacing::XS))
+            .py(Spacing::XSmall.pixels())
             .children(self.header)
             .map(|this| match (self.children.is_empty(), self.toggle) {
                 (false, _) => this.children(self.children),
                 (true, Some(false)) => this,
                 (true, _) => match self.empty_message {
                     EmptyMessage::Text(text) => this
-                        .px(px(spacing::SM))
+                        .px(Spacing::Medium.pixels())
                         .child(Label::new(text).color(Color::Muted)),
                     EmptyMessage::Element(element) => this.child(element),
                 },

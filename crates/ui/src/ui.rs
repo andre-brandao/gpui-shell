@@ -1,61 +1,23 @@
+//! Shared UI layer for the shell: the theme system and the component set
+//! built on top of it.
+
 mod components;
 mod theme;
 mod traits;
 
-// Re-export components
+// Components
 pub use components::{
-    // Label
-    Color,
-    // List
-    CursorPlacement,
-    EmptyMessage,
-    InputBuffer,
-    Label,
-    LabelCommon,
-    // Layout
-    LabelSide,
-    LabelSize,
-    List,
-    ListItem,
-    ListItemSpacing,
-    ListSeparator,
-    MaskedRenderParts,
-    PlainRenderParts,
-    Slider,
-    SliderEvent,
-    Switch,
-    SwitchSize,
-    h_flex,
-    render_input_line,
-    render_masked_input_line,
-    v_flex,
+    CursorPlacement, EmptyMessage, InputBuffer, Label, LabelCommon, LabelSide, List, ListItem,
+    ListItemSpacing, ListSeparator, MaskedRenderParts, PlainRenderParts, Slider, SliderEvent,
+    Switch, SwitchSize, h_flex, render_input_line, render_masked_input_line, v_flex,
 };
 
-// Re-export traits
+// Traits
 pub use traits::styled_ext::StyledExt;
 
-// Re-export theme system
+// Theme
 pub use theme::{
-    // Color group types (for constructing themes)
-    AccentColors,
-    // Core theme types
-    ActiveTheme,
-    // Base16 conversion
-    Base16Colors,
-    BgColors,
-    BorderColors,
-    Colorize,
-    // Font sizing
-    FontSizes,
-    InteractiveColors,
-    StatusColors,
-    TextColors,
-    Theme,
-    // Theme schemes
-    ThemeScheme,
-    builtin_schemes,
-    // Design constants (non-color)
-    icon_size,
-    radius,
-    spacing,
+    ActiveTheme, Appearance, Base16Palette, Color, Radius, Spacing, StatusColors,
+    StatusColorsRefinement, StoredTheme, TextSize, Theme, ThemeColors, ThemeColorsRefinement,
+    ThemeScheme, builtin_schemes,
 };

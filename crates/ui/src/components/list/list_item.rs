@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, ClickEvent, ElementId, IntoElement, RenderOnce, Window, prelude::*, px,
 };
 
-use crate::{ActiveTheme, h_flex, spacing};
+use crate::{ActiveTheme, Spacing, h_flex};
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -94,11 +94,11 @@ impl ParentElement for ListItem {
 
 impl RenderOnce for ListItem {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let theme = cx.theme();
+        let colors = cx.theme().colors();
 
-        let selected_bg = theme.accent.selection;
-        let hover_bg = theme.interactive.hover;
-        let active_bg = theme.interactive.active;
+        let selected_bg = colors.element_selected;
+        let hover_bg = colors.element_hover;
+        let active_bg = colors.element_active;
 
         h_flex()
             .id(self.id)
@@ -117,18 +117,18 @@ impl RenderOnce for ListItem {
                 h_flex()
                     .w_full()
                     .relative()
-                    .gap(px(spacing::SM))
-                    .px(px(spacing::SM))
+                    .gap(Spacing::Medium.pixels())
+                    .px(Spacing::Medium.pixels())
                     .map(|this| match self.spacing {
                         ListItemSpacing::Dense => this,
                         ListItemSpacing::ExtraDense => this.py(px(0.)),
-                        ListItemSpacing::Sparse => this.py(px(spacing::XS)),
+                        ListItemSpacing::Sparse => this.py(Spacing::XSmall.pixels()),
                     })
                     .child(
                         h_flex()
                             .flex_grow(1.)
                             .flex_shrink_0()
-                            .gap(px(spacing::SM))
+                            .gap(Spacing::Medium.pixels())
                             .overflow_hidden()
                             .children(self.start_slot)
                             .children(self.children),

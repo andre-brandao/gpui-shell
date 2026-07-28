@@ -139,8 +139,8 @@ impl Slider {
         cx: &mut Context<Self>,
     ) -> impl gpui::IntoElement {
         let entity_id = cx.entity_id();
-        let theme = cx.theme();
-        let thumb_color = self.thumb_color.unwrap_or(theme.accent.primary);
+        let colors = cx.theme().colors();
+        let thumb_color = self.thumb_color.unwrap_or(colors.accent);
 
         div()
             .id("thumb")
@@ -176,9 +176,9 @@ impl Slider {
 
 impl Render for Slider {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let track_color = self.track_color.unwrap_or(theme.bg.tertiary);
-        let fill_color = self.fill_color.unwrap_or(theme.accent.primary);
+        let colors = cx.theme().colors();
+        let track_color = self.track_color.unwrap_or(colors.element_background);
+        let fill_color = self.fill_color.unwrap_or(colors.accent);
 
         let thumb_bar_size = if self.percentage < 0.05 {
             0.05 * self.bounds.size.width

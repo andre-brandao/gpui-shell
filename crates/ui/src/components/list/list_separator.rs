@@ -1,6 +1,6 @@
-use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, px};
+use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*};
 
-use crate::{ActiveTheme, spacing};
+use crate::{ActiveTheme, Spacing};
 
 /// A horizontal separator line for use between list items.
 #[derive(IntoElement)]
@@ -11,7 +11,7 @@ impl RenderOnce for ListSeparator {
         div()
             .h_px()
             .w_full()
-            .my(px(spacing::SM))
-            .bg(cx.theme().border.subtle)
+            .my(Spacing::Medium.pixels())
+            .bg(cx.theme().colors().border_variant)
     }
 }

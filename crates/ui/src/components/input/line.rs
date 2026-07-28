@@ -4,8 +4,8 @@ use super::buffer::{CursorPlacement, InputBuffer};
 use crate::ActiveTheme;
 
 pub fn render_input_line(buffer: &InputBuffer, placeholder: &str, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let cursor_el = || div().w(px(1.)).h(px(14.)).bg(theme.text.primary).ml(px(1.));
+    let colors = cx.theme().colors();
+    let cursor_el = || div().w(px(1.)).h(px(14.)).bg(colors.text).ml(px(1.));
 
     if buffer.is_empty() {
         return div()
@@ -15,7 +15,7 @@ pub fn render_input_line(buffer: &InputBuffer, placeholder: &str, cx: &App) -> A
             .child(
                 div()
                     .ml(px(3.))
-                    .text_color(theme.text.placeholder)
+                    .text_color(colors.text_placeholder)
                     .child(placeholder.to_string()),
             )
             .into_any_element();
@@ -37,7 +37,7 @@ pub fn render_input_line(buffer: &InputBuffer, placeholder: &str, cx: &App) -> A
         line = line.child(
             div()
                 .px(px(2.))
-                .bg(theme.accent.selection)
+                .bg(colors.element_selected)
                 .rounded(px(3.))
                 .child(selected.to_string()),
         );
@@ -60,8 +60,8 @@ pub fn render_masked_input_line(
     mask: char,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
-    let cursor_el = || div().w(px(1.)).h(px(14.)).bg(theme.text.primary).ml(px(1.));
+    let colors = cx.theme().colors();
+    let cursor_el = || div().w(px(1.)).h(px(14.)).bg(colors.text).ml(px(1.));
 
     if buffer.is_empty() {
         return div()
@@ -71,7 +71,7 @@ pub fn render_masked_input_line(
             .child(
                 div()
                     .ml(px(3.))
-                    .text_color(theme.text.placeholder)
+                    .text_color(colors.text_placeholder)
                     .child(placeholder.to_string()),
             )
             .into_any_element();
@@ -93,7 +93,7 @@ pub fn render_masked_input_line(
         line = line.child(
             div()
                 .px(px(1.))
-                .bg(theme.accent.selection)
+                .bg(colors.element_selected)
                 .rounded(px(2.))
                 .child(selected),
         );
