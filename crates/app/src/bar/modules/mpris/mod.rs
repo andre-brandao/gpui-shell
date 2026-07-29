@@ -16,14 +16,6 @@ use crate::state::watch;
 mod panel;
 pub use panel::MprisPanel;
 
-mod icons {
-    use ui::IconName;
-
-    pub const PLAYING: IconName = IconName::Play;
-    pub const PAUSED: IconName = IconName::Pause;
-    pub const STOPPED: IconName = IconName::Stop;
-}
-
 /// Bar widget for media status and controls.
 pub struct Mpris {
     subscriber: services::MprisSubscriber,
@@ -72,10 +64,10 @@ impl Mpris {
 
     fn icon(&self) -> IconName {
         match self.primary_player().map(|p| p.state) {
-            Some(PlaybackStatus::Playing) => icons::PLAYING,
-            Some(PlaybackStatus::Paused) => icons::PAUSED,
-            Some(PlaybackStatus::Stopped) => icons::STOPPED,
-            None => icons::STOPPED,
+            Some(PlaybackStatus::Playing) => IconName::Play,
+            Some(PlaybackStatus::Paused) => IconName::Pause,
+            Some(PlaybackStatus::Stopped) => IconName::Stop,
+            None => IconName::Stop,
         }
     }
 

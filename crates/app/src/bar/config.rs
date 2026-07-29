@@ -6,6 +6,12 @@ use super::modules::{
 };
 
 /// Bar screen position.
+///
+// ponytail: the default is `Left`, i.e. vertical, which surprises anyone
+// expecting a conventional horizontal bar - and is what a config that fails
+// to parse silently falls back to. Changing it to `Top` would move every
+// existing install that relies on the default, so it wants a deliberate
+// call rather than a drive-by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BarPosition {

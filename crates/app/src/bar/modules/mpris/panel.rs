@@ -7,18 +7,6 @@ use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
-mod icons {
-    use ui::IconName;
-
-    pub const HEADER: IconName = IconName::Volume;
-    pub const PLAY: IconName = IconName::Play;
-    pub const PAUSE: IconName = IconName::Pause;
-    pub const PREV: IconName = IconName::SkipBack;
-    pub const NEXT: IconName = IconName::SkipForward;
-    pub const PLAYER: IconName = IconName::Music;
-    pub const DURATION: IconName = IconName::Clock;
-}
-
 /// Panel content for controlling media players exposed via MPRIS.
 pub struct MprisPanel {
     subscriber: MprisSubscriber,
@@ -146,9 +134,9 @@ impl MprisPanel {
         let title = Self::title_for(&player);
         let subtitle = Self::subtitle_for(&player);
         let play_icon = if is_playing {
-            icons::PAUSE
+            IconName::Pause
         } else {
-            icons::PLAY
+            IconName::Play
         };
         let service_name = player.service.clone();
         let subscriber = self.subscriber.clone();
@@ -232,7 +220,7 @@ impl MprisPanel {
                                             .items_center()
                                             .justify_center()
                                             .child(
-                                                Icon::new(icons::PLAYER)
+                                                Icon::new(IconName::Music)
                                                     .size(IconSize::XSmall)
                                                     .color(Color::Default),
                                             )
@@ -249,7 +237,7 @@ impl MprisPanel {
                                     .items_center()
                                     .justify_center()
                                     .child(
-                                        Icon::new(icons::PLAYER)
+                                        Icon::new(IconName::Music)
                                             .size(IconSize::XSmall)
                                             .color(Color::Default),
                                     )
@@ -294,7 +282,7 @@ impl MprisPanel {
                         .items_center()
                         .gap(Spacing::XSmall.pixels())
                         .child(
-                            Icon::new(icons::DURATION)
+                            Icon::new(IconName::Clock)
                                 .size(IconSize::XSmall)
                                 .color(Color::Muted),
                         )
@@ -326,7 +314,7 @@ impl MprisPanel {
                             .when(can_control, |el| {
                                 el.child(Self::render_control_button(
                                     format!("mpris-prev-{}", service_name),
-                                    icons::PREV,
+                                    IconName::SkipBack,
                                     cx,
                                     move |cx| {
                                         Self::run_command(
@@ -353,7 +341,7 @@ impl MprisPanel {
                                 .child(
                                     Self::render_control_button(
                                         format!("mpris-next-{}", next_service),
-                                        icons::NEXT,
+                                        IconName::SkipForward,
                                         cx,
                                         move |cx| {
                                             Self::run_command(
@@ -429,7 +417,7 @@ impl Render for MprisPanel {
                             .items_center()
                             .gap(Spacing::Medium.pixels())
                             .child(
-                                Icon::new(icons::HEADER)
+                                Icon::new(IconName::Volume)
                                     .size(IconSize::Large)
                                     .color(Color::Default),
                             )

@@ -57,6 +57,13 @@ impl Global for Config {}
 impl Config {
     /// Initialize the global config.
     pub fn init(cx: &mut App) {
+        // ponytail: one bad field discards the whole file. Icon fields are
+        // lenient (see `crate::icons::deserialize_lenient`) because that is
+        // where it bit us, but any other invalid value - a misspelt enum, a
+        // malformed float - still silently reverts every setting to its
+        // default, with only a log line to say so. Fix by surfacing the
+        // parse error in the UI, or by making each section fall back
+        // independently, if it bites again.
         let config = match persistence::load() {
             Ok(config) => config,
             Err(err) => {

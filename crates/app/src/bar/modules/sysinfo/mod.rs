@@ -19,36 +19,6 @@ use crate::state::watch;
 mod panel;
 pub use panel::SysInfoPanel;
 
-/// Icons for system info readouts.
-pub mod icons {
-    use ui::IconName;
-
-    // CPU
-    pub const CPU: IconName = IconName::Cpu;
-    pub const CPU_HIGH: IconName = IconName::Flame;
-
-    // Memory
-    pub const MEMORY: IconName = IconName::MemoryStick;
-    pub const SWAP: IconName = IconName::ArrowDownUp;
-
-    // Temperature
-    pub const TEMP: IconName = IconName::Thermometer;
-    pub const TEMP_HOT: IconName = IconName::Flame;
-
-    // Disk
-    pub const DISK: IconName = IconName::HardDrive;
-    pub const DISK_FOLDER: IconName = IconName::Folder;
-
-    // Network
-    pub const NETWORK: IconName = IconName::Network;
-    pub const IP: IconName = IconName::Globe;
-    pub const DOWNLOAD: IconName = IconName::Download;
-    pub const UPLOAD: IconName = IconName::Upload;
-
-    // System/header
-    pub const SYSTEM: IconName = IconName::Server;
-}
-
 /// SysInfo widget showing CPU and memory usage in the bar.
 pub struct SysInfo {
     subscriber: services::SysInfoSubscriber,
@@ -100,17 +70,17 @@ impl SysInfo {
 
     fn cpu_icon(&self) -> IconName {
         if self.data.cpu_usage >= 90 {
-            icons::CPU_HIGH
+            IconName::Flame
         } else {
-            icons::CPU
+            IconName::Cpu
         }
     }
 
     fn memory_icon(&self) -> IconName {
         if self.data.memory_usage >= 90 {
-            icons::SWAP
+            IconName::ArrowDownUp
         } else {
-            icons::MEMORY
+            IconName::MemoryStick
         }
     }
 
@@ -149,9 +119,9 @@ impl SysInfo {
         {
             stats.push(SysInfoStat {
                 icon: if temp >= 70 {
-                    icons::TEMP_HOT
+                    IconName::Flame
                 } else {
-                    icons::TEMP
+                    IconName::Thermometer
                 },
                 text: if is_vertical {
                     temp.to_string()

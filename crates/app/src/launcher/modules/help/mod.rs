@@ -9,8 +9,7 @@ use ui::{
 };
 
 use self::config::HelpConfig;
-use crate::bar::modules::sysinfo::icons;
-use crate::icons as shell_icons;
+use crate::icons;
 use crate::launcher::view::{LauncherView, ViewContext};
 use crate::state::AppState;
 
@@ -61,9 +60,9 @@ impl HelpView {
         let memory_color = theme.colors.status.from_percentage(memory_usage);
 
         let cpu_icon = if cpu_usage >= 90 {
-            icons::CPU_HIGH
+            IconName::Flame
         } else {
-            icons::CPU
+            IconName::Cpu
         };
 
         let temp_text = sysinfo
@@ -71,7 +70,7 @@ impl HelpView {
             .map(|t| format!("{}°C", t))
             .unwrap_or_else(|| "—".to_string());
 
-        let battery_icon = shell_icons::battery_data_icon(upower.battery.as_ref());
+        let battery_icon = icons::battery_data_icon(upower.battery.as_ref());
 
         let battery_text = if let Some(ref battery) = upower.battery {
             format!("{}%", battery.percentage)
@@ -113,7 +112,7 @@ impl HelpView {
                     .items_center()
                     .gap(px(4.))
                     .child(
-                        Icon::new(icons::MEMORY)
+                        Icon::new(IconName::MemoryStick)
                             .size(IconSize::Small)
                             .color(Color::Custom(memory_color)),
                     )
@@ -130,7 +129,7 @@ impl HelpView {
                     .items_center()
                     .gap(px(4.))
                     .child(
-                        Icon::new(icons::TEMP)
+                        Icon::new(IconName::Thermometer)
                             .size(IconSize::Small)
                             .color(Color::Muted),
                     )

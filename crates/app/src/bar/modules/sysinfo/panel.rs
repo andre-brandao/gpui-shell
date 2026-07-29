@@ -2,7 +2,6 @@
 //!
 //! This panel displays CPU, memory, swap, temperature, network, and disk information.
 
-use super::icons;
 use crate::state::watch;
 use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
@@ -165,8 +164,8 @@ impl Render for SysInfoPanel {
         };
 
         let temp_icon = match self.data.temperature {
-            Some(t) if t >= 70 => icons::TEMP_HOT,
-            _ => icons::TEMP,
+            Some(t) if t >= 70 => IconName::Flame,
+            _ => IconName::Thermometer,
         };
 
         let ip_str = self
@@ -189,9 +188,9 @@ impl Render for SysInfoPanel {
         };
 
         let cpu_icon = if cpu_usage >= 90 {
-            icons::CPU_HIGH
+            IconName::Flame
         } else {
-            icons::CPU
+            IconName::Cpu
         };
 
         let disks = self.data.disks.clone();
@@ -220,7 +219,7 @@ impl Render for SysInfoPanel {
                     .items_center()
                     .gap(Spacing::Medium.pixels())
                     .child(
-                        Icon::new(icons::SYSTEM)
+                        Icon::new(IconName::Server)
                             .size(IconSize::Large)
                             .color(Color::Default),
                     )
@@ -242,7 +241,7 @@ impl Render for SysInfoPanel {
             ))
             // Memory Section
             .child(Self::render_usage_section(
-                icons::MEMORY,
+                IconName::MemoryStick,
                 "Memory Usage",
                 memory_usage,
                 &memory_details,
@@ -251,7 +250,7 @@ impl Render for SysInfoPanel {
             // Swap Section (only show if swap is being used)
             .when(swap_usage > 0, |el| {
                 el.child(Self::render_usage_section(
-                    icons::SWAP,
+                    IconName::ArrowDownUp,
                     "Swap Usage",
                     swap_usage,
                     "Swap memory",
@@ -284,7 +283,7 @@ impl Render for SysInfoPanel {
                             .items_center()
                             .gap(Spacing::Medium.pixels())
                             .child(
-                                Icon::new(icons::NETWORK)
+                                Icon::new(IconName::Network)
                                     .size(IconSize::Medium)
                                     .color(Color::Default),
                             )
@@ -297,21 +296,21 @@ impl Render for SysInfoPanel {
                             ),
                     )
                     .child(Self::render_info_row(
-                        icons::IP,
+                        IconName::Globe,
                         "IP Address",
                         &ip_str,
                         None,
                         cx,
                     ))
                     .child(Self::render_info_row(
-                        icons::DOWNLOAD,
+                        IconName::Download,
                         "Download",
                         &download_str,
                         None,
                         cx,
                     ))
                     .child(Self::render_info_row(
-                        icons::UPLOAD,
+                        IconName::Upload,
                         "Upload",
                         &upload_str,
                         None,
@@ -335,7 +334,7 @@ impl Render for SysInfoPanel {
                                 .items_center()
                                 .gap(Spacing::Medium.pixels())
                                 .child(
-                                    Icon::new(icons::DISK)
+                                    Icon::new(IconName::HardDrive)
                                         .size(IconSize::Medium)
                                         .color(Color::Default),
                                 )
@@ -366,7 +365,7 @@ impl Render for SysInfoPanel {
                                         .py(Spacing::Medium.pixels())
                                         .child(
                                             div().w(px(32.)).child(
-                                                Icon::new(icons::DISK_FOLDER)
+                                                Icon::new(IconName::Folder)
                                                     .size(IconSize::Large)
                                                     .color(Color::Custom(disk_color)),
                                             ),
