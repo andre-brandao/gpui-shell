@@ -14,12 +14,33 @@
 //! # A note on frame rate
 //!
 //! gpui only renders when something asks it to, and a continuously animating
-//! component asks on every frame. Because this page puts ~40 cards in one
-//! render, each of those frames rebuilds all of them - measured at ~42fps
-//! release, against ~110fps for the gallery, which only ever builds one
-//! story. The cost is linear in card count (~0.4ms per card); no single card
-//! is pathological, and splitting cards into child entities does not help,
-//! because gpui re-renders clean child views on animation frames too.
+//! component asks on every frame - `Animation` calls
+//! `Window::request_animation_frame`, which notifies whichever view was
+//! rendering when the element was built. Every animated element on this page
+//! is built inside `Showcase::render`, so a single spinner dirties the whole
+//! page.
+//!
+//! What that costs is *not* rebuilding the cards. Measured with a probe
+//! around the body of `render`, building all ~40 cards takes 0.25ms of a
+//! ~19-23ms frame. The other 99% is what gpui does after `render` returns:
+//! `Window::draw` clears the taffy layout engine every frame, so the entire
+//! tree is re-laid-out, re-prepainted and re-painted from scratch. Shrinking
+//! the window to 400x300 does not change the frame time at all, which rules
+//! out fill rate - the cost is per element, not per pixel.
+//!
+//! Two things would actually move the needle, neither of them done here:
+//!
+//! - `opt-level = "z"` in the workspace release profile. Rebuilt at
+//!   `opt-level = 3` the same page goes from ~23ms to ~19ms per frame
+//!   (43 -> 52fps), for ~7MB more binary. Zed's own release profile leaves
+//!   `opt-level` at its default of 3.
+//! - `Entity::cached(style)`. A cached child view whose entity is not in
+//!   `dirty_views` skips render/layout/prepaint entirely via
+//!   `Window::reuse_prepaint`, so an animation in one corner stops
+//!   re-laying-out everything else. This is how Zed keeps its spinners cheap:
+//!   panes and docks are cached view boundaries (`pane_group.rs`,
+//!   `dock.rs`). It needs a definite size per cached view, which is why the
+//!   cards here are plain elements instead.
 //!
 //! So the animated cards are gated behind a toggle. Off - the default - the
 //! page requests no frames at all and sits idle, which is what you want from
