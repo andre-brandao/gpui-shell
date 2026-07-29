@@ -91,6 +91,27 @@ impl VariableListScrollHandle {
         }
     }
 
+    /// Measure every row after each [`Self::reset`], instead of only the
+    /// rows currently on screen.
+    ///
+    /// [`Self::scroll_to_item`] can only reach rows whose height is known -
+    /// with the default visible-only measuring it silently stops short at
+    /// the edge of the measured band, which shows up as "keyboard
+    /// selection scrolls off the bottom and the list won't follow". Turn
+    /// this on for lists that are jumped around by index rather than only
+    /// dragged.
+    ///
+    /// The cost is one build of every row per reset. For a list of
+    /// thousands, prefer uniform rows and [`super::VirtualList`], which
+    /// gets exact scrolling from `count * row_height` without measuring.
+    #[must_use]
+    pub fn measure_all(self) -> Self {
+        Self {
+            state: self.state.measure_all(),
+            drag_offset: self.drag_offset,
+        }
+    }
+
     /// Reset to a new item count. Clears measurement cache and scroll
     /// position.
     pub fn reset(&self, item_count: usize) {

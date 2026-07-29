@@ -90,11 +90,28 @@ pub trait LauncherView: Send + Sync {
         true
     }
 
+    /// Recompute the view's match list against the current query.
+    ///
+    /// The launcher calls this exactly once per frame, and again whenever
+    /// it needs a fresh count outside of rendering. Everything after it -
+    /// [`Self::match_count`], [`Self::render_item`], [`Self::on_select`] -
+    /// must read the stored result rather than filtering again: those are
+    /// called once *per row*, so filtering inside them is quadratic in the
+    /// number of matches.
+    ///
+    /// Content views that have no list leave this as a no-op.
+    fn update_matches(&mut self, _vx: &ViewContext, _cx: &App) {}
+
     /// How many selectable items the view currently has.
+    ///
+    /// Reads the result of the last [`Self::update_matches`].
     fn match_count(&self, vx: &ViewContext, cx: &App) -> usize;
 
     /// Render a single list item at `index`. `selected` is true if the
     /// launcher's selection cursor is on this item.
+    ///
+    /// Called only for the rows gpui actually needs, and reads the result
+    /// of the last [`Self::update_matches`].
     fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement;
 
     /// Optional header rendered above the item list.

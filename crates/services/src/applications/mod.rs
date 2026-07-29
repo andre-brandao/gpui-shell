@@ -100,21 +100,35 @@ impl ApplicationsService {
 
     /// Filter applications by search query.
     pub fn search(&self, query: &str) -> Vec<&Application> {
+        self.search_indices(query)
+            .into_iter()
+            .map(|ix| &self.apps[ix])
+            .collect()
+    }
+
+    /// Filter applications by search query, returning indices into
+    /// [`Self::all`].
+    ///
+    /// Callers that need to hold matches across frames want this rather
+    /// than [`Self::search`]: the indices are plain `usize`, so they can be
+    /// stored without borrowing the service.
+    pub fn search_indices(&self, query: &str) -> Vec<usize> {
         if query.is_empty() {
-            return self.apps.iter().collect();
+            return (0..self.apps.len()).collect();
         }
 
         let query_lower = query.to_lowercase();
         self.apps
             .iter()
-            .filter(|app| {
+            .enumerate()
+            .filter(|(_, app)| {
                 app.name.to_lowercase().contains(&query_lower)
                     || app
                         .description
                         .as_ref()
-                        .map(|d| d.to_lowercase().contains(&query_lower))
-                        .unwrap_or(false)
+                        .is_some_and(|d| d.to_lowercase().contains(&query_lower))
             })
+            .map(|(ix, _)| ix)
             .collect()
     }
 
@@ -305,6 +319,35 @@ mod tests {
             desktop_file: PathBuf::from(format!("/usr/share/applications/{name}.desktop")),
             startup_wm_class: startup_wm_class.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn search_indices_agrees_with_search() {
+        let mut firefox = app("Firefox", "firefox %u", None);
+        firefox.description = Some("Web Browser".to_string());
+        let service = ApplicationsService {
+            apps: vec![
+                firefox,
+                app("Kitty", "kitty", None),
+                app("GIMP", "gimp", None),
+            ],
+        };
+
+        for query in ["", "fire", "FIRE", "web browser", "nope"] {
+            let by_ref: Vec<&str> = service.search(query).iter().map(|a| &*a.name).collect();
+            let by_index: Vec<&str> = service
+                .search_indices(query)
+                .into_iter()
+                .map(|ix| &*service.all()[ix].name)
+                .collect();
+            assert_eq!(by_ref, by_index, "query {query:?}");
+        }
+
+        assert_eq!(service.search_indices(""), vec![0, 1, 2]);
+        assert_eq!(service.search_indices("fire"), vec![0]);
+        // Description is searched too, not just the name.
+        assert_eq!(service.search_indices("browser"), vec![0]);
+        assert!(service.search_indices("nope").is_empty());
     }
 
     #[test]

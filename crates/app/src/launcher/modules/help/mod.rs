@@ -17,6 +17,9 @@ use crate::state::AppState;
 pub struct HelpView {
     prefix: String,
     entries: Vec<HelpEntry>,
+    /// Indices into `entries` matching the current query, refreshed once
+    /// per frame by `update_matches`.
+    matches: Vec<usize>,
 }
 
 struct HelpEntry {
@@ -42,6 +45,7 @@ impl HelpView {
         HelpView {
             prefix: config.prefix.clone(),
             entries,
+            matches: Vec::new(),
         }
     }
 
@@ -166,35 +170,13 @@ impl HelpView {
             .into_any_element()
     }
 
-    pub fn selected_prefix(&self, index: usize, query: &str) -> Option<&str> {
-        let query_lower = query.to_lowercase();
-        self.entries
-            .iter()
-            .filter(|entry| {
-                if query.is_empty() {
-                    return true;
-                }
-                entry.prefix.to_lowercase().contains(&query_lower)
-                    || entry.name.to_lowercase().contains(&query_lower)
-                    || entry.description.to_lowercase().contains(&query_lower)
-            })
-            .nth(index)
-            .map(|e| e.prefix.as_str())
+    /// Prefix of the entry at `index` in the current match list.
+    pub fn selected_prefix(&self, index: usize) -> Option<&str> {
+        self.entry(index).map(|e| e.prefix.as_str())
     }
 
-    fn filtered_count(&self, query: &str) -> usize {
-        let query_lower = query.to_lowercase();
-        self.entries
-            .iter()
-            .filter(|entry| {
-                if query.is_empty() {
-                    return true;
-                }
-                entry.prefix.to_lowercase().contains(&query_lower)
-                    || entry.name.to_lowercase().contains(&query_lower)
-                    || entry.description.to_lowercase().contains(&query_lower)
-            })
-            .count()
+    fn entry(&self, index: usize) -> Option<&HelpEntry> {
+        self.entries.get(*self.matches.get(index)?)
     }
 }
 
@@ -219,26 +201,28 @@ impl LauncherView for HelpView {
         false
     }
 
-    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        self.filtered_count(vx.query)
-    }
-
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
+    fn update_matches(&mut self, vx: &ViewContext, _cx: &App) {
         let query_lower = vx.query.to_lowercase();
-        let filtered: Vec<_> = self
+        self.matches = self
             .entries
             .iter()
-            .filter(|entry| {
-                if vx.query.is_empty() {
-                    return true;
-                }
-                entry.prefix.to_lowercase().contains(&query_lower)
+            .enumerate()
+            .filter(|(_, entry)| {
+                query_lower.is_empty()
+                    || entry.prefix.to_lowercase().contains(&query_lower)
                     || entry.name.to_lowercase().contains(&query_lower)
                     || entry.description.to_lowercase().contains(&query_lower)
             })
+            .map(|(ix, _)| ix)
             .collect();
+    }
 
-        let Some(entry) = filtered.get(index) else {
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(entry) = self.entry(index) else {
             return div().into_any_element();
         };
 

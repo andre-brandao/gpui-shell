@@ -32,6 +32,10 @@ const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
 pub struct WallpaperView {
     prefix: String,
     directory: PathBuf,
+    /// Entries matching the current query, refreshed once per frame by
+    /// `update_matches`. Held rather than recomputed per row because
+    /// building it rescans the wallpaper directory off disk.
+    matches: Vec<WallpaperEntry>,
     matugen_type: String,
     matugen_source_color_index: usize,
     matugen_enabled: Arc<AtomicBool>,
@@ -44,6 +48,7 @@ impl WallpaperView {
         Self {
             prefix: config.prefix.clone(),
             directory,
+            matches: Vec::new(),
             matugen_type: "scheme-tonal-spot".into(),
             matugen_source_color_index: 0,
             matugen_enabled: Arc::new(AtomicBool::new(true)),
@@ -185,8 +190,12 @@ impl LauncherView for WallpaperView {
         "Browse and set wallpapers"
     }
 
-    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        filtered_entries(&self.directory, vx.query).len()
+    fn update_matches(&mut self, vx: &ViewContext, _cx: &App) {
+        self.matches = filtered_entries(&self.directory, vx.query);
+    }
+
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
     }
 
     fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
@@ -332,9 +341,8 @@ impl LauncherView for WallpaperView {
         )
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let entries = filtered_entries(&self.directory, vx.query);
-        let Some(entry) = entries.get(index) else {
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(entry) = self.matches.get(index) else {
             return div().into_any_element();
         };
 
@@ -393,9 +401,8 @@ impl LauncherView for WallpaperView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let entries = filtered_entries(&self.directory, vx.query);
-        if let Some(entry) = entries.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(entry) = self.matches.get(index) {
             Self::apply_wallpaper(
                 entry.path.clone(),
                 &self.matugen_enabled,

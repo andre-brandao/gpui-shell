@@ -17,7 +17,10 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use modules::{HelpView, all_views};
-use ui::{ActiveTheme, IconSize, InputBuffer, Radius, Spacing, TextSize, render_input_line};
+use ui::{
+    ActiveTheme, IconSize, InputBuffer, Radius, Spacing, TextSize, VariableList,
+    VariableListScrollHandle, render_input_line,
+};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 
 use crate::config::Config;
@@ -31,12 +34,33 @@ use crate::state::{AppState, watch};
 /// Number of items to jump when using Page Up/Down.
 const ITEMS_PER_PAGE: usize = 7;
 
+/// Which view owns the current query.
+///
+/// Resolved as a slot rather than a `&dyn LauncherView` so the launcher can
+/// still take `&mut` on the view to refresh its matches - a borrow that a
+/// returned reference into `self` would rule out.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ViewSlot {
+    Help,
+    Index(usize),
+}
+
 /// The main launcher struct.
 pub struct Launcher {
     input: InputBuffer,
     selected_index: usize,
     focus_handle: FocusHandle,
+    /// Scroll state for content views (shell, web), which render one
+    /// element rather than a row list.
     scroll_handle: ScrollHandle,
+    /// Scroll and row-measurement state for list views. Persisted across
+    /// frames so `gpui::list` can cache row heights.
+    list_state: VariableListScrollHandle,
+    /// Item count `list_state` was last sized for.
+    list_count: usize,
+    /// Set when the query or view changes, so the next frame rewinds the
+    /// list to the top.
+    needs_list_reset: bool,
     views: Vec<Box<dyn LauncherView>>,
     help_view: HelpView,
 }
@@ -72,6 +96,12 @@ impl Launcher {
             selected_index: 0,
             focus_handle,
             scroll_handle,
+            // ponytail: measure_all builds every row once per query change
+            // so keyboard selection can scroll anywhere. Fine at ~50 apps;
+            // switch to uniform rows + VirtualList if the list gets large.
+            list_state: VariableListScrollHandle::new(0).measure_all(),
+            list_count: 0,
+            needs_list_reset: true,
             views,
             help_view,
         }
@@ -85,38 +115,38 @@ impl Launcher {
     }
 
     /// Reset scroll to top.
-    fn reset_scroll(&self) {
+    fn reset_scroll(&mut self) {
         self.scroll_handle.set_offset(gpui::point(px(0.), px(0.)));
+        self.needs_list_reset = true;
     }
 
     /// Ensure the selected item is scrolled into view.
-    /// The header (if present) is the first child, so item indices are offset by 1.
-    fn scroll_to_selected(&self, cx: &App) {
-        let vx = self.view_context();
-        let has_header = self.current_view().render_header(&vx, cx).is_some();
-        let child_index = self.selected_index + if has_header { 1 } else { 0 };
-        self.scroll_handle.scroll_to_item(child_index);
+    fn scroll_to_selected(&self) {
+        self.list_state.scroll_to_item(self.selected_index);
     }
 
     /// Parse the search query to find which view should handle it.
-    /// Returns (matched_view_or_none, search_term_for_view).
-    fn parse_query(&self) -> (Option<&dyn LauncherView>, &str) {
+    ///
+    /// Returns the slot of the matched view plus that view's search term.
+    /// The term is owned so callers can hold it across a `&mut self`
+    /// borrow of the view itself.
+    fn parse_query(&self) -> (ViewSlot, String) {
         let query = self.input.text().trim();
 
         if query.is_empty() {
-            return (self.default_view(), "");
+            return (self.default_slot(), String::new());
         }
 
         // Check if query starts with any view's prefix
         // We need to find the longest matching prefix first
-        let mut best_match: Option<(&dyn LauncherView, usize)> = None;
+        let mut best_match: Option<(ViewSlot, usize)> = None;
 
-        for view in &self.views {
+        for (ix, view) in self.views.iter().enumerate() {
             let prefix = view.prefix();
             if is_prefix(query, prefix) {
                 // Check if this is a better (longer) match
                 if best_match.is_none() || prefix.len() > best_match.unwrap().1 {
-                    best_match = Some((view.as_ref(), prefix.len()));
+                    best_match = Some((ViewSlot::Index(ix), prefix.len()));
                 }
             }
         }
@@ -125,13 +155,12 @@ impl Launcher {
         if is_prefix(query, self.help_view.prefix()) {
             let prefix_len = self.help_view.prefix().len();
             if best_match.is_none() || prefix_len > best_match.unwrap().1 {
-                best_match = Some((&self.help_view, prefix_len));
+                best_match = Some((ViewSlot::Help, prefix_len));
             }
         }
 
-        if let Some((view, prefix_len)) = best_match {
-            let rest = query[prefix_len..].trim_start();
-            return (Some(view), rest);
+        if let Some((slot, prefix_len)) = best_match {
+            return (slot, query[prefix_len..].trim_start().to_string());
         }
 
         // Check if starts with a known prefix character but no matching prefix
@@ -144,25 +173,38 @@ impl Launcher {
                 || self.help_view.prefix().starts_with(first_char))
         {
             // Unknown special prefix - show help
-            return (Some(&self.help_view), query);
+            return (ViewSlot::Help, query.to_string());
         }
 
         // No prefix, use default view with full query as search
-        (self.default_view(), query)
+        (self.default_slot(), query.to_string())
     }
 
-    /// Get the default view.
-    fn default_view(&self) -> Option<&dyn LauncherView> {
+    /// Slot of the default view, falling back to help when none is marked.
+    fn default_slot(&self) -> ViewSlot {
         self.views
             .iter()
-            .find(|v| v.is_default())
-            .map(|v| v.as_ref())
+            .position(|v| v.is_default())
+            .map_or(ViewSlot::Help, ViewSlot::Index)
+    }
+
+    fn view(&self, slot: ViewSlot) -> &dyn LauncherView {
+        match slot {
+            ViewSlot::Help => &self.help_view,
+            ViewSlot::Index(ix) => self.views[ix].as_ref(),
+        }
+    }
+
+    fn view_mut(&mut self, slot: ViewSlot) -> &mut dyn LauncherView {
+        match slot {
+            ViewSlot::Help => &mut self.help_view,
+            ViewSlot::Index(ix) => self.views[ix].as_mut(),
+        }
     }
 
     /// Get the current active view.
     fn current_view(&self) -> &dyn LauncherView {
-        let (view, _) = self.parse_query();
-        view.unwrap_or(&self.help_view)
+        self.view(self.parse_query().0)
     }
 
     /// Get the current view name for display.
@@ -170,33 +212,39 @@ impl Launcher {
         self.current_view().name()
     }
 
-    /// Create view context for rendering.
-    fn view_context(&self) -> ViewContext<'_> {
-        let (_, search) = self.parse_query();
-        ViewContext {
-            query: search,
+    /// Refresh the current view's matches and return its slot, search term
+    /// and match count.
+    ///
+    /// Every read of `match_count` / `render_item` downstream reuses this
+    /// one filter pass.
+    fn refresh_matches(&mut self, cx: &App) -> (ViewSlot, String, usize) {
+        let (slot, query) = self.parse_query();
+        let vx = ViewContext {
+            query: &query,
             selected_index: self.selected_index,
-        }
+        };
+        let view = self.view_mut(slot);
+        view.update_matches(&vx, cx);
+        let count = view.match_count(&vx, cx);
+        (slot, query, count)
     }
 
     fn handle_input(&mut self, input: ViewInput, cx: &mut App) -> bool {
-        let vx = self.view_context();
-        let view = self.current_view();
-        let item_count = view.match_count(&vx, cx);
+        let (slot, query, item_count) = self.refresh_matches(cx);
+        let vx = ViewContext {
+            query: &query,
+            selected_index: self.selected_index,
+        };
+        let view = self.view(slot);
 
         match view.handle_input(&input, &vx, cx) {
             InputResult::Handled { query, close } => {
                 // Update search query based on current view prefix
-                let (matched_view, _) = self.parse_query();
-                if let Some(v) = matched_view {
-                    let prefix = v.prefix();
-                    if query.is_empty() {
-                        self.input.set_text(prefix.to_string());
-                    } else {
-                        self.input.set_text(format!("{} {}", prefix, query));
-                    }
+                let prefix = self.current_view().prefix().to_string();
+                if query.is_empty() {
+                    self.input.set_text(prefix);
                 } else {
-                    self.input.set_text(query);
+                    self.input.set_text(format!("{} {}", prefix, query));
                 }
                 self.selected_index = 0;
                 self.reset_scroll();
@@ -222,27 +270,27 @@ impl Launcher {
                             } else {
                                 self.selected_index - 1
                             };
-                            self.scroll_to_selected(cx);
+                            self.scroll_to_selected();
                         }
                     }
                     ViewInput::Down => {
                         if item_count > 0 {
                             self.selected_index = (self.selected_index + 1) % item_count;
-                            self.scroll_to_selected(cx);
+                            self.scroll_to_selected();
                         }
                     }
                     ViewInput::PageUp => {
                         if item_count > 0 {
                             self.selected_index =
                                 self.selected_index.saturating_sub(ITEMS_PER_PAGE);
-                            self.scroll_to_selected(cx);
+                            self.scroll_to_selected();
                         }
                     }
                     ViewInput::PageDown => {
                         if item_count > 0 {
                             self.selected_index = (self.selected_index + ITEMS_PER_PAGE)
                                 .min(item_count.saturating_sub(1));
-                            self.scroll_to_selected(cx);
+                            self.scroll_to_selected();
                         }
                     }
                     ViewInput::Enter => {
@@ -261,27 +309,30 @@ impl Launcher {
     }
 
     fn execute_selected(&mut self, cx: &mut App) -> bool {
-        let view = self.current_view();
+        let (slot, query) = self.parse_query();
 
         // Check if we're in help view and selected a command
-        if std::ptr::eq(view, &self.help_view as &dyn LauncherView) {
-            let vx = self.view_context();
-            if let Some(prefix) = self
-                .help_view
-                .selected_prefix(self.selected_index, vx.query)
-            {
-                let target = self.views.iter().find(|v| v.prefix() == prefix);
-                if let Some(target_view) = target {
-                    self.input.set_text(format!("{} ", target_view.prefix()));
-                    self.selected_index = 0;
-                    self.reset_scroll();
-                    return false;
-                }
+        if slot == ViewSlot::Help
+            && let Some(prefix) = self.help_view.selected_prefix(self.selected_index)
+        {
+            let target = self
+                .views
+                .iter()
+                .find(|v| v.prefix() == prefix)
+                .map(|v| v.prefix().to_string());
+            if let Some(prefix) = target {
+                self.input.set_text(format!("{} ", prefix));
+                self.selected_index = 0;
+                self.reset_scroll();
+                return false;
             }
         }
 
-        let vx = self.view_context();
-        view.on_select(self.selected_index, &vx, cx)
+        let vx = ViewContext {
+            query: &query,
+            selected_index: self.selected_index,
+        };
+        self.view(slot).on_select(self.selected_index, &vx, cx)
     }
 
     fn placeholder(&self) -> String {
@@ -345,21 +396,27 @@ impl Render for Launcher {
         let prefix_hints = self.footer_prefix_hints();
         let placeholder = self.placeholder();
 
-        // Compute item count and clamp selected index before borrowing self
-        {
-            let vx = self.view_context();
-            let item_count = self.current_view().match_count(&vx, cx);
-            if self.selected_index >= item_count && item_count > 0 {
-                self.selected_index = item_count - 1;
-            }
+        // One filter pass for the whole frame. Everything below reads its
+        // result instead of re-filtering per row.
+        let (slot, query, item_count) = self.refresh_matches(cx);
+        if self.selected_index >= item_count && item_count > 0 {
+            self.selected_index = item_count - 1;
         }
 
-        // Now render with the clamped selection
-        let vx = self.view_context();
-        let current_view = self.current_view();
-        let item_count = current_view.match_count(&vx, cx);
+        // `gpui::list` needs to be told when the row set changes; it caches
+        // measurements per index otherwise.
+        if self.needs_list_reset || item_count != self.list_count {
+            self.list_state.reset(item_count);
+            self.list_count = item_count;
+            self.needs_list_reset = false;
+        }
+
+        let vx = ViewContext {
+            query: &query,
+            selected_index: self.selected_index,
+        };
+        let current_view = self.view(slot);
         let footer_bar = current_view.render_footer_bar(&vx, cx);
-        let selected_index = self.selected_index;
         let header = current_view.render_header(&vx, cx);
         let footer = current_view.render_footer(&vx, cx);
         let content = current_view.render_content(&vx, cx);
@@ -531,26 +588,55 @@ impl Render for Launcher {
             )
             // Divider line
             .child(div().w_full().h(px(1.)).bg(border_default))
-            // View content with scroll support — items are direct children
-            // so that scroll_handle.scroll_to_item(index) works correctly.
+            // View content. List views go through `VariableList`, which
+            // only builds the rows gpui actually needs - layout cost in
+            // gpui is per element and independent of visibility, so
+            // building all N rows to show ~8 is the whole cost. Header and
+            // footer sit outside the list because it owns its own scroll.
             .child(
                 div()
                     .id("view-content")
                     .flex_1()
                     .flex()
                     .flex_col()
-                    .overflow_y_scroll()
-                    .track_scroll(&self.scroll_handle)
                     .py(Spacing::XSmall.pixels())
                     .when_some(header, |el, h| el.child(h))
                     .map(|el| {
                         if let Some(content) = content {
-                            el.child(content)
+                            el.child(
+                                div()
+                                    .id("view-scroll")
+                                    .flex_1()
+                                    .overflow_y_scroll()
+                                    .track_scroll(&self.scroll_handle)
+                                    .child(content),
+                            )
                         } else {
-                            el.children(
-                                (0..item_count).map(|i| {
-                                    current_view.render_item(i, i == selected_index, &vx, cx)
-                                }),
+                            // `gpui::list` sizes itself from its own style,
+                            // not from its rows, so it needs a parent with a
+                            // definite height to measure against - `flex_1`
+                            // on the list itself resolves to zero and it
+                            // renders no rows at all.
+                            el.child(
+                                div().flex_1().overflow_hidden().child(
+                                    VariableList::new(
+                                        self.list_state.clone(),
+                                        cx.processor(|this, ix: usize, _window, cx| {
+                                            let (slot, query) = this.parse_query();
+                                            let vx = ViewContext {
+                                                query: &query,
+                                                selected_index: this.selected_index,
+                                            };
+                                            this.view(slot).render_item(
+                                                ix,
+                                                ix == this.selected_index,
+                                                &vx,
+                                                cx,
+                                            )
+                                        }),
+                                    )
+                                    .h_full(),
+                                ),
                             )
                         }
                     })

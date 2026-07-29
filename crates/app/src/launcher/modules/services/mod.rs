@@ -16,6 +16,9 @@ use crate::state::AppState;
 /// Services status view - shows health of all system services.
 pub struct ServicesView {
     prefix: String,
+    /// Services matching the current query, refreshed once per frame by
+    /// `update_matches`.
+    matches: Vec<ServiceInfo>,
 }
 
 #[derive(Clone)]
@@ -29,6 +32,7 @@ impl ServicesView {
     pub fn new(config: &ServicesConfig) -> Self {
         Self {
             prefix: config.prefix.clone(),
+            matches: Vec::new(),
         }
     }
 
@@ -128,13 +132,16 @@ impl LauncherView for ServicesView {
         "View service health status"
     }
 
-    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
-        self.filtered_services(vx.query, cx).len()
+    fn update_matches(&mut self, vx: &ViewContext, cx: &App) {
+        self.matches = self.filtered_services(vx.query, cx);
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let services = self.filtered_services(vx.query, cx);
-        let Some(service) = services.get(index) else {
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(service) = self.matches.get(index) else {
             return div().into_any_element();
         };
 

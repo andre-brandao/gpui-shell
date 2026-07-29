@@ -16,12 +16,16 @@ use crate::state::AppState;
 /// Workspaces view - displays and switches between workspaces.
 pub struct WorkspacesView {
     prefix: String,
+    /// Workspaces matching the current query, refreshed once per frame by
+    /// `update_matches`.
+    matches: Vec<services::compositor::Workspace>,
 }
 
 impl WorkspacesView {
     pub fn new(config: &WorkspacesConfig) -> Self {
         Self {
             prefix: config.prefix.clone(),
+            matches: Vec::new(),
         }
     }
 
@@ -69,13 +73,16 @@ impl LauncherView for WorkspacesView {
         "Switch between workspaces"
     }
 
-    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
-        self.filtered_workspaces(vx, cx).len()
+    fn update_matches(&mut self, vx: &ViewContext, cx: &App) {
+        self.matches = self.filtered_workspaces(vx, cx);
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let filtered = self.filtered_workspaces(vx, cx);
-        let Some(ws) = filtered.get(index) else {
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(ws) = self.matches.get(index) else {
             return div().into_any_element();
         };
 
@@ -124,9 +131,8 @@ impl LauncherView for WorkspacesView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let filtered = self.filtered_workspaces(vx, cx);
-        if let Some(ws) = filtered.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(ws) = self.matches.get(index) {
             let _ = AppState::compositor(cx).dispatch(CompositorCommand::FocusWorkspace(ws.id));
             true
         } else {

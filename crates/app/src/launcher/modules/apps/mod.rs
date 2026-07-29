@@ -15,13 +15,22 @@ use crate::state::AppState;
 /// Applications view - searches and launches desktop applications.
 pub struct AppsView {
     prefix: String,
+    /// Indices into `ApplicationsService::all()`, refreshed once per frame
+    /// by `update_matches`.
+    matches: Vec<usize>,
 }
 
 impl AppsView {
     pub fn new(config: &AppsConfig) -> Self {
         Self {
             prefix: config.prefix.clone(),
+            matches: Vec::new(),
         }
+    }
+
+    fn app<'a>(&self, index: usize, cx: &'a App) -> Option<&'a services::Application> {
+        let ix = *self.matches.get(index)?;
+        AppState::applications(cx).all().get(ix)
     }
 }
 
@@ -46,15 +55,16 @@ impl LauncherView for AppsView {
         true
     }
 
-    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
-        let query_lower = vx.query.to_lowercase();
-        AppState::applications(cx).search(&query_lower).len()
+    fn update_matches(&mut self, vx: &ViewContext, cx: &App) {
+        self.matches = AppState::applications(cx).search_indices(vx.query);
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let query_lower = vx.query.to_lowercase();
-        let apps = AppState::applications(cx).search(&query_lower);
-        let Some(app) = apps.get(index) else {
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(app) = self.app(index, cx) else {
             return div().into_any_element();
         };
 
@@ -103,11 +113,8 @@ impl LauncherView for AppsView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let query_lower = vx.query.to_lowercase();
-        let apps = AppState::applications(cx).search(&query_lower);
-
-        if let Some(app) = apps.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(app) = self.app(index, cx) {
             launch_app(&app.exec);
             true
         } else {

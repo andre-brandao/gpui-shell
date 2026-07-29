@@ -22,12 +22,16 @@ static CACHED_SCHEMES: Mutex<Option<Vec<ThemeScheme>>> = Mutex::new(None);
 /// Launcher view for browsing and applying themes.
 pub struct ThemeView {
     prefix: String,
+    /// Schemes matching the current query, refreshed once per frame by
+    /// `update_matches`.
+    matches: Vec<ThemeScheme>,
 }
 
 impl ThemeView {
     pub fn new(config: &ThemesConfig) -> Self {
         Self {
             prefix: config.prefix.clone(),
+            matches: Vec::new(),
         }
     }
 
@@ -56,8 +60,12 @@ impl LauncherView for ThemeView {
         "Browse and apply themes"
     }
 
-    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        Self::visible_schemes(vx.query).len()
+    fn update_matches(&mut self, vx: &ViewContext, _cx: &App) {
+        self.matches = Self::visible_schemes(vx.query);
+    }
+
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
     }
 
     fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
@@ -85,9 +93,9 @@ impl LauncherView for ThemeView {
         Some(header.into_any_element())
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
         let theme = cx.theme();
-        let schemes = Self::visible_schemes(vx.query);
+        let schemes = &self.matches;
         let current_accent = theme.colors.accent;
         let current_bg = theme.colors.background;
 
@@ -100,9 +108,8 @@ impl LauncherView for ThemeView {
         }
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let schemes = Self::visible_schemes(vx.query);
-        if let Some(scheme) = schemes.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(scheme) = self.matches.get(index) {
             // Swapping only the palette keeps the user's font size and any
             // token overrides intact.
             let mut new_theme = cx.theme().clone();
