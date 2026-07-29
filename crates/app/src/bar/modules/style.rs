@@ -8,7 +8,7 @@
 //! Font sizes come from `TextSize` (XSmall/Small for vertical, Small/Medium for horizontal).
 
 use gpui::{AnyElement, Hsla, IntoElement, div, prelude::*, px};
-use ui::{IconSize, Spacing, TextSize, Theme};
+use ui::{Color, Icon, IconName, IconSize, Spacing, TextSize, Theme};
 
 use crate::bar::config::BarConfig;
 
@@ -40,11 +40,11 @@ pub fn group_gap(is_vertical: bool) -> f32 {
 
 /// Icon size tuned for bar density.
 #[inline(always)]
-pub fn icon(is_vertical: bool) -> f32 {
+pub fn icon(is_vertical: bool) -> IconSize {
     if is_vertical {
-        IconSize::Small.value()
+        IconSize::Small
     } else {
-        IconSize::Medium.value()
+        IconSize::Medium
     }
 }
 
@@ -107,7 +107,7 @@ pub fn widget_hover_background(theme: &Theme, bar: &BarConfig) -> Hsla {
 pub fn bar_stat(
     _theme: &Theme,
     is_vertical: bool,
-    icon_text: &'static str,
+    icon_name: IconName,
     value_text: impl IntoElement,
     color: Hsla,
 ) -> AnyElement {
@@ -118,11 +118,9 @@ pub fn bar_stat(
         .justify_center()
         .gap(px(CHIP_GAP))
         .child(
-            div()
-                .flex_shrink_0()
-                .text_size(px(icon(is_vertical)))
-                .text_color(color)
-                .child(icon_text),
+            Icon::new(icon_name)
+                .size(icon(is_vertical))
+                .color(Color::Custom(color)),
         )
         .child(if is_vertical {
             vertical_text_line(

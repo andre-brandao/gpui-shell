@@ -6,10 +6,7 @@
 
 use gpui::{AnyElement, App, IntoElement, RenderOnce, SharedString, Window, div, prelude::*, px};
 
-use crate::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
-
-/// Search glyph shown left of the query line (Nerd Font).
-const SEARCH_ICON: &str = "";
+use crate::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 /// The launcher surface: query row, body, footer hint bar.
 ///
@@ -27,7 +24,7 @@ const SEARCH_ICON: &str = "";
 #[must_use = "LauncherFrame does nothing unless rendered"]
 pub struct LauncherFrame {
     query: AnyElement,
-    icon: SharedString,
+    icon: IconName,
     badge: Option<SharedString>,
     hints: Option<SharedString>,
     actions: Option<AnyElement>,
@@ -40,7 +37,7 @@ impl LauncherFrame {
     pub fn new(query: impl IntoElement) -> Self {
         Self {
             query: query.into_any_element(),
-            icon: SharedString::new_static(SEARCH_ICON),
+            icon: IconName::MagnifyingGlass,
             badge: None,
             hints: None,
             actions: None,
@@ -48,9 +45,9 @@ impl LauncherFrame {
         }
     }
 
-    /// Replace the search glyph.
-    pub fn icon(mut self, icon: impl Into<SharedString>) -> Self {
-        self.icon = icon.into();
+    /// Replace the search icon.
+    pub fn icon(mut self, icon: IconName) -> Self {
+        self.icon = icon;
         self
     }
 
@@ -109,10 +106,9 @@ impl RenderOnce for LauncherFrame {
                     .items_center()
                     .gap(Spacing::Large.pixels())
                     .child(
-                        div()
-                            .text_size(IconSize::Medium.pixels())
-                            .text_color(muted)
-                            .child(self.icon),
+                        Icon::new(self.icon)
+                            .size(IconSize::Medium)
+                            .color(Color::Custom(muted)),
                     )
                     .child(
                         div()

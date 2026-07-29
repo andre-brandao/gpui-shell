@@ -13,12 +13,18 @@ use gpui::{AnyElement, App, div, prelude::*, px};
 use services::{ServiceMode, ServiceStatus};
 use ui::patterns::footer_hints;
 use ui::{
-    ActiveTheme, Color, IconSize, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, TextSize,
-    Toggleable,
+    ActiveTheme, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem, ListItemSpacing,
+    Spacing, TextSize, Toggleable,
 };
+
+use crate::icons;
 
 use self::config::ServicesConfig;
 use crate::config::Config;
+
+/// Icon for the services view itself, and for any service without a more
+/// specific one.
+const SERVICES_ICON: IconName = IconName::Gauge;
 use crate::launcher::view::{InputResult, LauncherView, ViewContext, ViewInput};
 use crate::state::AppState;
 
@@ -47,7 +53,7 @@ enum Level {
 #[derive(Clone)]
 struct ServiceInfo {
     name: &'static str,
-    icon: &'static str,
+    icon: IconName,
     status: ServiceStatus,
     mode: ServiceMode,
     memory: usize,
@@ -83,12 +89,12 @@ impl Action {
         }
     }
 
-    fn icon(&self) -> &'static str {
+    fn icon(&self) -> IconName {
         match self {
-            Action::Start => "󰐊",
-            Action::Stop => "󰓛",
-            Action::Restart => "󰑓",
-            Action::SetMode(_) => "󰒓",
+            Action::Start => IconName::Play,
+            Action::Stop => IconName::Stop,
+            Action::Restart => IconName::Refresh,
+            Action::SetMode(_) => IconName::Settings,
         }
     }
 }
@@ -148,8 +154,8 @@ impl LauncherView for ServicesView {
         "Services"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰓅"
+    fn icon(&self) -> IconName {
+        SERVICES_ICON
     }
 
     fn description(&self) -> &'static str {
@@ -281,10 +287,9 @@ impl LauncherView for ServicesView {
                                 .items_center()
                                 .gap(Spacing::Medium.pixels())
                                 .child(
-                                    div()
-                                        .text_size(IconSize::Small.pixels())
-                                        .text_color(color)
-                                        .child("󰓅"),
+                                    Icon::new(SERVICES_ICON)
+                                        .size(IconSize::Small)
+                                        .color(Color::Custom(color)),
                                 )
                                 .child(
                                     div()
@@ -381,16 +386,14 @@ fn render_service_row(service: &ServiceInfo, selected: bool, cx: &App) -> AnyEle
                 .items_center()
                 .gap(Spacing::Medium.pixels())
                 .child(
-                    div()
-                        .text_size(IconSize::Medium.pixels())
-                        .text_color(theme.colors.text)
-                        .child(service.icon),
+                    Icon::new(service.icon)
+                        .size(IconSize::Medium)
+                        .color(Color::Custom(theme.colors.text)),
                 )
                 .child(
-                    div()
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(status_color(&service.status, cx))
-                        .child(service.status.icon()),
+                    Icon::new(icons::service_status_icon(&service.status))
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(status_color(&service.status, cx))),
                 ),
         )
         .child(
@@ -431,10 +434,9 @@ fn render_action_row(
         .spacing(ListItemSpacing::Sparse)
         .toggle_state(selected)
         .start_slot(
-            div()
-                .text_size(IconSize::Medium.pixels())
-                .text_color(theme.colors.text)
-                .child(action.icon()),
+            Icon::new(action.icon())
+                .size(IconSize::Medium)
+                .color(Color::Custom(theme.colors.text)),
         )
         .child(
             div()
@@ -470,21 +472,21 @@ fn status_color(status: &ServiceStatus, cx: &App) -> gpui::Hsla {
     }
 }
 
-fn icon_for(name: &str) -> &'static str {
+fn icon_for(name: &str) -> IconName {
     match name {
-        "Audio" => "󰕾",
-        "Network" => "󰖟",
-        "Bluetooth" => "󰂯",
-        "UPower" => "󰁹",
-        "MPRIS" => "󰝚",
-        "Notifications" => "󰂚",
-        "Tray" => "󰍜",
-        "Sysinfo" => "󰻠",
-        "Privacy" => "󰒃",
-        "Wallpaper" => "󰸉",
-        "Brightness" => "󰃟",
-        "Compositor" => "󰧨",
-        _ => "󰓅",
+        "Audio" => IconName::Volume,
+        "Network" => IconName::Globe,
+        "Bluetooth" => IconName::Bluetooth,
+        "UPower" => IconName::BatteryFull,
+        "MPRIS" => IconName::Headphones,
+        "Notifications" => IconName::Bell,
+        "Tray" => IconName::Menu,
+        "Sysinfo" => IconName::Cpu,
+        "Privacy" => IconName::Eye,
+        "Wallpaper" => IconName::Image,
+        "Brightness" => IconName::Sun,
+        "Compositor" => IconName::Layout,
+        _ => SERVICES_ICON,
     }
 }
 

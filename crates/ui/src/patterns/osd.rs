@@ -4,22 +4,20 @@
 //! Horizontal reads icon → bar → value; vertical reads value → bar → icon,
 //! so the value stays at the top and the bar still fills from the bottom.
 
-use gpui::{
-    App, Hsla, IntoElement, RenderOnce, SharedString, Window, div, prelude::*, px, relative,
-};
+use gpui::{App, Hsla, IntoElement, RenderOnce, Window, div, prelude::*, px, relative};
 
-use crate::{ActiveTheme, IconSize, Radius, Spacing};
+use crate::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing};
 
 const TRACK: f32 = 6.0;
 
-/// A level readout: glyph, filled track, percentage.
+/// A level readout: icon, filled track, percentage.
 ///
 /// Fills its parent, so give it one. `level` may exceed 100 (overamplified
 /// volume) - the track clamps, the number does not.
 #[derive(IntoElement)]
 #[must_use = "OsdIndicator does nothing unless rendered"]
 pub struct OsdIndicator {
-    icon: SharedString,
+    icon: IconName,
     level: u8,
     vertical: bool,
     fill: Option<Hsla>,
@@ -27,9 +25,9 @@ pub struct OsdIndicator {
 }
 
 impl OsdIndicator {
-    pub fn new(icon: impl Into<SharedString>, level: u8) -> Self {
+    pub fn new(icon: IconName, level: u8) -> Self {
         Self {
-            icon: icon.into(),
+            icon,
             level,
             vertical: false,
             fill: None,
@@ -65,10 +63,9 @@ impl RenderOnce for OsdIndicator {
         let vertical = self.vertical;
         let filled = (self.level as f32 / 100.0).min(1.0);
 
-        let icon = div()
-            .text_size(IconSize::Large.pixels())
-            .text_color(icon_color)
-            .child(self.icon);
+        let icon = Icon::new(self.icon)
+            .size(IconSize::Large)
+            .color(Color::Custom(icon_color));
 
         let value = div()
             .text_size(px(12.0))

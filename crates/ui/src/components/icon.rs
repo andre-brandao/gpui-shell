@@ -27,6 +27,7 @@ use std::sync::Arc;
 
 use crate::theme::{ActiveTheme, Color};
 use gpui::{App, IntoElement, RenderOnce, SharedString, Window, img, prelude::*, svg};
+use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoStaticStr};
 
 pub use crate::theme::IconSize;
@@ -46,8 +47,13 @@ pub use crate::theme::IconSize;
 /// battery and Wi-Fi signal ladders, Bluetooth states, Ethernet, and
 /// sensor icons - which a general-purpose UI catalogue has no reason to
 /// ship.
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, IntoStaticStr, EnumIter)]
+/// Config files name icons the same way the assets do (`"battery_low"`),
+/// so serde and strum agree on `snake_case`.
+#[derive(
+    Debug, PartialEq, Eq, Copy, Clone, Hash, IntoStaticStr, EnumIter, Serialize, Deserialize,
+)]
 #[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum IconName {
     ArrowDown,
     ArrowDownLeft,

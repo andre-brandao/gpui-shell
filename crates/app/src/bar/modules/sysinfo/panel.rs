@@ -7,7 +7,7 @@ use crate::state::watch;
 use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanel {
@@ -33,7 +33,7 @@ impl SysInfoPanel {
     }
 
     fn render_info_row(
-        icon: &str,
+        icon: IconName,
         label: &str,
         value: &str,
         color: Option<Hsla>,
@@ -48,11 +48,11 @@ impl SysInfoPanel {
             .items_center()
             .py(Spacing::Medium.pixels())
             .child(
-                div()
-                    .w(px(32.))
-                    .text_size(IconSize::Large.pixels())
-                    .text_color(text_color)
-                    .child(icon.to_string()),
+                div().w(px(32.)).child(
+                    Icon::new(icon)
+                        .size(IconSize::Large)
+                        .color(Color::Custom(text_color)),
+                ),
             )
             .child(
                 div()
@@ -90,7 +90,7 @@ impl SysInfoPanel {
     }
 
     fn render_usage_section(
-        icon: &str,
+        icon: IconName,
         title: &str,
         usage: u32,
         details: &str,
@@ -118,10 +118,9 @@ impl SysInfoPanel {
                             .items_center()
                             .gap(Spacing::Medium.pixels())
                             .child(
-                                div()
-                                    .text_size(IconSize::Medium.pixels())
-                                    .text_color(theme.colors.text)
-                                    .child(icon.to_string()),
+                                Icon::new(icon)
+                                    .size(IconSize::Medium)
+                                    .color(Color::Custom(theme.colors.text)),
                             )
                             .child(
                                 div()
@@ -225,10 +224,9 @@ impl Render for SysInfoPanel {
                     .items_center()
                     .gap(Spacing::Medium.pixels())
                     .child(
-                        div()
-                            .text_size(IconSize::Large.pixels())
-                            .text_color(theme.colors.text)
-                            .child(icons::SYSTEM),
+                        Icon::new(icons::SYSTEM)
+                            .size(IconSize::Large)
+                            .color(Color::Custom(theme.colors.text)),
                     )
                     .child(
                         div()
@@ -290,10 +288,9 @@ impl Render for SysInfoPanel {
                             .items_center()
                             .gap(Spacing::Medium.pixels())
                             .child(
-                                div()
-                                    .text_size(IconSize::Medium.pixels())
-                                    .text_color(theme.colors.text)
-                                    .child(icons::NETWORK),
+                                Icon::new(icons::NETWORK)
+                                    .size(IconSize::Medium)
+                                    .color(Color::Custom(theme.colors.text)),
                             )
                             .child(
                                 div()
@@ -342,10 +339,9 @@ impl Render for SysInfoPanel {
                                 .items_center()
                                 .gap(Spacing::Medium.pixels())
                                 .child(
-                                    div()
-                                        .text_size(IconSize::Medium.pixels())
-                                        .text_color(text_primary)
-                                        .child(icons::DISK),
+                                    Icon::new(icons::DISK)
+                                        .size(IconSize::Medium)
+                                        .color(Color::Custom(text_primary)),
                                 )
                                 .child(
                                     div()
@@ -373,11 +369,11 @@ impl Render for SysInfoPanel {
                                         .items_center()
                                         .py(Spacing::Medium.pixels())
                                         .child(
-                                            div()
-                                                .w(px(32.))
-                                                .text_size(IconSize::Large.pixels())
-                                                .text_color(disk_color)
-                                                .child(icons::DISK_FOLDER),
+                                            div().w(px(32.)).child(
+                                                Icon::new(icons::DISK_FOLDER)
+                                                    .size(IconSize::Large)
+                                                    .color(Color::Custom(disk_color)),
+                                            ),
                                         )
                                         .child(
                                             div()

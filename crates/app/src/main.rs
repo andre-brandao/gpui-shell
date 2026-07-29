@@ -17,6 +17,7 @@ mod bar;
 pub mod config;
 pub mod control_center;
 pub mod dock;
+pub mod icons;
 mod ipc;
 mod keybinds;
 pub mod launcher;

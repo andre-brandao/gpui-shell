@@ -41,21 +41,6 @@ pub struct BluetoothData {
 }
 
 impl BluetoothData {
-    /// Get an icon representing the current Bluetooth state.
-    pub fn icon(&self) -> &'static str {
-        match self.state {
-            BluetoothState::Active => {
-                if self.devices.iter().any(|d| d.connected) {
-                    "󰂱" // Connected
-                } else {
-                    "󰂯" // On but not connected
-                }
-            }
-            BluetoothState::Inactive => "󰂲",    // Off
-            BluetoothState::Unavailable => "󰂲", // Unavailable
-        }
-    }
-
     /// Check if any device is currently connected.
     pub fn has_connected_device(&self) -> bool {
         self.devices.iter().any(|d| d.connected)

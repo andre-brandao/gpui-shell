@@ -4,12 +4,13 @@ pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px};
 use ui::{
-    ActiveTheme, Color, IconSize, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, TextSize,
-    Toggleable,
+    ActiveTheme, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem, ListItemSpacing,
+    Spacing, TextSize, Toggleable,
 };
 
 use self::config::HelpConfig;
 use crate::bar::modules::sysinfo::icons;
+use crate::icons as shell_icons;
 use crate::launcher::view::{LauncherView, ViewContext};
 use crate::state::AppState;
 
@@ -24,7 +25,7 @@ pub struct HelpView {
 
 struct HelpEntry {
     prefix: String,
-    icon: String,
+    icon: IconName,
     name: String,
     description: String,
 }
@@ -36,7 +37,7 @@ impl HelpView {
             .filter(|v| v.show_in_help())
             .map(|v| HelpEntry {
                 prefix: v.prefix().to_string(),
-                icon: v.icon().to_string(),
+                icon: v.icon(),
                 name: v.name().to_string(),
                 description: v.description().to_string(),
             })
@@ -70,11 +71,7 @@ impl HelpView {
             .map(|t| format!("{}°C", t))
             .unwrap_or_else(|| "—".to_string());
 
-        let battery_icon = if let Some(ref battery) = upower.battery {
-            battery.icon()
-        } else {
-            "󰂃"
-        };
+        let battery_icon = shell_icons::battery_data_icon(upower.battery.as_ref());
 
         let battery_text = if let Some(ref battery) = upower.battery {
             format!("{}%", battery.percentage)
@@ -99,10 +96,9 @@ impl HelpView {
                     .items_center()
                     .gap(px(4.))
                     .child(
-                        div()
-                            .text_size(IconSize::Small.pixels())
-                            .text_color(cpu_color)
-                            .child(cpu_icon),
+                        Icon::new(cpu_icon)
+                            .size(IconSize::Small)
+                            .color(Color::Custom(cpu_color)),
                     )
                     .child(
                         div()
@@ -117,10 +113,9 @@ impl HelpView {
                     .items_center()
                     .gap(px(4.))
                     .child(
-                        div()
-                            .text_size(IconSize::Small.pixels())
-                            .text_color(memory_color)
-                            .child(icons::MEMORY),
+                        Icon::new(icons::MEMORY)
+                            .size(IconSize::Small)
+                            .color(Color::Custom(memory_color)),
                     )
                     .child(
                         div()
@@ -135,10 +130,9 @@ impl HelpView {
                     .items_center()
                     .gap(px(4.))
                     .child(
-                        div()
-                            .text_size(IconSize::Small.pixels())
-                            .text_color(text_muted)
-                            .child(icons::TEMP),
+                        Icon::new(icons::TEMP)
+                            .size(IconSize::Small)
+                            .color(Color::Custom(text_muted)),
                     )
                     .child(
                         div()
@@ -153,10 +147,9 @@ impl HelpView {
                     .items_center()
                     .gap(px(4.))
                     .child(
-                        div()
-                            .text_size(IconSize::Small.pixels())
-                            .text_color(text_muted)
-                            .child(battery_icon),
+                        Icon::new(battery_icon)
+                            .size(IconSize::Small)
+                            .color(Color::Custom(text_muted)),
                     )
                     .when(!battery_text.is_empty(), |el| {
                         el.child(
@@ -189,8 +182,8 @@ impl LauncherView for HelpView {
         "Help"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰋗"
+    fn icon(&self) -> IconName {
+        IconName::CircleHelp
     }
 
     fn description(&self) -> &'static str {
@@ -241,8 +234,7 @@ impl LauncherView for HelpView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(TextSize::Large.rems())
-                    .child(entry.icon.clone()),
+                    .child(Icon::new(entry.icon).size(IconSize::Medium)),
             )
             .child(
                 div()

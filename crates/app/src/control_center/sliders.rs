@@ -2,11 +2,11 @@
 
 use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BrightnessCommand};
-use ui::{ActiveTheme, IconSize, Radius, Slider, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Slider, Spacing, TextSize};
 
 use crate::state::AppState;
 
-use super::icons;
+use crate::icons;
 
 /// Render the volume slider row
 pub fn render_volume_slider(cx: &App) -> impl IntoElement {
@@ -74,7 +74,7 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
 
     let percent = brightness.percentage();
 
-    let icon = icons::brightness_icon(percent);
+    let icon = icons::BRIGHTNESS;
 
     let services_slider = AppState::brightness(cx).clone();
     let services_dec = AppState::brightness(cx).clone();
@@ -101,10 +101,9 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
                 .justify_center()
                 .bg(interactive_default)
                 .child(
-                    div()
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(text_primary)
-                        .child(icon),
+                    Icon::new(icon)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(text_primary)),
                 ),
         )
         // Slider
@@ -154,7 +153,7 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
 /// Render a clickable slider icon
 fn render_slider_icon(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     is_muted: bool,
     cx: &App,
     on_click: impl Fn(&mut App) + 'static,
@@ -184,10 +183,9 @@ fn render_slider_icon(
             on_click(cx);
         })
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(icon_color)
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(icon_color)),
         )
 }
 

@@ -6,13 +6,13 @@ pub use config::TrayConfig;
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
     AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Size,
-    Window, div, img, prelude::*, px,
+    Window, div, img, prelude::*, px, rems,
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use std::sync::Arc;
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::{ActiveConfig, Config};
@@ -112,24 +112,15 @@ impl Tray {
                 let render_img = Arc::new(RenderImage::new(vec![frame]));
                 img(render_img).size(px(icon_size)).into_any_element()
             } else {
-                let icon_char = get_icon_char("", item.id.as_deref());
-                div()
-                    .text_size(px(icon_size))
-                    .text_color(theme.colors.text)
-                    .child(icon_char)
-                    .into_any_element()
+                render_icon_name(get_icon_name("", item.id.as_deref()), icon_size, theme)
             }
         } else {
-            let icon_char = match &item.icon {
-                Some(TrayIcon::Name(name)) => get_icon_char(name, item.id.as_deref()),
-                None => get_icon_char("", item.id.as_deref()),
+            let name = match &item.icon {
+                Some(TrayIcon::Name(name)) => get_icon_name(name, item.id.as_deref()),
+                None => get_icon_name("", item.id.as_deref()),
                 Some(TrayIcon::Pixmap { .. }) => unreachable!(),
             };
-            div()
-                .text_size(px(icon_size))
-                .text_color(theme.colors.text)
-                .child(icon_char)
-                .into_any_element()
+            render_icon_name(name, icon_size, theme)
         };
 
         div()
@@ -418,25 +409,15 @@ fn render_menu_item(
     let _theme = cx.theme();
 
     // Checkbox/radio indicator
-    let toggle_indicator = props.toggle_type.as_ref().map(|toggle_type| {
+    let toggle_indicator = props.toggle_type.as_ref().and_then(|toggle_type| {
         let is_checked = props.toggle_state == Some(1);
-        match toggle_type.as_str() {
-            "checkmark" => {
-                if is_checked {
-                    ("󰄬", true)
-                } else {
-                    ("󰄱", false)
-                }
-            }
-            "radio" => {
-                if is_checked {
-                    ("󰄴", true)
-                } else {
-                    ("󰄱", false)
-                }
-            }
-            _ => ("", false),
-        }
+        let icon = match (toggle_type.as_str(), is_checked) {
+            ("checkmark", true) => IconName::Check,
+            ("radio", true) => IconName::CheckCircle,
+            ("checkmark" | "radio", false) => IconName::Square,
+            _ => return None,
+        };
+        Some((icon, is_checked))
     });
 
     let label_owned = label.to_string();
@@ -477,14 +458,13 @@ fn render_menu_item(
         // Toggle indicator (checkbox/radio)
         .when_some(toggle_indicator, |el, (icon, is_checked)| {
             el.child(
-                div()
-                    .text_size(TextSize::Small.rems())
-                    .text_color(if is_checked {
+                Icon::new(icon)
+                    .size(IconSize::Small)
+                    .color(Color::Custom(if is_checked {
                         accent_primary
                     } else {
                         text_muted
-                    })
-                    .child(icon),
+                    })),
             )
         })
         // Label
@@ -500,10 +480,13 @@ fn render_menu_item(
         // Submenu indicator with rotation animation
         .when(has_submenu, |el| {
             el.child(
-                div()
-                    .text_size(TextSize::XSmall.rems())
-                    .text_color(text_muted)
-                    .child(if is_expanded { "󰅀" } else { "󰅂" }),
+                Icon::new(if is_expanded {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                })
+                .size(IconSize::XSmall)
+                .color(Color::Custom(text_muted)),
             )
         })
 }
@@ -534,42 +517,52 @@ impl Render for TrayMenuPanel {
 // Icon Mapping
 // ============================================================================
 
-/// Map a single identifier to a nerd font icon.
-fn lookup_icon(key: &str) -> Option<&'static str> {
+/// Render a tray item that gave us no pixmap, using the closest icon from
+/// the embedded set.
+fn render_icon_name(name: IconName, icon_size: f32, theme: &ui::Theme) -> AnyElement {
+    // `icon_size` is configured in px; icons size in rems so they track the
+    // window's rem size the way the rest of the bar does.
+    Icon::new(name)
+        .size(IconSize::Custom(rems(icon_size / 16.0)))
+        .color(Color::Custom(theme.colors.text))
+        .into_any_element()
+}
+
+/// Map a single identifier to an icon.
+///
+/// The embedded set carries no brand marks, so tray apps map onto what they
+/// do - a password manager is a lock, a sync client is a cloud.
+fn lookup_icon(key: &str) -> Option<IconName> {
     match key {
-        "discord" | "vesktop" => Some("󰙯"),
-        "spotify" => Some("󰓇"),
-        "steam" => Some("󰓓"),
-        "firefox" => Some("󰈹"),
-        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => Some(""),
-        "telegram" | "telegram-desktop" => Some(""),
-        "slack" => Some("󰒱"),
-        "thunderbird" => Some("󰴃"),
-        "1password" => Some("󰢁"),
-        "bitwarden" => Some("󰞀"),
-        "dropbox" => Some("󰇣"),
-        "nextcloud" => Some("󰀸"),
-        "syncthing" | "syncthingtray" => Some("󰓦"),
-        "nm-applet" | "network-manager" | "network-manager-applet" => Some("󰖩"),
-        "blueman" | "blueman-applet" | "blueman-tray" => Some("󰂯"),
-        "pasystray" | "pavucontrol" => Some("󰕾"),
-        "udiskie" => Some("󰋊"),
-        "flameshot" => Some("󰹑"),
-        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some("󰄜"),
-        "tailscale" | "tailscale-systray" => Some("󰖂"),
-        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => {
-            Some("󰢹")
+        "discord" | "vesktop" | "slack" | "telegram" | "telegram-desktop" => Some(IconName::Chat),
+        "spotify" => Some(IconName::Headphones),
+        "firefox" | "chrome" | "google-chrome" | "chromium" | "chromium-browser" => {
+            Some(IconName::Globe)
         }
-        "network" | "network-wireless" => Some("󰖩"),
-        "bluetooth" | "bluetooth-active" => Some("󰂯"),
-        "audio" | "audio-volume-high" => Some("󰕾"),
-        "battery" | "battery-full" => Some("󰁹"),
+        "thunderbird" => Some(IconName::Mail),
+        "1password" | "bitwarden" => Some(IconName::Lock),
+        "dropbox" | "nextcloud" => Some(IconName::Cloud),
+        "syncthing" | "syncthingtray" => Some(IconName::Refresh),
+        "nm-applet" | "network-manager" | "network-manager-applet" => Some(IconName::Wifi),
+        "blueman" | "blueman-applet" | "blueman-tray" => Some(IconName::Bluetooth),
+        "pasystray" | "pavucontrol" => Some(IconName::Volume),
+        "udiskie" => Some(IconName::HardDrive),
+        "flameshot" => Some(IconName::Camera),
+        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some(IconName::Phone),
+        "tailscale" | "tailscale-systray" => Some(IconName::Network),
+        "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => {
+            Some(IconName::ScreenShare)
+        }
+        "network" | "network-wireless" => Some(IconName::Wifi),
+        "bluetooth" | "bluetooth-active" => Some(IconName::Bluetooth),
+        "audio" | "audio-volume-high" => Some(IconName::Volume),
+        "battery" | "battery-full" => Some(IconName::BatteryFull),
         _ => None,
     }
 }
 
-/// Map common icon names or app IDs to nerd font characters.
-fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
+/// Map common icon names or app IDs to an icon.
+fn get_icon_name(name: &str, app_id: Option<&str>) -> IconName {
     if let Some(icon) = lookup_icon(&name.to_lowercase()) {
         return icon;
     }
@@ -579,7 +572,7 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
         // Handle generic systray_XXXX pattern (often used by Go apps like Tailscale)
         if id_lower.starts_with("systray_") {
-            return "󰖂";
+            return IconName::Network;
         }
 
         if let Some(icon) = lookup_icon(&id_lower) {
@@ -599,34 +592,32 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
     // Fallback icon - log for easier icon mapping
     tracing::debug!("No icon mapping for name='{}' app_id={:?}", name, app_id);
-    "󰀻"
+    IconName::Circle
 }
 
-fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
-    if hint.contains("chrome") || hint.contains("chromium") || hint.contains("telegram") {
-        Some("")
-    } else if hint.contains("discord") || hint.contains("vesktop") {
-        Some("󰙯")
+fn infer_icon_from_hint(hint: &str) -> Option<IconName> {
+    if hint.contains("chrome") || hint.contains("chromium") {
+        Some(IconName::Globe)
+    } else if hint.contains("telegram") || hint.contains("discord") || hint.contains("vesktop") {
+        Some(IconName::Chat)
     } else if hint.contains("spotify") {
-        Some("󰓇")
-    } else if hint.contains("steam") {
-        Some("󰓓")
+        Some(IconName::Headphones)
     } else if hint.contains("network") || hint.contains("wifi") || hint.contains("nm-") {
-        Some("󰖩")
+        Some(IconName::Wifi)
     } else if hint.contains("bluetooth") || hint.contains("blue") {
-        Some("󰂯")
+        Some(IconName::Bluetooth)
     } else if hint.contains("audio") || hint.contains("volume") || hint.contains("pulse") {
-        Some("󰕾")
+        Some(IconName::Volume)
     } else if hint.contains("battery") || hint.contains("power") {
-        Some("󰁹")
+        Some(IconName::BatteryFull)
     } else if hint.contains("kdeconnect") || hint.contains("kde connect") {
-        Some("󰄜")
+        Some(IconName::Phone)
     } else if hint.contains("vpn") {
-        Some("󰕥")
+        Some(IconName::Network)
     } else if hint.contains("cloud") || hint.contains("dropbox") || hint.contains("sync") {
-        Some("󰇣")
+        Some(IconName::Cloud)
     } else if hint.contains("remote") || hint.contains("remmina") {
-        Some("󰢹")
+        Some(IconName::ScreenShare)
     } else {
         None
     }

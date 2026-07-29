@@ -2,7 +2,7 @@ use gpui::prelude::*;
 use gpui::{Context, MouseButton, Render, ScrollHandle, Window, div, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconSize, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
@@ -62,8 +62,6 @@ impl Render for NotificationCenter {
                                 .top(px(8.0))
                                 .right(px(8.0))
                                 .cursor_pointer()
-                                .text_size(TextSize::Small.rems())
-                                .text_color(theme.colors.text_muted)
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |_, _, _, _cx| {
@@ -73,7 +71,11 @@ impl Render for NotificationCenter {
                                         );
                                     }),
                                 )
-                                .child(config.icons.close.clone()),
+                                .child(
+                                    Icon::new(config.icons.close)
+                                        .size(IconSize::XSmall)
+                                        .color(Color::Custom(theme.colors.text_muted)),
+                                ),
                         )
                 }))
                 .into_any_element()
@@ -114,12 +116,6 @@ impl Render for NotificationCenter {
                             .child(
                                 div()
                                     .cursor_pointer()
-                                    .text_size(TextSize::Small.rems())
-                                    .text_color(if dnd_enabled {
-                                        theme.colors.accent
-                                    } else {
-                                        theme.colors.text
-                                    })
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(move |_, _, _, _cx| {
@@ -129,7 +125,15 @@ impl Render for NotificationCenter {
                                             );
                                         }),
                                     )
-                                    .child(config.icons.dnd.clone()),
+                                    .child(
+                                        Icon::new(config.icons.dnd).size(IconSize::XSmall).color(
+                                            Color::Custom(if dnd_enabled {
+                                                theme.colors.accent
+                                            } else {
+                                                theme.colors.text
+                                            }),
+                                        ),
+                                    ),
                             )
                             .child(
                                 div()

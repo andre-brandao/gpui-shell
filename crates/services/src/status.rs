@@ -25,17 +25,6 @@ impl ServiceStatus {
         matches!(self, ServiceStatus::Active)
     }
 
-    /// Get a Nerd Font icon representing the status.
-    pub fn icon(&self) -> &'static str {
-        match self {
-            ServiceStatus::Active => "󰄬",       // Check mark
-            ServiceStatus::Initializing => "󰥔", // Loading spinner
-            ServiceStatus::Error(_) => "󰅚",     // Error X
-            ServiceStatus::Stopped => "󰐊",      // Play (start me)
-            ServiceStatus::Unavailable => "󰪎",  // Disabled
-        }
-    }
-
     /// Get a human-readable label for the status.
     pub fn label(&self) -> &'static str {
         match self {

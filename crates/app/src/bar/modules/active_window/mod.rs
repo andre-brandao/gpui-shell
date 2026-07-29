@@ -10,7 +10,7 @@ use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
-use ui::ActiveTheme;
+use ui::{ActiveTheme, Color, Icon, IconName};
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
@@ -70,7 +70,12 @@ impl ActiveWindow {
         }
     }
 
-    fn window_icon(&self) -> Option<&'static str> {
+    /// Icon for the focused window, keyed off its class/title.
+    ///
+    /// The icon set carries no brand marks, so apps map onto what they *are*:
+    /// a browser is a globe, a chat client is a speech bubble, and anything
+    /// unrecognised falls back to a generic window.
+    fn window_icon(&self) -> Option<IconName> {
         let window = self.state.active_window.as_ref()?;
         let haystack = format!(
             "{} {}",
@@ -78,41 +83,43 @@ impl ActiveWindow {
             window.title.to_lowercase()
         );
 
-        if haystack.contains("firefox") {
-            Some("󰈹")
-        } else if haystack.contains("chrome") || haystack.contains("chromium") {
-            Some("")
-        } else if haystack.contains("telegram") {
-            Some("")
-        } else if haystack.contains("discord") || haystack.contains("vesktop") {
-            Some("󰙯")
-        } else if haystack.contains("spotify") {
-            Some("󰓇")
-        } else if haystack.contains("steam") {
-            Some("󰓓")
-        } else if haystack.contains("thunderbird") {
-            Some("󰴃")
-        } else if haystack.contains("code")
-            || haystack.contains("zed")
-            || haystack.contains("neovim")
-            || haystack.contains("nvim")
-        {
-            Some("󰨞")
-        } else if haystack.contains("kitty")
-            || haystack.contains("alacritty")
-            || haystack.contains("wezterm")
-            || haystack.contains("terminal")
-        {
-            Some("󰆍")
-        } else if haystack.contains("files")
-            || haystack.contains("nautilus")
-            || haystack.contains("thunar")
-            || haystack.contains("dolphin")
-        {
-            Some("󰉋")
-        } else {
-            Some("󰣇")
-        }
+        Some(
+            if haystack.contains("firefox")
+                || haystack.contains("chrome")
+                || haystack.contains("chromium")
+            {
+                IconName::Globe
+            } else if haystack.contains("telegram")
+                || haystack.contains("discord")
+                || haystack.contains("vesktop")
+            {
+                IconName::Chat
+            } else if haystack.contains("spotify") {
+                IconName::Headphones
+            } else if haystack.contains("thunderbird") {
+                IconName::Mail
+            } else if haystack.contains("code")
+                || haystack.contains("zed")
+                || haystack.contains("neovim")
+                || haystack.contains("nvim")
+            {
+                IconName::Code
+            } else if haystack.contains("kitty")
+                || haystack.contains("alacritty")
+                || haystack.contains("wezterm")
+                || haystack.contains("terminal")
+            {
+                IconName::Terminal
+            } else if haystack.contains("files")
+                || haystack.contains("nautilus")
+                || haystack.contains("thunar")
+                || haystack.contains("dolphin")
+            {
+                IconName::Folder
+            } else {
+                IconName::Layout
+            },
+        )
     }
 
     fn vertical_lines(&self, max_length: usize) -> Vec<String> {
@@ -278,11 +285,9 @@ impl BarWidget for ActiveWindow {
             .overflow_hidden()
             .when_some(icon, |el, icon| {
                 el.child(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(px(style::icon(false)))
-                        .text_color(theme.colors.text)
-                        .child(icon),
+                    Icon::new(icon)
+                        .size(style::icon(false))
+                        .color(Color::Custom(theme.colors.text)),
                 )
             })
             .child(

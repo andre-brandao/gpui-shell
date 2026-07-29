@@ -210,51 +210,6 @@ impl Default for NetworkData {
 }
 
 impl NetworkData {
-    /// Get an icon representing the current network state.
-    pub fn icon(&self) -> &'static str {
-        // Check for VPN first
-        if self
-            .active_connections
-            .iter()
-            .any(|c| matches!(c, ActiveConnectionInfo::Vpn { .. }))
-        {
-            return "󰖂"; // VPN
-        }
-
-        // Check for WiFi
-        if let Some(wifi) = self.active_connections.iter().find_map(|c| {
-            if let ActiveConnectionInfo::WiFi { strength, .. } = c {
-                Some(*strength)
-            } else {
-                None
-            }
-        }) {
-            return match wifi {
-                0..=25 => "󰤟",
-                26..=50 => "󰤢",
-                51..=75 => "󰤥",
-                _ => "󰤨",
-            };
-        }
-
-        // Check for wired
-        if self
-            .active_connections
-            .iter()
-            .any(|c| matches!(c, ActiveConnectionInfo::Wired { .. }))
-        {
-            return "󰈀"; // Ethernet
-        }
-
-        // No connection
-        match self.connectivity {
-            ConnectivityState::Full => "󰈀",
-            ConnectivityState::Portal => "󰤫",
-            ConnectivityState::Loss | ConnectivityState::None => "󰤮",
-            ConnectivityState::Unknown => "󰤯",
-        }
-    }
-
     /// Check if there's any active connection.
     pub fn is_connected(&self) -> bool {
         !self.active_connections.is_empty()

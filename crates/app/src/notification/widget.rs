@@ -1,6 +1,6 @@
 use gpui::{AnyElement, App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, TextSize};
 
 use crate::bar::modules::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -57,7 +57,7 @@ impl NotificationWidget {
     fn render_widget_content(
         &self,
         theme: &ui::Theme,
-        icon: String,
+        icon: IconName,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -76,15 +76,13 @@ impl NotificationWidget {
                 cx.listener(|this, event, window, cx| this.toggle_center(event, window, cx)),
             )
             .child(
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(style::icon(is_vertical)))
-                    .text_color(if self.data.dnd {
+                Icon::new(icon)
+                    .size(style::icon(is_vertical))
+                    .color(Color::Custom(if self.data.dnd {
                         theme.colors.text_muted
                     } else {
                         theme.colors.text
-                    })
-                    .child(icon),
+                    })),
             )
             .when(unread > 0, |el| {
                 el.child(
@@ -108,9 +106,9 @@ impl BarWidget for NotificationWidget {
         let theme = cx.theme().clone();
         let config = &cx.config().notification;
         let icon = if self.data.dnd {
-            config.icons.bell_off.clone()
+            config.icons.bell_off
         } else {
-            config.icons.bell.clone()
+            config.icons.bell
         };
         self.render_widget_content(&theme, icon, true, cx)
     }
@@ -119,9 +117,9 @@ impl BarWidget for NotificationWidget {
         let theme = cx.theme().clone();
         let config = &cx.config().notification;
         let icon = if self.data.dnd {
-            config.icons.bell_off.clone()
+            config.icons.bell_off
         } else {
-            config.icons.bell.clone()
+            config.icons.bell
         };
         self.render_widget_content(&theme, icon, false, cx)
     }

@@ -107,7 +107,7 @@ Each module can be configured in the `[bar.modules.<module_name>]` section.
 
 | Option | Type     | Default | Description          |
 | ------ | -------- | ------- | -------------------- |
-| `icon` | `string` | `"󰀻"`   | Icon to display for launcher button. |
+| `icon` | `string` | `"layers"` | Name of a built-in icon (see `crates/assets/icons/`, without the `.svg`). |
 
 ### Settings Module
 

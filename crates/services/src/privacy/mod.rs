@@ -62,19 +62,6 @@ impl PrivacyData {
     pub fn screenshare_access(&self) -> bool {
         self.nodes.iter().any(|n| n.media == Media::Video)
     }
-
-    /// Get an icon representing the current privacy state.
-    pub fn icon(&self) -> Option<&'static str> {
-        if self.webcam_access() {
-            Some("󰄀") // Camera
-        } else if self.microphone_access() {
-            Some("󰍬") // Microphone
-        } else if self.screenshare_access() {
-            Some("󰹑") // Screen
-        } else {
-            None
-        }
-    }
 }
 
 /// Event-driven privacy subscriber.

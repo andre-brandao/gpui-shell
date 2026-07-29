@@ -5,11 +5,15 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
-use ui::{ActiveTheme, IconSize, InputBuffer, Radius, Spacing, TextSize, render_masked_input_line};
+use ui::{
+    ActiveTheme, Color, Icon, IconSize, InputBuffer, Radius, Spacing, TextSize,
+    render_masked_input_line,
+};
 
 use crate::state::AppState;
 
-use super::{icons, tooltip::control_center_tooltip};
+use super::tooltip::control_center_tooltip;
+use crate::icons;
 
 /// State for WiFi password input
 #[derive(Debug, Clone, Default)]
@@ -94,10 +98,9 @@ pub fn render_wifi_section(
                 .items_center()
                 .gap(Spacing::Medium.pixels())
                 .child(
-                    div()
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(theme.colors.text)
-                        .child(icons::WIFI),
+                    Icon::new(icons::WIFI)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(theme.colors.text)),
                 )
                 .child(
                     div()
@@ -274,13 +277,15 @@ fn render_network_item(
         .child(
             div()
                 .id(format!("wifi-signal-{}", index))
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(if connected {
-                    accent_primary
-                } else {
-                    text_muted
-                })
-                .child(signal_icon)
+                .child(
+                    Icon::new(signal_icon)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(if connected {
+                            accent_primary
+                        } else {
+                            text_muted
+                        })),
+                )
                 .tooltip(control_center_tooltip(format!(
                     "Signal strength: {}%",
                     strength
@@ -299,9 +304,11 @@ fn render_network_item(
             el.child(
                 div()
                     .id(format!("wifi-known-{}", index))
-                    .text_size(IconSize::XSmall.pixels())
-                    .text_color(status_success)
-                    .child(icons::CHECK)
+                    .child(
+                        Icon::new(icons::CHECK)
+                            .size(IconSize::XSmall)
+                            .color(Color::Custom(status_success)),
+                    )
                     .tooltip(control_center_tooltip("Saved network")),
             )
         })
@@ -310,9 +317,15 @@ fn render_network_item(
             el.child(
                 div()
                     .id(format!("wifi-lock-{}", index))
-                    .text_size(IconSize::XSmall.pixels())
-                    .text_color(if known { status_success } else { text_muted })
-                    .child(icons::LOCK)
+                    .child(
+                        Icon::new(icons::LOCK)
+                            .size(IconSize::XSmall)
+                            .color(Color::Custom(if known {
+                                status_success
+                            } else {
+                                text_muted
+                            })),
+                    )
                     .tooltip(control_center_tooltip(lock_tooltip)),
             )
         })
@@ -320,9 +333,11 @@ fn render_network_item(
             el.child(
                 div()
                     .id(format!("wifi-connect-{}", index))
-                    .text_size(IconSize::XSmall.pixels())
-                    .text_color(text_muted)
-                    .child(icons::CHEVRON_RIGHT)
+                    .child(
+                        Icon::new(icons::CHEVRON_RIGHT)
+                            .size(IconSize::XSmall)
+                            .color(Color::Custom(text_muted)),
+                    )
                     .tooltip(control_center_tooltip("Connect")),
             )
         })
@@ -349,10 +364,9 @@ fn render_network_item(
                         }
                     })
                     .child(
-                        div()
-                            .text_size(IconSize::XSmall.pixels())
-                            .text_color(status_success)
-                            .child(icons::CLOSE),
+                        Icon::new(icons::CLOSE)
+                            .size(IconSize::XSmall)
+                            .color(Color::Custom(status_success)),
                     ),
             )
         })
@@ -403,10 +417,9 @@ fn render_password_input(
                 .items_center()
                 .gap(Spacing::Medium.pixels())
                 .child(
-                    div()
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(accent_primary)
-                        .child(icons::WIFI_LOCK),
+                    Icon::new(icons::WIFI_LOCK)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(accent_primary)),
                 )
                 .child(
                     div()
@@ -419,14 +432,15 @@ fn render_password_input(
                 .child(
                     div()
                         .id(format!("wifi-cancel-{}", index))
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(text_muted)
                         .cursor_pointer()
-                        .hover(move |s| s.text_color(text_primary))
                         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                             on_cancel(cx);
                         })
-                        .child(icons::CLOSE),
+                        .child(
+                            Icon::new(icons::CLOSE)
+                                .size(IconSize::XSmall)
+                                .color(Color::Custom(text_muted)),
+                        ),
                 ),
         )
         // Password input with keyboard support
@@ -525,9 +539,8 @@ pub fn render_refresh_button(cx: &App) -> impl IntoElement {
             .detach();
         })
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(text_muted)
-                .child(icons::REFRESH),
+            Icon::new(icons::REFRESH)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(text_muted)),
         )
 }

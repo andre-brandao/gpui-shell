@@ -13,6 +13,7 @@
 //!   the launcher skips the item loop.
 
 use gpui::{AnyElement, App};
+use ui::IconName;
 use ui::patterns::footer_hints;
 
 /// Input event passed to views for handling.
@@ -74,8 +75,8 @@ pub trait LauncherView: Send + Sync {
     /// Display name for the view.
     fn name(&self) -> &'static str;
 
-    /// Icon for the view (Nerd font).
-    fn icon(&self) -> &'static str;
+    /// Icon for the view.
+    fn icon(&self) -> IconName;
 
     /// Description shown in help.
     fn description(&self) -> &'static str;

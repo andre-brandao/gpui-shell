@@ -11,8 +11,8 @@ use std::sync::{
 use gpui::{AnyElement, App, div, img, prelude::*, px};
 use services::WallpaperCommand;
 use ui::{
-    ActiveTheme, Clickable, Color, Label, LabelCommon, ListItem, ListItemSpacing, Spacing, Switch,
-    SwitchSize, TextSize, Toggleable,
+    ActiveTheme, Clickable, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem,
+    ListItemSpacing, Spacing, Switch, SwitchSize, TextSize, Toggleable,
 };
 
 use self::config::WallpaperConfig;
@@ -184,8 +184,8 @@ impl LauncherView for WallpaperView {
         "Wallpaper"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰸉"
+    fn icon(&self) -> IconName {
+        IconName::Image
     }
 
     fn description(&self) -> &'static str {
@@ -248,13 +248,15 @@ impl LauncherView for WallpaperView {
                                         } else {
                                             theme.colors.element_background
                                         })
-                                        .text_color(if enabled {
-                                            theme.colors.background
-                                        } else {
-                                            text_muted
-                                        })
-                                        .text_base()
-                                        .child("󱥚"),
+                                        .child(
+                                            Icon::new(IconName::Palette)
+                                                .size(IconSize::Small)
+                                                .color(Color::Custom(if enabled {
+                                                    theme.colors.background
+                                                } else {
+                                                    text_muted
+                                                })),
+                                        ),
                                 )
                                 .child(
                                     div()
@@ -308,16 +310,13 @@ impl LauncherView for WallpaperView {
                                     .flex()
                                     .items_center()
                                     .gap(Spacing::Medium.pixels())
-                                    .child(
-                                        div()
-                                            .text_color(if dark_mode {
-                                                text_muted
-                                            } else {
-                                                accent_primary
-                                            })
-                                            .text_xs()
-                                            .child("󰖨"),
-                                    )
+                                    .child(Icon::new(IconName::Sun).size(IconSize::XSmall).color(
+                                        Color::Custom(if dark_mode {
+                                            text_muted
+                                        } else {
+                                            accent_primary
+                                        }),
+                                    ))
                                     .child(
                                         Switch::new("matugen-dark-mode-toggle", dark_mode)
                                             .size(SwitchSize::Small)
@@ -326,16 +325,13 @@ impl LauncherView for WallpaperView {
                                                     .store(checked.selected(), Ordering::Relaxed);
                                             }),
                                     )
-                                    .child(
-                                        div()
-                                            .text_color(if dark_mode {
-                                                accent_primary
-                                            } else {
-                                                text_muted
-                                            })
-                                            .text_xs()
-                                            .child("󰖔"),
-                                    ),
+                                    .child(Icon::new(IconName::Moon).size(IconSize::XSmall).color(
+                                        Color::Custom(if dark_mode {
+                                            accent_primary
+                                        } else {
+                                            text_muted
+                                        }),
+                                    )),
                             ),
                     )
                 })

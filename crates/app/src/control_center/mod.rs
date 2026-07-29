@@ -7,7 +7,6 @@
 //! - Power profiles and battery status
 //!
 //! The module is split into submodules for better organization:
-//! - `icons` - Icon constants (Nerd Font glyphs)
 //! - `quick_toggles` - Quick toggle buttons for WiFi, Bluetooth, Mic
 //! - `sliders` - Volume and brightness slider controls
 //! - `wifi` - WiFi network list and password handling
@@ -16,7 +15,6 @@
 
 mod bluetooth;
 pub mod config;
-pub mod icons;
 mod power;
 mod quick_toggles;
 mod sliders;
@@ -25,6 +23,7 @@ mod wifi;
 
 pub use config::{ControlCenterConfig, PowerActionsConfig};
 
+use crate::icons;
 use gpui::{
     App, AvailableSpace, Context, FocusHandle, Focusable, MouseButton, Size, Window, div,
     prelude::*, px,
@@ -32,7 +31,7 @@ use gpui::{
 use services::{NetworkCommand, UPowerCommand};
 use std::rc::Rc;
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconSize, Radius, Spacing, TextSize};
 
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
@@ -253,7 +252,7 @@ impl Render for ControlCenter {
             let accent_primary = theme.colors.accent;
 
             let battery = upower.battery.as_ref();
-            let battery_icon = battery.map(|b| b.icon()).unwrap_or(icons::BATTERY_FULL);
+            let battery_icon = icons::battery_data_icon(battery);
             let battery_line = battery
                 .map(|b| format!("{}%", b.percentage))
                 .unwrap_or_else(|| "AC".to_string());
@@ -568,10 +567,9 @@ impl Render for ControlCenter {
                                         .items_center()
                                         .gap(Spacing::Medium.pixels())
                                         .child(
-                                            div()
-                                                .text_size(IconSize::Medium.pixels())
-                                                .text_color(battery_color)
-                                                .child(battery_icon),
+                                            Icon::new(battery_icon)
+                                                .size(IconSize::Medium)
+                                                .color(Color::Custom(battery_color)),
                                         )
                                         .child(
                                             div()
@@ -610,10 +608,11 @@ impl Render for ControlCenter {
                                             on_cycle_power_profile(cx);
                                         })
                                         .child(
-                                            div()
-                                                .text_size(IconSize::XSmall.pixels())
-                                                .text_color(text_primary)
-                                                .child(upower.power_profile.icon()),
+                                            Icon::new(icons::power_profile_icon(
+                                                upower.power_profile,
+                                            ))
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Custom(text_primary)),
                                         ),
                                 ),
                         )
@@ -639,10 +638,9 @@ impl Render for ControlCenter {
                                     on_toggle_section_power(cx);
                                 })
                                 .child(
-                                    div()
-                                        .text_size(IconSize::Small.pixels())
-                                        .text_color(text_primary)
-                                        .child(icons::POWER_BUTTON),
+                                    Icon::new(icons::POWER_BUTTON)
+                                        .size(IconSize::Small)
+                                        .color(Color::Custom(text_primary)),
                                 ),
                         ),
                 )

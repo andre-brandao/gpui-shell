@@ -10,7 +10,7 @@ use gpui::{
 };
 use services::{Notification, NotificationCommand, NotificationSubscriber};
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconSize, Spacing};
 
 use crate::config::ActiveConfig;
 use crate::state::AppState;
@@ -82,8 +82,6 @@ impl Render for NotificationPopupStack {
                                     .top(px(8.0))
                                     .right(px(8.0))
                                     .cursor_pointer()
-                                    .text_size(TextSize::Small.rems())
-                                    .text_color(theme.colors.text_muted)
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(move |_, _, _, _cx| {
@@ -93,7 +91,11 @@ impl Render for NotificationPopupStack {
                                             );
                                         }),
                                     )
-                                    .child(config.icons.close.clone()),
+                                    .child(
+                                        Icon::new(config.icons.close)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Custom(theme.colors.text_muted)),
+                                    ),
                             )
                     })),
             )

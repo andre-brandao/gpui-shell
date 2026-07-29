@@ -3,18 +3,20 @@
 use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
 mod icons {
-    pub const HEADER: &str = "󰕾";
-    pub const PLAY: &str = "󰐊";
-    pub const PAUSE: &str = "󰏤";
-    pub const PREV: &str = "󰒮";
-    pub const NEXT: &str = "󰒭";
-    pub const PLAYER: &str = "󰎈";
-    pub const DURATION: &str = "󰥔";
+    use ui::IconName;
+
+    pub const HEADER: IconName = IconName::Volume;
+    pub const PLAY: IconName = IconName::Play;
+    pub const PAUSE: IconName = IconName::Pause;
+    pub const PREV: IconName = IconName::SkipBack;
+    pub const NEXT: IconName = IconName::SkipForward;
+    pub const PLAYER: IconName = IconName::Headphones;
+    pub const DURATION: IconName = IconName::Clock;
 }
 
 /// Panel content for controlling media players exposed via MPRIS.
@@ -111,7 +113,7 @@ impl MprisPanel {
 
     fn render_control_button(
         id: impl Into<gpui::ElementId>,
-        label: &'static str,
+        icon: IconName,
         cx: &App,
         on_click: impl Fn(&mut App) + 'static,
     ) -> impl IntoElement {
@@ -133,10 +135,9 @@ impl MprisPanel {
             .hover(move |el| el.bg(interactive_hover))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| on_click(cx))
             .child(
-                div()
-                    .text_size(IconSize::XSmall.pixels())
-                    .text_color(text_primary)
-                    .child(label),
+                Icon::new(icon)
+                    .size(IconSize::XSmall)
+                    .color(Color::Custom(text_primary)),
             )
     }
 
@@ -236,10 +237,9 @@ impl MprisPanel {
                                             .items_center()
                                             .justify_center()
                                             .child(
-                                                div()
-                                                    .text_size(IconSize::XSmall.pixels())
-                                                    .text_color(theme.colors.text)
-                                                    .child(icons::PLAYER),
+                                                Icon::new(icons::PLAYER)
+                                                    .size(IconSize::XSmall)
+                                                    .color(Color::Custom(theme.colors.text)),
                                             )
                                             .into_any_element()
                                     })
@@ -254,10 +254,9 @@ impl MprisPanel {
                                     .items_center()
                                     .justify_center()
                                     .child(
-                                        div()
-                                            .text_size(IconSize::XSmall.pixels())
-                                            .text_color(theme.colors.text)
-                                            .child(icons::PLAYER),
+                                        Icon::new(icons::PLAYER)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Custom(theme.colors.text)),
                                     )
                                     .into_any_element()
                             })
@@ -300,10 +299,9 @@ impl MprisPanel {
                         .items_center()
                         .gap(Spacing::XSmall.pixels())
                         .child(
-                            div()
-                                .text_size(TextSize::XSmall.rems())
-                                .text_color(theme.colors.text_muted)
-                                .child(icons::DURATION),
+                            Icon::new(icons::DURATION)
+                                .size(IconSize::XSmall)
+                                .color(Color::Custom(theme.colors.text_muted)),
                         )
                         .child(
                             div()
@@ -376,7 +374,7 @@ impl MprisPanel {
                             .when(can_control && player.volume.is_some(), |el| {
                                 el.child(Self::render_control_button(
                                     format!("mpris-dec-{}", dec_service),
-                                    "−",
+                                    IconName::Dash,
                                     cx,
                                     move |cx| {
                                         let value = player.volume.unwrap_or(0.0) - 5.0;
@@ -391,7 +389,7 @@ impl MprisPanel {
                                 .child(
                                     Self::render_control_button(
                                         format!("mpris-inc-{}", inc_service),
-                                        "+",
+                                        IconName::Plus,
                                         cx,
                                         move |cx| {
                                             let value = player.volume.unwrap_or(0.0) + 5.0;
@@ -436,10 +434,9 @@ impl Render for MprisPanel {
                             .items_center()
                             .gap(Spacing::Medium.pixels())
                             .child(
-                                div()
-                                    .text_size(IconSize::Large.pixels())
-                                    .text_color(theme.colors.text)
-                                    .child(icons::HEADER),
+                                Icon::new(icons::HEADER)
+                                    .size(IconSize::Large)
+                                    .color(Color::Custom(theme.colors.text)),
                             )
                             .child(
                                 div()

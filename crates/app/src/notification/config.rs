@@ -1,6 +1,7 @@
 //! Notification module configuration.
 
 use serde::{Deserialize, Serialize};
+use ui::IconName;
 
 /// Notification popup screen position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -52,23 +53,23 @@ impl Default for NotificationConfig {
     }
 }
 
-/// Notification icon glyphs.
+/// Notification icons, named from the embedded icon set (e.g. `bell = "bell_ring"`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationIcons {
-    pub bell: String,
-    pub bell_off: String,
-    pub close: String,
-    pub dnd: String,
+    pub bell: IconName,
+    pub bell_off: IconName,
+    pub close: IconName,
+    pub dnd: IconName,
 }
 
 impl Default for NotificationIcons {
     fn default() -> Self {
         Self {
-            bell: "󰂚".into(),
-            bell_off: "󰂛".into(),
-            close: "󰅖".into(),
-            dnd: "󰂛".into(),
+            bell: IconName::Bell,
+            bell_off: IconName::BellOff,
+            close: IconName::Close,
+            dnd: IconName::BellOff,
         }
     }
 }

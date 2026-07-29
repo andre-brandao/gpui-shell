@@ -15,7 +15,7 @@ use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
 };
-use ui::ActiveTheme;
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize};
 
 mod config;
 pub use config::SettingsConfig;
@@ -28,30 +28,7 @@ use crate::control_center::{
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
 
-/// Nerd Font icons for status display.
-mod icons {
-    // Privacy
-    pub const MICROPHONE: &str = "󰍬";
-    pub const WEBCAM: &str = "󰄀";
-    pub const SCREENSHARE: &str = "󰍹";
-
-    // Audio
-    pub const VOLUME_HIGH: &str = "󰕾";
-    pub const VOLUME_MED: &str = "󰖀";
-    pub const VOLUME_LOW: &str = "󰕿";
-    pub const VOLUME_MUTE: &str = "󰝟";
-
-    // Network
-    pub const WIFI: &str = "󰤨";
-    pub const WIFI_OFF: &str = "󰤭";
-    pub const ETHERNET: &str = "󰈀";
-
-    // Bluetooth
-    pub const BLUETOOTH_CONNECTED: &str = "󰂱";
-
-    // Battery (using BatteryInfo::icon() from services, but keep BATTERY_NONE for no-battery case)
-    pub const BATTERY_NONE: &str = "󰂑";
-}
+use crate::icons;
 
 /// Settings widget for the bar that shows system status icons.
 pub struct Settings {
@@ -63,12 +40,12 @@ pub struct Settings {
 }
 
 struct SettingsView {
-    privacy_icons: Vec<&'static str>,
-    volume_icon: &'static str,
-    network_icon: &'static str,
-    bluetooth_icon: Option<&'static str>,
-    power_profile_icon: &'static str,
-    battery_icon: &'static str,
+    privacy_icons: Vec<IconName>,
+    volume_icon: IconName,
+    network_icon: IconName,
+    bluetooth_icon: Option<IconName>,
+    power_profile_icon: IconName,
+    battery_icon: IconName,
     battery_text: String,
     battery_color: gpui::Hsla,
 }
@@ -144,7 +121,7 @@ impl Settings {
     }
 
     /// Get privacy indicator icons (only when active).
-    fn privacy_icons(&self, is_vertical: bool) -> Vec<&'static str> {
+    fn privacy_icons(&self, is_vertical: bool) -> Vec<IconName> {
         if is_vertical {
             let mut icons = Vec::new();
 
@@ -152,7 +129,7 @@ impl Settings {
                 icons.push(icons::MICROPHONE);
             }
             if self.privacy.webcam_access() {
-                icons.push(icons::WEBCAM);
+                icons.push(icons::CAMERA);
             }
             if self.privacy.screenshare_access() {
                 icons.push(icons::SCREENSHARE);
@@ -165,7 +142,7 @@ impl Settings {
         if self.privacy.screenshare_access() {
             vec![icons::SCREENSHARE]
         } else if self.privacy.webcam_access() {
-            vec![icons::WEBCAM]
+            vec![icons::CAMERA]
         } else if self.privacy.microphone_access() {
             vec![icons::MICROPHONE]
         } else {
@@ -174,20 +151,12 @@ impl Settings {
     }
 
     /// Get the volume icon based on current state.
-    fn volume_icon(&self) -> &'static str {
-        if self.audio.sink_muted {
-            icons::VOLUME_MUTE
-        } else if self.audio.sink_volume >= 66 {
-            icons::VOLUME_HIGH
-        } else if self.audio.sink_volume >= 33 {
-            icons::VOLUME_MED
-        } else {
-            icons::VOLUME_LOW
-        }
+    fn volume_icon(&self) -> IconName {
+        icons::volume_icon(self.audio.sink_volume, self.audio.sink_muted)
     }
 
     /// Get the network icon based on current state.
-    fn network_icon(&self) -> &'static str {
+    fn network_icon(&self) -> IconName {
         // Check for wired connection first
         if self
             .network
@@ -217,7 +186,7 @@ impl Settings {
     }
 
     /// Get bluetooth icon if any device is connected.
-    fn bluetooth_icon(&self) -> Option<&'static str> {
+    fn bluetooth_icon(&self) -> Option<IconName> {
         if self.bluetooth.state == BluetoothState::Active
             && self.bluetooth.devices.iter().any(|d| d.connected)
         {
@@ -228,16 +197,13 @@ impl Settings {
     }
 
     /// Get the power profile icon.
-    fn power_profile_icon(&self) -> &'static str {
-        self.upower.power_profile.icon()
+    fn power_profile_icon(&self) -> IconName {
+        icons::power_profile_icon(self.upower.power_profile)
     }
 
     /// Get the battery icon based on current state.
-    fn battery_icon(&self) -> &'static str {
-        match &self.upower.battery {
-            Some(battery) => battery.icon(),
-            None => icons::BATTERY_NONE,
-        }
+    fn battery_icon(&self) -> IconName {
+        icons::battery_data_icon(self.upower.battery.as_ref())
     }
 
     /// Get the battery percentage text.
@@ -284,15 +250,10 @@ impl Settings {
         }
     }
 
-    fn render_status_icon(icon: &'static str, size: f32, color: gpui::Hsla) -> AnyElement {
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .flex_shrink_0()
-            .text_size(px(size))
-            .text_color(color)
-            .child(icon)
+    fn render_status_icon(icon: IconName, size: IconSize, color: gpui::Hsla) -> AnyElement {
+        Icon::new(icon)
+            .size(size)
+            .color(Color::Custom(color))
             .into_any_element()
     }
 

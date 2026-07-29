@@ -3,7 +3,9 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, Radius, Spacing, TextSize};
+use ui::{
+    ActiveTheme, Color, Icon, IconName, IconSize, Label, LabelCommon, Radius, Spacing, TextSize,
+};
 
 use self::config::ShellConfig;
 use ui::patterns::footer_hints;
@@ -34,8 +36,8 @@ impl LauncherView for ShellView {
         "Shell"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰆍"
+    fn icon(&self) -> IconName {
+        IconName::SquareTerminal
     }
 
     fn description(&self) -> &'static str {
@@ -93,11 +95,7 @@ impl LauncherView for ShellView {
                                         .flex()
                                         .items_center()
                                         .gap(Spacing::Medium.pixels())
-                                        .child(
-                                            Label::new(icon)
-                                                .size(TextSize::Large)
-                                                .color(Color::Default),
-                                        )
+                                        .child(Icon::new(icon).size(IconSize::Large))
                                         .child(Label::new("Terminal").size(TextSize::Default))
                                         .child(
                                             div()

@@ -102,30 +102,6 @@ impl SysInfoData {
     pub fn temperature_str(&self) -> Option<String> {
         self.temperature.map(|t| format!("{}°C", t))
     }
-
-    /// Get an icon for CPU usage.
-    pub fn cpu_icon(&self) -> &'static str {
-        match self.cpu_usage {
-            0..=25 => "󰻠",
-            26..=50 => "󰻠",
-            51..=75 => "󰻠",
-            _ => "󰻠",
-        }
-    }
-
-    /// Get an icon for memory usage.
-    pub fn memory_icon(&self) -> &'static str {
-        "󰍛"
-    }
-
-    /// Get an icon for temperature.
-    pub fn temperature_icon(&self) -> &'static str {
-        match self.temperature {
-            Some(t) if t >= 80 => "󰸁", // Hot
-            Some(t) if t >= 60 => "󱃃", // Warm
-            _ => "󱃂",                  // Normal
-        }
-    }
 }
 
 /// Event-driven system information subscriber.

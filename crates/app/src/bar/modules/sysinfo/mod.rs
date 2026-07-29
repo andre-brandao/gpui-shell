@@ -5,7 +5,7 @@
 use crate::panel::{PanelConfig, toggle_panel};
 use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
 use services::SysInfoData;
-use ui::ActiveTheme;
+use ui::{ActiveTheme, IconName};
 
 mod config;
 pub use config::SysInfoConfig;
@@ -19,32 +19,34 @@ use crate::state::watch;
 mod panel;
 pub use panel::SysInfoPanel;
 
-/// Nerd Font icons for system info
+/// Icons for system info readouts.
 pub mod icons {
-    // CPU icons
-    pub const CPU: &str = "󰻠"; // nf-md-chip
-    pub const CPU_HIGH: &str = ""; // nf-fa-fire
+    use ui::IconName;
 
-    // Memory icons
-    pub const MEMORY: &str = "󰍛"; // nf-md-memory
-    pub const SWAP: &str = "󰾴"; // nf-md-swap_horizontal
+    // CPU
+    pub const CPU: IconName = IconName::Cpu;
+    pub const CPU_HIGH: IconName = IconName::Flame;
 
-    // Temperature icons
-    pub const TEMP: &str = "󱃂"; // nf-md-thermometer
-    pub const TEMP_HOT: &str = "󰸁"; // nf-md-thermometer_high
+    // Memory
+    pub const MEMORY: IconName = IconName::MemoryStick;
+    pub const SWAP: IconName = IconName::ArrowDownUp;
 
-    // Disk icons
-    pub const DISK: &str = "󰋊"; // nf-md-harddisk
-    pub const DISK_FOLDER: &str = "󰉋"; // nf-md-folder
+    // Temperature
+    pub const TEMP: IconName = IconName::Thermometer;
+    pub const TEMP_HOT: IconName = IconName::Flame;
 
-    // Network icons
-    pub const NETWORK: &str = "󰛳"; // nf-md-network
-    pub const IP: &str = "󰩟"; // nf-md-ip_network
-    pub const DOWNLOAD: &str = "󰇚"; // nf-md-download
-    pub const UPLOAD: &str = "󰕒"; // nf-md-upload
+    // Disk
+    pub const DISK: IconName = IconName::HardDrive;
+    pub const DISK_FOLDER: IconName = IconName::Folder;
 
-    // System/header icon
-    pub const SYSTEM: &str = ""; // nf-fa-server
+    // Network
+    pub const NETWORK: IconName = IconName::Network;
+    pub const IP: IconName = IconName::Globe;
+    pub const DOWNLOAD: IconName = IconName::Download;
+    pub const UPLOAD: IconName = IconName::Upload;
+
+    // System/header
+    pub const SYSTEM: IconName = IconName::Server;
 }
 
 /// SysInfo widget showing CPU and memory usage in the bar.
@@ -54,7 +56,7 @@ pub struct SysInfo {
 }
 
 struct SysInfoStat {
-    icon: &'static str,
+    icon: IconName,
     text: String,
     color: gpui::Hsla,
 }
@@ -96,7 +98,7 @@ impl SysInfo {
         });
     }
 
-    fn cpu_icon(&self) -> &'static str {
+    fn cpu_icon(&self) -> IconName {
         if self.data.cpu_usage >= 90 {
             icons::CPU_HIGH
         } else {
@@ -104,7 +106,7 @@ impl SysInfo {
         }
     }
 
-    fn memory_icon(&self) -> &'static str {
+    fn memory_icon(&self) -> IconName {
         if self.data.memory_usage >= 90 {
             icons::SWAP
         } else {

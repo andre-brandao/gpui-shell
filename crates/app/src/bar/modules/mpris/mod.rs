@@ -5,7 +5,7 @@ pub use config::MprisConfig;
 
 use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
-use ui::ActiveTheme;
+use ui::{ActiveTheme, Color, Icon, IconName};
 
 use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -17,9 +17,11 @@ mod panel;
 pub use panel::MprisPanel;
 
 mod icons {
-    pub const PLAYING: &str = "󰐊";
-    pub const PAUSED: &str = "󰏤";
-    pub const STOPPED: &str = "󰓛";
+    use ui::IconName;
+
+    pub const PLAYING: IconName = IconName::Play;
+    pub const PAUSED: IconName = IconName::Pause;
+    pub const STOPPED: IconName = IconName::Stop;
 }
 
 /// Bar widget for media status and controls.
@@ -68,7 +70,7 @@ impl Mpris {
             .or_else(|| self.data.players.first())
     }
 
-    fn icon(&self) -> &'static str {
+    fn icon(&self) -> IconName {
         match self.primary_player().map(|p| p.state) {
             Some(PlaybackStatus::Playing) => icons::PLAYING,
             Some(PlaybackStatus::Paused) => icons::PAUSED,
@@ -100,7 +102,7 @@ impl Mpris {
     fn render_widget_content(
         &self,
         theme: &ui::Theme,
-        icon: &'static str,
+        icon: IconName,
         label: Option<String>,
         is_vertical: bool,
         cx: &mut Context<Self>,
@@ -123,11 +125,9 @@ impl Mpris {
                 }),
             )
             .child(
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(style::icon(is_vertical)))
-                    .text_color(theme.colors.text)
-                    .child(icon),
+                Icon::new(icon)
+                    .size(style::icon(is_vertical))
+                    .color(Color::Custom(theme.colors.text)),
             )
             .when_some(label, |el, label| {
                 el.child(

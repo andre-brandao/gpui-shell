@@ -32,16 +32,6 @@ impl BrightnessData {
             ((self.current as f64 / self.max as f64) * 100.0).round() as u8
         }
     }
-
-    /// Get an icon based on brightness level.
-    pub fn icon(&self) -> &'static str {
-        match self.percentage() {
-            0..=25 => "󰃞",
-            26..=50 => "󰃟",
-            51..=75 => "󰃠",
-            _ => "󰃠",
-        }
-    }
 }
 
 /// Commands for controlling brightness.

@@ -23,7 +23,7 @@ use ui::ActiveTheme;
 use ui::patterns::OsdIndicator;
 
 use crate::config::Config;
-use crate::control_center::icons;
+use crate::icons;
 use crate::state::AppState;
 
 const OSD_LONG: f32 = 280.0;
@@ -81,10 +81,10 @@ impl OsdView {
         Self { kind, position }
     }
 
-    fn icon_and_level(&self) -> (&'static str, u8, bool) {
+    fn icon_and_level(&self) -> (ui::IconName, u8, bool) {
         match self.kind {
             OsdKind::Volume { level, muted } => (icons::volume_icon(level, muted), level, muted),
-            OsdKind::Brightness { level } => (icons::brightness_icon(level), level, false),
+            OsdKind::Brightness { level } => (icons::BRIGHTNESS, level, false),
         }
     }
 }

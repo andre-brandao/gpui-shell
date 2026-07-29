@@ -3,7 +3,7 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, IconName, Label, LabelCommon, Radius, Spacing, TextSize};
 
 use self::config::{WebConfig, WebProviderConfig};
 use ui::patterns::footer_hints;
@@ -55,8 +55,8 @@ impl LauncherView for WebSearchView {
         "Web Search"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰖟"
+    fn icon(&self) -> IconName {
+        IconName::Globe
     }
 
     fn description(&self) -> &'static str {

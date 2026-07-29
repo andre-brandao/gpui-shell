@@ -1,16 +1,17 @@
 //! OSD - the pill that flashes on a volume or brightness change.
 
 use gpui::{AnyElement, div};
+use ui::IconName;
 use ui::patterns::OsdIndicator;
 
 use crate::prelude::*;
 
-/// Nerd Font glyphs, same source as the shell's own OSD.
-const VOLUME: &str = "󰕾";
-const MUTED: &str = "󰝟";
-const BRIGHT: &str = "󰃠";
+/// Same icons the shell's own OSD uses.
+const VOLUME: IconName = IconName::Volume;
+const MUTED: IconName = IconName::VolumeOff;
+const BRIGHT: IconName = IconName::Sun;
 
-fn horizontal(icon: &'static str, level: u8, fill: Option<gpui::Hsla>) -> AnyElement {
+fn horizontal(icon: IconName, level: u8, fill: Option<gpui::Hsla>) -> AnyElement {
     div()
         .w(px(264.))
         .h(px(40.))

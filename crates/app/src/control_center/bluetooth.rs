@@ -5,12 +5,13 @@
 
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{BluetoothCommand, BluetoothDevice};
-use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use crate::state::AppState;
 use zbus::zvariant::OwnedObjectPath;
 
-use super::{icons, tooltip::control_center_tooltip};
+use super::tooltip::control_center_tooltip;
+use crate::icons;
 
 /// Render the Bluetooth section (device list)
 pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
@@ -53,10 +54,9 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                         .items_center()
                         .gap(Spacing::Medium.pixels())
                         .child(
-                            div()
-                                .text_size(IconSize::XSmall.pixels())
-                                .text_color(theme.colors.text)
-                                .child(icons::BLUETOOTH),
+                            Icon::new(icons::BLUETOOTH)
+                                .size(IconSize::XSmall)
+                                .color(Color::Custom(theme.colors.text)),
                         )
                         .child(
                             div()
@@ -208,13 +208,15 @@ fn render_device_item(
         .child(
             div()
                 .id(format!("bt-device-icon-{}", index))
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(if connected {
-                    accent_primary
-                } else {
-                    text_muted
-                })
-                .child(device_icon)
+                .child(
+                    Icon::new(device_icon)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(if connected {
+                            accent_primary
+                        } else {
+                            text_muted
+                        })),
+                )
                 .tooltip(control_center_tooltip(device_tooltip)),
         )
         // Device name
@@ -230,9 +232,11 @@ fn render_device_item(
             el.child(
                 div()
                     .id(format!("bt-paired-{}", index))
-                    .text_size(IconSize::XSmall.pixels())
-                    .text_color(status_success)
-                    .child(icons::CHECK)
+                    .child(
+                        Icon::new(icons::CHECK)
+                            .size(IconSize::XSmall)
+                            .color(Color::Custom(status_success)),
+                    )
                     .tooltip(control_center_tooltip("Paired")),
             )
         })
@@ -272,7 +276,7 @@ fn render_device_actions(
     _cx: &App,
 ) -> impl IntoElement {
     let action_button = |id: String,
-                         icon: &'static str,
+                         icon: IconName,
                          color: gpui::Hsla,
                          tooltip: &'static str,
                          on_click: Box<dyn Fn(&mut App) + 'static>| {
@@ -290,10 +294,9 @@ fn render_device_actions(
                 on_click(cx);
             })
             .child(
-                div()
-                    .text_size(IconSize::XSmall.pixels())
-                    .text_color(color)
-                    .child(icon),
+                Icon::new(icon)
+                    .size(IconSize::XSmall)
+                    .color(Color::Custom(color)),
             )
             .tooltip(control_center_tooltip(tooltip))
     };
@@ -307,7 +310,7 @@ fn render_device_actions(
             let on_pair = on_pair.clone();
             el.child(action_button(
                 format!("bt-pair-{}", index),
-                "+",
+                IconName::Plus,
                 text_muted,
                 "Pair",
                 Box::new(move |cx| {
@@ -376,10 +379,9 @@ fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoEleme
         .gap(px(2.))
         .tooltip(control_center_tooltip(format!("Battery: {}%", level)))
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(color)
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(color)),
         )
         .child(
             div()
@@ -390,7 +392,10 @@ fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoEleme
 }
 
 /// Get appropriate icon for device type
-fn get_device_icon(device: &BluetoothDevice) -> &'static str {
+///
+/// Mice and gamepads have no counterpart in the icon set, so they fall
+/// through to the generic Bluetooth icon - the tooltip still names them.
+fn get_device_icon(device: &BluetoothDevice) -> IconName {
     // Check device class/type from icon or name hints
     let name_lower = device.name.to_lowercase();
 
@@ -398,22 +403,18 @@ fn get_device_icon(device: &BluetoothDevice) -> &'static str {
         || name_lower.contains("headphone")
         || name_lower.contains("buds")
     {
-        "󰋋" // Headphones
-    } else if name_lower.contains("mouse") {
-        "󰍽" // Mouse
+        IconName::Headphones
     } else if name_lower.contains("keyboard") {
-        "󰌌" // Keyboard
+        IconName::Keyboard
     } else if name_lower.contains("speaker") || name_lower.contains("soundbar") {
-        "󰓃" // Speaker
+        IconName::Volume
     } else if name_lower.contains("phone")
         || name_lower.contains("iphone")
         || name_lower.contains("android")
     {
-        "󰏲" // Phone
+        IconName::Phone
     } else if name_lower.contains("watch") {
-        "󰖉" // Watch
-    } else if name_lower.contains("controller") || name_lower.contains("gamepad") {
-        "󰊴" // Gamepad
+        IconName::Clock
     } else if device.connected {
         icons::BLUETOOTH_CONNECTED
     } else {
@@ -497,9 +498,8 @@ fn render_scan_button(discovering: bool, cx: &App) -> impl IntoElement {
             .detach();
         })
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(icon_color)
-                .child(icons::REFRESH),
+            Icon::new(icons::REFRESH)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(icon_color)),
         )
 }

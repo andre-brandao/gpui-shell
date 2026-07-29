@@ -4,8 +4,8 @@ pub mod config;
 
 use gpui::{AnyElement, App, div, img, prelude::*, px};
 use ui::{
-    ActiveTheme, Clickable, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize,
-    Toggleable,
+    ActiveTheme, Clickable, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem,
+    ListItemSpacing, TextSize, Toggleable,
 };
 
 use self::config::AppsConfig;
@@ -43,8 +43,8 @@ impl LauncherView for AppsView {
         "Applications"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰀻"
+    fn icon(&self) -> IconName {
+        IconName::Layers
     }
 
     fn description(&self) -> &'static str {
@@ -89,8 +89,7 @@ impl LauncherView for AppsView {
                     })
                     .when(app.icon_path.is_none(), move |el| {
                         el.bg(interactive_default)
-                            .text_size(px(14.))
-                            .child(fallback_icon)
+                            .child(Icon::new(fallback_icon).size(IconSize::Small))
                     }),
             )
             .on_click(move |_, _, _cx| {

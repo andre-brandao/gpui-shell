@@ -70,16 +70,6 @@ impl PowerProfile {
             PowerProfile::Unknown => "Unknown",
         }
     }
-
-    /// Get an icon name for this profile.
-    pub fn icon(&self) -> &'static str {
-        match self {
-            PowerProfile::Balanced => "󰗑",
-            PowerProfile::Performance => "󱐋",
-            PowerProfile::PowerSaver => "󰌪",
-            PowerProfile::Unknown => "󰗑",
-        }
-    }
 }
 
 /// Battery data from UPower.
@@ -135,37 +125,6 @@ impl BatteryData {
             self.warning_level,
             WarningLevel::Low | WarningLevel::Critical | WarningLevel::Action
         )
-    }
-
-    /// Get a Nerd Font icon for the current battery state.
-    pub fn icon(&self) -> &'static str {
-        if self.is_charging() {
-            match self.percentage {
-                0..=10 => "󰢜",
-                11..=20 => "󰂆",
-                21..=30 => "󰂇",
-                31..=40 => "󰂈",
-                41..=50 => "󰢝",
-                51..=60 => "󰂉",
-                61..=70 => "󰢞",
-                71..=80 => "󰂊",
-                81..=90 => "󰂋",
-                _ => "󰂅",
-            }
-        } else {
-            match self.percentage {
-                0..=10 => "󰁺",
-                11..=20 => "󰁻",
-                21..=30 => "󰁼",
-                31..=40 => "󰁽",
-                41..=50 => "󰁾",
-                51..=60 => "󰁿",
-                61..=70 => "󰂀",
-                71..=80 => "󰂁",
-                81..=90 => "󰂂",
-                _ => "󰁹",
-            }
-        }
     }
 
     /// Format time remaining as a human-readable string.

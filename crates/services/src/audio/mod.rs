@@ -33,26 +33,6 @@ pub struct AudioData {
     pub source_muted: bool,
 }
 
-impl AudioData {
-    /// Get an icon based on sink volume and mute state.
-    pub fn sink_icon(&self) -> &'static str {
-        if self.sink_muted {
-            "󰝟"
-        } else {
-            match self.sink_volume {
-                0 => "󰕿",
-                1..=50 => "󰖀",
-                _ => "󰕾",
-            }
-        }
-    }
-
-    /// Get an icon based on source volume and mute state.
-    pub fn source_icon(&self) -> &'static str {
-        if self.source_muted { "󰍭" } else { "󰍬" }
-    }
-}
-
 /// Commands for controlling audio.
 #[derive(Debug, Clone)]
 pub enum AudioCommand {

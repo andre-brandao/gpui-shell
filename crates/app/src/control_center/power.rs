@@ -4,9 +4,10 @@
 
 use crate::config::ActiveConfig;
 use gpui::{App, Hsla, MouseButton, div, prelude::*};
-use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
-use super::{config::PowerActionsConfig, icons};
+use super::config::PowerActionsConfig;
+use crate::icons;
 
 /// Render the power section (expanded view with actions)
 pub fn render_power_section(cx: &App) -> impl IntoElement {
@@ -48,7 +49,7 @@ fn render_power_actions(config: &PowerActionsConfig, cx: &App) -> impl IntoEleme
 /// Render a power action button
 fn render_action_button(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     command: &str,
     cx: &App,
@@ -83,10 +84,9 @@ fn render_action_button(
                 })
         })
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(fg_color)
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(fg_color)),
         )
         .child(
             div()

@@ -5,8 +5,8 @@ pub mod config;
 use gpui::{AnyElement, App, div, prelude::*, px};
 use services::CompositorCommand;
 use ui::{
-    ActiveTheme, Clickable, Color, Label, LabelCommon, ListItem, ListItemSpacing, TextSize,
-    Toggleable,
+    ActiveTheme, Clickable, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem,
+    ListItemSpacing, TextSize, Toggleable,
 };
 
 use self::config::WorkspacesConfig;
@@ -67,8 +67,8 @@ impl LauncherView for WorkspacesView {
         "Workspaces"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰍉"
+    fn icon(&self) -> IconName {
+        IconName::Layout
     }
 
     fn description(&self) -> &'static str {
@@ -112,8 +112,7 @@ impl LauncherView for WorkspacesView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(14.))
-                    .child(icon),
+                    .child(Icon::new(icon).size(IconSize::Small)),
             )
             .on_click(move |_, _, _cx| {
                 let _ = compositor_clone.dispatch(CompositorCommand::FocusWorkspace(ws_id));

@@ -7,7 +7,8 @@ use std::sync::Mutex;
 use gpui::{AnyElement, App, FontWeight, div, prelude::*, px};
 use services::{THEME_PROVIDERS, ThemeProvider, ThemeRepository, load_stylix_scheme};
 use ui::{
-    ActiveTheme, Base16Palette, Radius, Spacing, TextSize, Theme, ThemeScheme, builtin_schemes,
+    ActiveTheme, Base16Palette, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize, Theme,
+    ThemeScheme, builtin_schemes,
 };
 
 use self::config::ThemesConfig;
@@ -17,7 +18,7 @@ use ui::patterns::footer_hints;
 use crate::launcher::view::{LauncherView, ViewContext};
 
 const MAX_VISIBLE_THEMES: usize = 50;
-const THEME_ICON: &str = "󰏘";
+const THEME_ICON: IconName = IconName::Palette;
 
 static CACHED_SCHEMES: Mutex<Option<Vec<ThemeScheme>>> = Mutex::new(None);
 
@@ -54,7 +55,7 @@ impl LauncherView for ThemeView {
         "Themes"
     }
 
-    fn icon(&self) -> &'static str {
+    fn icon(&self) -> IconName {
         THEME_ICON
     }
 
@@ -235,10 +236,9 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                 .items_center()
                 .gap(Spacing::Medium.pixels())
                 .child(
-                    div()
-                        .text_size(TextSize::Large.rems())
-                        .text_color(accent_primary)
-                        .child(THEME_ICON),
+                    Icon::new(THEME_ICON)
+                        .size(IconSize::Large)
+                        .color(Color::Custom(accent_primary)),
                 )
                 .child(
                     div()
@@ -295,9 +295,9 @@ fn render_provider_card(
     let interactive_hover = theme.colors.element_hover;
 
     let (icon, action) = if is_downloaded {
-        ("󰚰", format!("Update {}", provider.name))
+        (IconName::Refresh, format!("Update {}", provider.name))
     } else {
-        ("󰇚", format!("Download {}", provider.name))
+        (IconName::Download, format!("Download {}", provider.name))
     };
 
     let provider_id = provider.id;
@@ -330,10 +330,9 @@ fn render_provider_card(
         .items_center()
         .gap(Spacing::Medium.pixels())
         .child(
-            div()
-                .text_size(TextSize::Large.rems())
-                .text_color(accent_primary)
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::Large)
+                .color(Color::Custom(accent_primary)),
         )
         .child(
             div()

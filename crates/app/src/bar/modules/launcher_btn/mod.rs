@@ -4,8 +4,8 @@ mod config;
 pub use config::LauncherBtnConfig;
 
 use crate::launcher;
-use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
-use ui::ActiveTheme;
+use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*};
+use ui::{ActiveTheme, Color, Icon, IconName};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -13,7 +13,7 @@ use crate::config::ActiveConfig;
 /// A button widget that opens the launcher when clicked.
 pub struct LauncherBtn;
 
-const LAUNCHER_ICON: &str = "󰀻";
+const LAUNCHER_ICON: IconName = IconName::Layers;
 
 impl LauncherBtn {
     /// Create a new launcher button.
@@ -21,17 +21,9 @@ impl LauncherBtn {
         LauncherBtn
     }
 
-    fn icon(&self, configured_icon: &str) -> String {
-        if configured_icon.trim().is_empty() {
-            LAUNCHER_ICON.to_string()
-        } else {
-            configured_icon.to_string()
-        }
-    }
-
     fn render_button_content(
         &self,
-        icon: String,
+        icon: IconName,
         theme: &ui::Theme,
         is_vertical: bool,
         cx: &mut Context<Self>,
@@ -48,12 +40,9 @@ impl LauncherBtn {
                 }),
             )
             .child(
-                div().flex().items_center().justify_center().child(
-                    div()
-                        .text_size(px(style::icon(is_vertical)))
-                        .text_color(theme.colors.text)
-                        .child(icon),
-                ),
+                Icon::new(icon)
+                    .size(style::icon(is_vertical))
+                    .color(Color::Custom(theme.colors.text)),
             )
             .into_any_element()
     }
@@ -67,13 +56,13 @@ impl BarWidget for LauncherBtn {
     fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(self.icon(&config.icon), &theme, true, cx)
+        self.render_button_content(config.icon, &theme, true, cx)
     }
 
     fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(self.icon(&config.icon), &theme, false, cx)
+        self.render_button_content(config.icon, &theme, false, cx)
     }
 }
 

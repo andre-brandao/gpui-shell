@@ -4,11 +4,11 @@
 
 use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand};
-use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use crate::state::AppState;
 
-use super::icons;
+use crate::icons;
 
 /// Which section is currently expanded
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -171,7 +171,7 @@ pub fn render_quick_toggles(
 #[allow(clippy::too_many_arguments)]
 fn render_expandable_module(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     status: String,
     active: bool,
@@ -223,10 +223,9 @@ fn render_expandable_module(
                     on_toggle(cx);
                 })
                 .child(
-                    div()
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(icon_color)
-                        .child(icon),
+                    Icon::new(icon)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(icon_color)),
                 )
                 .child(
                     div()
@@ -260,14 +259,13 @@ fn render_expandable_module(
                     on_expand(cx);
                 })
                 .child(
-                    div()
-                        .text_size(IconSize::XSmall.pixels())
-                        .text_color(text_muted)
-                        .child(if expanded {
-                            icons::CHEVRON_UP
-                        } else {
-                            icons::CHEVRON_DOWN
-                        }),
+                    Icon::new(if expanded {
+                        icons::CHEVRON_UP
+                    } else {
+                        icons::CHEVRON_DOWN
+                    })
+                    .size(IconSize::XSmall)
+                    .color(Color::Custom(text_muted)),
                 ),
         )
 }
@@ -275,7 +273,7 @@ fn render_expandable_module(
 #[allow(clippy::too_many_arguments)]
 fn render_simple_module(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     status: &'static str,
     active: bool,
@@ -309,10 +307,13 @@ fn render_simple_module(
             on_click(cx);
         })
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(if active { accent_primary } else { text_muted })
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(if active {
+                    accent_primary
+                } else {
+                    text_muted
+                })),
         )
         .child(
             div()
@@ -336,7 +337,7 @@ fn render_simple_module(
 
 fn render_status_module(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     status: &'static str,
     active: bool,
@@ -363,10 +364,13 @@ fn render_status_module(
         .border_color(border_subtle)
         .bg(bg_secondary)
         .child(
-            div()
-                .text_size(IconSize::XSmall.pixels())
-                .text_color(if active { status_warning } else { text_muted })
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(if active {
+                    status_warning
+                } else {
+                    text_muted
+                })),
         )
         .child(
             div()
