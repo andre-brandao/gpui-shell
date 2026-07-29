@@ -3,7 +3,9 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, IconName, Label, LabelCommon, Radius, Spacing, TextSize};
+use ui::{
+    ActiveTheme, Color, Icon, IconName, IconSize, Label, LabelCommon, Radius, Spacing, TextSize,
+};
 
 use self::config::{WebConfig, WebProviderConfig};
 use ui::patterns::footer_hints;
@@ -88,7 +90,7 @@ impl LauncherView for WebSearchView {
         let accent_selection = theme.colors.element_selected;
         let interactive_hover = theme.colors.element_hover;
 
-        let provider_icon = provider.icon.clone();
+        let provider_icon = provider.icon();
         let provider_name = provider.name.clone();
         let provider_shebang = provider.shebang.clone();
 
@@ -118,11 +120,7 @@ impl LauncherView for WebSearchView {
                                         .flex()
                                         .items_center()
                                         .gap(Spacing::Medium.pixels())
-                                        .child(
-                                            Label::new(provider_icon)
-                                                .size(TextSize::Large)
-                                                .color(Color::Default),
-                                        )
+                                        .child(Icon::new(provider_icon).size(IconSize::Large))
                                         .child(Label::new(provider_name).size(TextSize::Default))
                                         .child(
                                             div()
@@ -214,7 +212,7 @@ impl LauncherView for WebSearchView {
                                 .gap(Spacing::Medium.pixels())
                                 .children(self.providers.iter().map(|p| {
                                     let is_active = p.shebang == provider.shebang;
-                                    let icon = p.icon.clone();
+                                    let icon = p.icon();
                                     let shebang = p.shebang.clone();
                                     div()
                                         .px(Spacing::Medium.pixels())
@@ -225,11 +223,7 @@ impl LauncherView for WebSearchView {
                                         .flex()
                                         .items_center()
                                         .gap(px(4.))
-                                        .child(
-                                            Label::new(icon)
-                                                .size(TextSize::Small)
-                                                .color(Color::Default),
-                                        )
+                                        .child(Icon::new(icon).size(IconSize::Small))
                                         .child(
                                             Label::new(format!("!{}", shebang))
                                                 .size(TextSize::Small)

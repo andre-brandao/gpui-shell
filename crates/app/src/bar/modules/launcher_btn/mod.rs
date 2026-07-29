@@ -56,13 +56,13 @@ impl BarWidget for LauncherBtn {
     fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(config.icon, &theme, true, cx)
+        self.render_button_content(config.icon.unwrap_or(LAUNCHER_ICON), &theme, true, cx)
     }
 
     fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(config.icon, &theme, false, cx)
+        self.render_button_content(config.icon.unwrap_or(LAUNCHER_ICON), &theme, false, cx)
     }
 }
 

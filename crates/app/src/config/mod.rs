@@ -247,4 +247,44 @@ mod tests {
         assert_eq!(decoded.service_mode("Bluetooth"), ServiceMode::Off);
         assert_eq!(decoded.service_mode("Audio"), ServiceMode::Eager);
     }
+
+    /// Parses the config actually on this machine, if there is one. Skips
+    /// silently when there is not, so CI stays hermetic.
+    #[test]
+    fn the_live_config_on_this_machine_parses() {
+        let Ok(path) = super::persistence::config_path() else {
+            return;
+        };
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            return;
+        };
+
+        if let Err(err) = toml::from_str::<Config>(&raw) {
+            panic!("live config at {} does not parse: {err}", path.display());
+        }
+    }
+
+    /// Configs written before the SVG icon switch still hold Nerd Font
+    /// glyphs. One of those must not fail the parse - doing so drops every
+    /// other setting in the file, which is how a `position = "top"` bar
+    /// silently came back vertical.
+    #[test]
+    fn a_stale_icon_glyph_does_not_discard_the_rest_of_the_config() {
+        let raw = concat!(
+            "[bar]\n",
+            "position = \"top\"\n",
+            "\n",
+            "[bar.modules.launcher_btn]\n",
+            "icon = \"\u{f003b}\"\n",
+            "\n",
+            "[notification.icons]\n",
+            "bell = \"\u{f009a}\"\n",
+        );
+
+        let config: Config = toml::from_str(raw).expect("config parses despite stale icons");
+
+        assert_eq!(config.bar.position, crate::bar::config::BarPosition::Top);
+        assert_eq!(config.bar.modules.launcher_btn.icon, None);
+        assert_eq!(config.notification.icons.bell(), ui::IconName::Bell);
+    }
 }

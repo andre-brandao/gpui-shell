@@ -11,8 +11,30 @@
 //! ladder. Levels that used to be readable from the glyph now come from the
 //! value next to it.
 
+use serde::{Deserialize, Deserializer};
 use services::{BatteryData, PowerProfile, ServiceStatus};
 use ui::IconName;
+
+/// Deserialize a configured icon name, tolerating values we can't resolve.
+///
+/// A config file outlives any one icon set: it may still hold a Nerd Font
+/// glyph from before the SVG switch, or a plain typo. Failing the field
+/// would fail the whole TOML parse and silently drop every other setting
+/// with it, so an unresolvable name becomes `None` and the caller falls
+/// back to its built-in icon.
+pub fn deserialize_lenient<'de, D>(deserializer: D) -> Result<Option<IconName>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    Ok(raw.parse().ok().or_else(|| {
+        tracing::warn!("Unknown icon name {raw:?} in config, using the built-in default");
+        None
+    }))
+}
 
 // Audio
 pub const MICROPHONE: IconName = IconName::Mic;

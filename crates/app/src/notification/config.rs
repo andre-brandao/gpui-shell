@@ -53,23 +53,52 @@ impl Default for NotificationConfig {
     }
 }
 
-/// Notification icons, named from the embedded icon set (e.g. `bell = "bell_ring"`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Notification icons, named from the embedded icon set (e.g. `bell =
+/// "bell_ring"`). Omit a field - or give a name we don't ship - to get the
+/// built-in icon.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationIcons {
-    pub bell: IconName,
-    pub bell_off: IconName,
-    pub close: IconName,
-    pub dnd: IconName,
+    #[serde(with = "icon_field")]
+    pub bell: Option<IconName>,
+    #[serde(with = "icon_field")]
+    pub bell_off: Option<IconName>,
+    #[serde(with = "icon_field")]
+    pub close: Option<IconName>,
+    #[serde(with = "icon_field")]
+    pub dnd: Option<IconName>,
 }
 
-impl Default for NotificationIcons {
-    fn default() -> Self {
-        Self {
-            bell: IconName::Bell,
-            bell_off: IconName::BellOff,
-            close: IconName::Close,
-            dnd: IconName::BellOff,
+impl NotificationIcons {
+    pub fn bell(&self) -> IconName {
+        self.bell.unwrap_or(IconName::Bell)
+    }
+
+    pub fn bell_off(&self) -> IconName {
+        self.bell_off.unwrap_or(IconName::BellOff)
+    }
+
+    pub fn close(&self) -> IconName {
+        self.close.unwrap_or(IconName::Close)
+    }
+
+    pub fn dnd(&self) -> IconName {
+        self.dnd.unwrap_or(IconName::BellOff)
+    }
+}
+
+/// `serde(with = ...)` pair so each icon field is both lenient on the way in
+/// and omitted from the written config when it is unset.
+mod icon_field {
+    pub use crate::icons::deserialize_lenient as deserialize;
+
+    pub fn serialize<S: serde::Serializer>(
+        icon: &Option<ui::IconName>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match icon {
+            Some(icon) => serializer.serialize_some(icon),
+            None => serializer.serialize_none(),
         }
     }
 }

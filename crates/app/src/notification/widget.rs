@@ -106,9 +106,9 @@ impl BarWidget for NotificationWidget {
         let theme = cx.theme().clone();
         let config = &cx.config().notification;
         let icon = if self.data.dnd {
-            config.icons.bell_off
+            config.icons.bell_off()
         } else {
-            config.icons.bell
+            config.icons.bell()
         };
         self.render_widget_content(&theme, icon, true, cx)
     }
@@ -117,9 +117,9 @@ impl BarWidget for NotificationWidget {
         let theme = cx.theme().clone();
         let config = &cx.config().notification;
         let icon = if self.data.dnd {
-            config.icons.bell_off
+            config.icons.bell_off()
         } else {
-            config.icons.bell
+            config.icons.bell()
         };
         self.render_widget_content(&theme, icon, false, cx)
     }

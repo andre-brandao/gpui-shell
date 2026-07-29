@@ -72,7 +72,7 @@ impl Render for NotificationCenter {
                                     }),
                                 )
                                 .child(
-                                    Icon::new(config.icons.close)
+                                    Icon::new(config.icons.close())
                                         .size(IconSize::XSmall)
                                         .color(Color::Custom(theme.colors.text_muted)),
                                 ),
@@ -126,7 +126,7 @@ impl Render for NotificationCenter {
                                         }),
                                     )
                                     .child(
-                                        Icon::new(config.icons.dnd).size(IconSize::XSmall).color(
+                                        Icon::new(config.icons.dnd()).size(IconSize::XSmall).color(
                                             Color::Custom(if dnd_enabled {
                                                 theme.colors.accent
                                             } else {
