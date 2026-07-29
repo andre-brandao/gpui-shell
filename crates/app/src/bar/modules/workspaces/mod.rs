@@ -62,14 +62,7 @@ impl Workspaces {
     /// against the same hash computed from each compositor monitor's name.
     fn current_monitor_name(&self, window: &Window, cx: &gpui::App) -> Option<String> {
         let display_id = crate::state::display_id_for_window(window)?;
-        let display_uuid = cx.find_display(display_id)?.uuid().ok()?;
-
-        self.state
-            .monitors
-            .iter()
-            .find(|m| {
-                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, m.name.as_bytes()) == display_uuid
-            })
+        crate::state::monitor_for_display(Some(display_id), &self.state, cx)
             .map(|m| m.name.clone())
     }
 

@@ -171,10 +171,24 @@ pub fn window_options(
     display_id: Option<DisplayId>,
     cx: &App,
 ) -> WindowOptions {
-    let display_size = display_id
-        .and_then(|id| cx.find_display(id))
-        .or_else(|| cx.primary_display())
-        .map(|display| display.bounds().size)
+    // The bar spans the screen on its long axis, so it needs the real
+    // logical screen extent. `PlatformDisplay::bounds()` does not give it:
+    // gpui derives those from the integer `wl_output.scale`, and Wayland's
+    // core output protocol carries no fractional scale, so a screen at 1.5
+    // advertises 2 and gpui reports two thirds of the true size - which
+    // left the bar covering 75% of the screen.
+    //
+    // Requesting 0 on the spanned axis and letting the compositor stretch
+    // between the anchors would be the protocol-blessed alternative, but
+    // gpui sets a `wp_viewport` destination from these bounds before the
+    // configure arrives, and a zero there is a protocol error.
+    let display_size = crate::state::logical_display_size(display_id, cx)
+        .or_else(|| {
+            display_id
+                .and_then(|id| cx.find_display(id))
+                .or_else(|| cx.primary_display())
+                .map(|display| display.bounds().size)
+        })
         .unwrap_or_else(|| Size::new(px(1920.), px(1080.)));
     let config = cx.config();
     let (window_size, anchor) = match config.bar.position {

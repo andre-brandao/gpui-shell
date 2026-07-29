@@ -286,15 +286,7 @@ fn monitor_name_for_display(
     state: &services::CompositorState,
     cx: &App,
 ) -> Option<String> {
-    let display_uuid = cx.find_display(display_id?)?.uuid().ok()?;
-
-    state
-        .monitors
-        .iter()
-        .find(|monitor| {
-            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, monitor.name.as_bytes()) == display_uuid
-        })
-        .map(|monitor| monitor.name.clone())
+    crate::state::monitor_for_display(display_id, state, cx).map(|monitor| monitor.name.clone())
 }
 
 fn focused_window_is_on_other_monitor(

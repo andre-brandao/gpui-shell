@@ -38,6 +38,50 @@ pub fn display_id_for_window(window: &Window) -> Option<DisplayId> {
         .copied()
 }
 
+/// Find the compositor monitor backing a gpui display.
+///
+/// `gpui_linux`'s `PlatformDisplay::uuid()` is a deterministic hash of the
+/// Wayland output's name (`Uuid::new_v5(NAMESPACE_DNS, name)`), so hashing
+/// each compositor monitor name the same way identifies the pair without
+/// relying on enumeration order - which `cx.displays()` and the
+/// compositor's own list do not share (see the note on [`WINDOW_DISPLAYS`]).
+pub(crate) fn monitor_for_display<'a>(
+    display_id: Option<DisplayId>,
+    state: &'a services::CompositorState,
+    cx: &App,
+) -> Option<&'a services::Monitor> {
+    let display_uuid = cx.find_display(display_id?)?.uuid().ok()?;
+    state.monitors.iter().find(|monitor| {
+        uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, monitor.name.as_bytes()) == display_uuid
+    })
+}
+
+/// Logical (scale-corrected) size of the monitor backing a gpui display.
+///
+/// Prefer this over `PlatformDisplay::bounds()` for anything that has to
+/// match the real screen extent. gpui derives its display bounds from the
+/// integer `wl_output.scale`, and Wayland's core output protocol carries no
+/// fractional scale - a screen running at 1.5 advertises 2, so gpui reports
+/// two thirds of the true logical size.
+///
+/// Returns `None` when the compositor backend does not publish monitor
+/// geometry (the Niri backend leaves it at zero), leaving the caller to
+/// fall back to gpui's own bounds.
+pub(crate) fn logical_display_size(
+    display_id: Option<DisplayId>,
+    cx: &App,
+) -> Option<gpui::Size<gpui::Pixels>> {
+    let state = AppState::compositor(cx).get();
+    let monitor = monitor_for_display(display_id, &state, cx)?;
+    if monitor.scale <= 0.0 || monitor.width == 0 || monitor.height == 0 {
+        return None;
+    }
+    Some(gpui::size(
+        gpui::px(monitor.width as f32 / monitor.scale),
+        gpui::px(monitor.height as f32 / monitor.scale),
+    ))
+}
+
 pub(crate) fn record_window_display(handle: AnyWindowHandle, display_id: Option<DisplayId>) {
     let Some(display_id) = display_id else {
         return;
