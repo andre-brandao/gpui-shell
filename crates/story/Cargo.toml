@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+# Two views of the same component set: `story` isolates one component at a
+# time, `showcase` puts them all on one page against a shared surface.
 [[bin]]
 name = "story"
 path = "src/story.rs"
+
+[[bin]]
+name = "showcase"
+path = "src/showcase.rs"
 
 [dependencies]
 ui.workspace = true

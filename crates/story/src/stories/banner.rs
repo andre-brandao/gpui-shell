@@ -76,7 +76,7 @@ impl Render for BannerStory {
                     example(
                         "Error",
                         Banner::new(Severity::Error, "Build failed")
-                            .description("3 tests failed in `engram-ui`.")
+                            .description("3 tests failed in `ui`.")
                             .into_any_element(),
                     ),
                 ],

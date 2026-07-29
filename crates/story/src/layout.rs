@@ -1,7 +1,7 @@
 //! Layout helpers for rendering story examples in a consistent format.
 //!
 //! Inspired by Zed's `ComponentExample` / `ComponentExampleGroup` from the
-//! `component` crate, adapted to engram's theme tokens.
+//! `component` crate, adapted to the shell's theme tokens.
 
 use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window, div,

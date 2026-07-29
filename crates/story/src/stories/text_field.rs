@@ -9,7 +9,7 @@ impl TextFieldStory {
     fn new(cx: &mut Context<Self>) -> Self {
         let weak = cx.entity().downgrade();
         let field = cx.new(|cx| {
-            TextField::with_value(cx, "Hello, engram")
+            TextField::with_value(cx, "Hello, gpui-shell")
                 .placeholder("Type something...")
                 .on_submit(move |value, _window, cx| {
                     let value = SharedString::from(value.to_string());

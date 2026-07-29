@@ -21,7 +21,7 @@ impl Render for BreadcrumbStory {
                                 .icon(IconName::Folder)
                                 .on_click(|_, _, _| {}),
                         )
-                        .child(BreadcrumbItem::new("b-cur", "engram").current(true))
+                        .child(BreadcrumbItem::new("b-cur", "gpui-shell").current(true))
                         .into_any_element(),
                 ),
                 example(

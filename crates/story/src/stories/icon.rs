@@ -69,7 +69,7 @@ impl Render for IconStory {
             .child(example_group(
                 "External SVGs",
                 vec![example(
-                    "Icon::from_path (story AssetSource + engram fallback)",
+                    "Icon::from_path (story AssetSource + shell fallback)",
                     h_flex()
                         .gap(Spacing::Large.pixels())
                         .child(Icon::from_path("demo/story_mark.svg").color(Color::Accent))
