@@ -31,7 +31,7 @@ use gpui::{
 use services::{NetworkCommand, UPowerCommand};
 use std::rc::Rc;
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, Color, Icon, IconSize, Radius, Spacing, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft,
@@ -612,7 +612,7 @@ impl Render for ControlCenter {
                                                 upower.power_profile,
                                             ))
                                             .size(IconSize::XSmall)
-                                            .color(Color::Custom(text_primary)),
+                                            .color(Color::Default),
                                         ),
                                 ),
                         )
@@ -638,9 +638,9 @@ impl Render for ControlCenter {
                                     on_toggle_section_power(cx);
                                 })
                                 .child(
-                                    Icon::new(icons::POWER_BUTTON)
+                                    Icon::new(IconName::Power)
                                         .size(IconSize::Small)
-                                        .color(Color::Custom(text_primary)),
+                                        .color(Color::Default),
                                 ),
                         ),
                 )

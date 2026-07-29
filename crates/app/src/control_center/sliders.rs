@@ -74,7 +74,7 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
 
     let percent = brightness.percentage();
 
-    let icon = icons::BRIGHTNESS;
+    let icon = IconName::Sun;
 
     let services_slider = AppState::brightness(cx).clone();
     let services_dec = AppState::brightness(cx).clone();
@@ -82,7 +82,6 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
 
     // Pre-compute colors
     let interactive_default = theme.colors.element_background;
-    let text_primary = theme.colors.text;
 
     div()
         .flex()
@@ -100,11 +99,7 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
                 .items_center()
                 .justify_center()
                 .bg(interactive_default)
-                .child(
-                    Icon::new(icon)
-                        .size(IconSize::XSmall)
-                        .color(Color::Custom(text_primary)),
-                ),
+                .child(Icon::new(icon).size(IconSize::XSmall).color(Color::Default)),
         )
         // Slider
         .child(

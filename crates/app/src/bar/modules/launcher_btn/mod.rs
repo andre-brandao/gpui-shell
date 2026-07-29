@@ -5,7 +5,7 @@ pub use config::LauncherBtnConfig;
 
 use crate::launcher;
 use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*};
-use ui::{ActiveTheme, Color, Icon, IconName};
+use ui::{Color, Icon, IconName, IconSource};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -23,8 +23,7 @@ impl LauncherBtn {
 
     fn render_button_content(
         &self,
-        icon: IconName,
-        theme: &ui::Theme,
+        icon: IconSource,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -42,7 +41,7 @@ impl LauncherBtn {
             .child(
                 Icon::new(icon)
                     .size(style::icon(is_vertical))
-                    .color(Color::Custom(theme.colors.text)),
+                    .color(Color::Default),
             )
             .into_any_element()
     }
@@ -54,15 +53,15 @@ impl BarWidget for LauncherBtn {
     }
 
     fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(config.icon.unwrap_or(LAUNCHER_ICON), &theme, true, cx)
+        let icon = crate::icons::source_or(config.icon.as_ref(), LAUNCHER_ICON);
+        self.render_button_content(icon, true, cx)
     }
 
     fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(config.icon.unwrap_or(LAUNCHER_ICON), &theme, false, cx)
+        let icon = crate::icons::source_or(config.icon.as_ref(), LAUNCHER_ICON);
+        self.render_button_content(icon, false, cx)
     }
 }
 

@@ -1,6 +1,6 @@
 use gpui::{AnyElement, App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, Color, Icon, IconName, TextSize};
+use ui::{ActiveTheme, Color, Icon, IconSource, TextSize};
 
 use crate::bar::modules::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -57,7 +57,7 @@ impl NotificationWidget {
     fn render_widget_content(
         &self,
         theme: &ui::Theme,
-        icon: IconName,
+        icon: IconSource,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {

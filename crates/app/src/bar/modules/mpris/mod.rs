@@ -127,7 +127,7 @@ impl Mpris {
             .child(
                 Icon::new(icon)
                     .size(style::icon(is_vertical))
-                    .color(Color::Custom(theme.colors.text)),
+                    .color(Color::Default),
             )
             .when_some(label, |el, label| {
                 el.child(

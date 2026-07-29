@@ -1,26 +1,20 @@
 //! Launcher button module configuration.
 
 use serde::{Deserialize, Serialize};
-use ui::IconName;
+
+use crate::icons::ConfigIcon;
 
 /// Launcher button module configuration.
 ///
-/// `icon` names an entry in the embedded icon set, e.g. `icon = "layers"`.
-/// Omit it - or give a name we don't ship - to get the built-in icon.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// `icon` is either a name from the embedded set (`icon = "layers"`) or a
+/// path to your own file (`icon = "~/.config/gpuishell/icons/mine.svg"`).
+/// Omit it - or give something we can't resolve - to get the built-in icon.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LauncherBtnConfig {
     #[serde(
         deserialize_with = "crate::icons::deserialize_lenient",
         skip_serializing_if = "Option::is_none"
     )]
-    pub icon: Option<IconName>,
-}
-
-impl Default for LauncherBtnConfig {
-    fn default() -> Self {
-        Self {
-            icon: Some(super::LAUNCHER_ICON),
-        }
-    }
+    pub icon: Option<ConfigIcon>,
 }

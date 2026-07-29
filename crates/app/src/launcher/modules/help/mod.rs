@@ -132,7 +132,7 @@ impl HelpView {
                     .child(
                         Icon::new(icons::TEMP)
                             .size(IconSize::Small)
-                            .color(Color::Custom(text_muted)),
+                            .color(Color::Muted),
                     )
                     .child(
                         div()
@@ -149,7 +149,7 @@ impl HelpView {
                     .child(
                         Icon::new(battery_icon)
                             .size(IconSize::Small)
-                            .color(Color::Custom(text_muted)),
+                            .color(Color::Muted),
                     )
                     .when(!battery_text.is_empty(), |el| {
                         el.child(

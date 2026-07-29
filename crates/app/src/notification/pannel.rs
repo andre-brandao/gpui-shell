@@ -74,7 +74,7 @@ impl Render for NotificationCenter {
                                 .child(
                                     Icon::new(config.icons.close())
                                         .size(IconSize::XSmall)
-                                        .color(Color::Custom(theme.colors.text_muted)),
+                                        .color(Color::Muted),
                                 ),
                         )
                 }))

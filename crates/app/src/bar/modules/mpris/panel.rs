@@ -15,7 +15,7 @@ mod icons {
     pub const PAUSE: IconName = IconName::Pause;
     pub const PREV: IconName = IconName::SkipBack;
     pub const NEXT: IconName = IconName::SkipForward;
-    pub const PLAYER: IconName = IconName::Headphones;
+    pub const PLAYER: IconName = IconName::Music;
     pub const DURATION: IconName = IconName::Clock;
 }
 
@@ -120,7 +120,6 @@ impl MprisPanel {
         let theme = cx.theme();
         let interactive_default = theme.colors.element_background;
         let interactive_hover = theme.colors.element_hover;
-        let text_primary = theme.colors.text;
 
         div()
             .id(id.into())
@@ -134,11 +133,7 @@ impl MprisPanel {
             .bg(interactive_default)
             .hover(move |el| el.bg(interactive_hover))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| on_click(cx))
-            .child(
-                Icon::new(icon)
-                    .size(IconSize::XSmall)
-                    .color(Color::Custom(text_primary)),
-            )
+            .child(Icon::new(icon).size(IconSize::XSmall).color(Color::Default))
     }
 
     fn render_player_card(
@@ -239,7 +234,7 @@ impl MprisPanel {
                                             .child(
                                                 Icon::new(icons::PLAYER)
                                                     .size(IconSize::XSmall)
-                                                    .color(Color::Custom(theme.colors.text)),
+                                                    .color(Color::Default),
                                             )
                                             .into_any_element()
                                     })
@@ -256,7 +251,7 @@ impl MprisPanel {
                                     .child(
                                         Icon::new(icons::PLAYER)
                                             .size(IconSize::XSmall)
-                                            .color(Color::Custom(theme.colors.text)),
+                                            .color(Color::Default),
                                     )
                                     .into_any_element()
                             })
@@ -301,7 +296,7 @@ impl MprisPanel {
                         .child(
                             Icon::new(icons::DURATION)
                                 .size(IconSize::XSmall)
-                                .color(Color::Custom(theme.colors.text_muted)),
+                                .color(Color::Muted),
                         )
                         .child(
                             div()
@@ -436,7 +431,7 @@ impl Render for MprisPanel {
                             .child(
                                 Icon::new(icons::HEADER)
                                     .size(IconSize::Large)
-                                    .color(Color::Custom(theme.colors.text)),
+                                    .color(Color::Default),
                             )
                             .child(
                                 div()

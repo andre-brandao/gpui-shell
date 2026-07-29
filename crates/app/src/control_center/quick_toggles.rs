@@ -8,8 +8,6 @@ use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize
 
 use crate::state::AppState;
 
-use crate::icons;
-
 /// Which section is currently expanded
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ExpandedSection {
@@ -92,9 +90,9 @@ pub fn render_quick_toggles(
                 .child(render_simple_module(
                     "mic-toggle",
                     if mic_muted {
-                        icons::MICROPHONE_MUTE
+                        IconName::MicOff
                     } else {
-                        icons::MICROPHONE
+                        IconName::Mic
                     },
                     "Mic",
                     mic_status,
@@ -106,7 +104,7 @@ pub fn render_quick_toggles(
                 ))
                 .child(render_status_module(
                     "cam-status",
-                    icons::CAMERA,
+                    IconName::Camera,
                     "Cam",
                     cam_status,
                     cam_active,
@@ -122,9 +120,9 @@ pub fn render_quick_toggles(
                 .child(render_expandable_module(
                     "wifi-toggle",
                     if wifi_enabled {
-                        icons::WIFI
+                        IconName::Wifi
                     } else {
-                        icons::WIFI_OFF
+                        IconName::WifiOff
                     },
                     "WiFi",
                     wifi_status,
@@ -145,9 +143,9 @@ pub fn render_quick_toggles(
                 .child(render_expandable_module(
                     "bt-toggle",
                     if bt_active {
-                        icons::BLUETOOTH
+                        IconName::Bluetooth
                     } else {
-                        icons::BLUETOOTH_OFF
+                        IconName::BluetoothOff
                     },
                     "Bluetooth",
                     bt_status,
@@ -260,12 +258,12 @@ fn render_expandable_module(
                 })
                 .child(
                     Icon::new(if expanded {
-                        icons::CHEVRON_UP
+                        IconName::ChevronUp
                     } else {
-                        icons::CHEVRON_DOWN
+                        IconName::ChevronDown
                     })
                     .size(IconSize::XSmall)
-                    .color(Color::Custom(text_muted)),
+                    .color(Color::Muted),
                 ),
         )
 }

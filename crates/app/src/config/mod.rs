@@ -285,6 +285,6 @@ mod tests {
 
         assert_eq!(config.bar.position, crate::bar::config::BarPosition::Top);
         assert_eq!(config.bar.modules.launcher_btn.icon, None);
-        assert_eq!(config.notification.icons.bell(), ui::IconName::Bell);
+        assert_eq!(config.notification.icons.bell, None);
     }
 }

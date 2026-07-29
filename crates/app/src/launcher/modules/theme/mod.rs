@@ -238,7 +238,7 @@ fn render_stylix_card(scheme: &ThemeScheme, is_active: bool, theme: &Theme) -> A
                 .child(
                     Icon::new(THEME_ICON)
                         .size(IconSize::Large)
-                        .color(Color::Custom(accent_primary)),
+                        .color(Color::Accent),
                 )
                 .child(
                     div()
@@ -291,7 +291,6 @@ fn render_provider_card(
     let bg_secondary = theme.colors.surface_background;
     let text_primary = theme.colors.text;
     let text_disabled = theme.colors.text_disabled;
-    let accent_primary = theme.colors.accent;
     let interactive_hover = theme.colors.element_hover;
 
     let (icon, action) = if is_downloaded {
@@ -329,11 +328,7 @@ fn render_provider_card(
         .flex()
         .items_center()
         .gap(Spacing::Medium.pixels())
-        .child(
-            Icon::new(icon)
-                .size(IconSize::Large)
-                .color(Color::Custom(accent_primary)),
-        )
+        .child(Icon::new(icon).size(IconSize::Large).color(Color::Accent))
         .child(
             div()
                 .flex()

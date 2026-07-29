@@ -19,8 +19,8 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     prelude::*, px,
 };
-use ui::ActiveTheme;
 use ui::patterns::OsdIndicator;
+use ui::{ActiveTheme, IconName};
 
 use crate::config::Config;
 use crate::icons;
@@ -84,7 +84,7 @@ impl OsdView {
     fn icon_and_level(&self) -> (ui::IconName, u8, bool) {
         match self.kind {
             OsdKind::Volume { level, muted } => (icons::volume_icon(level, muted), level, muted),
-            OsdKind::Brightness { level } => (icons::BRIGHTNESS, level, false),
+            OsdKind::Brightness { level } => (IconName::Sun, level, false),
         }
     }
 }

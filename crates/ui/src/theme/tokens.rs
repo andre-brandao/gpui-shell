@@ -138,6 +138,14 @@ pub enum IconSize {
     XXLarge,
     /// A caller-specified size in [`Rems`], bypassing the preset ladder.
     Custom(Rems),
+    /// A caller-specified size in absolute pixels, which does *not* scale
+    /// with the window's rem size.
+    ///
+    /// Only for icons that must line up with something else measured in
+    /// device pixels - a tray widget mixing SVG fallbacks with raster
+    /// pixmaps, say. Everything else wants [`Self::Custom`] or a preset, so
+    /// icons track the user's font scale the way text does.
+    Exact(f32),
 }
 
 impl IconSize {
@@ -147,15 +155,20 @@ impl IconSize {
             // nominal 16px rem. Prefer `rems()` when going through a
             // rem-aware API.
             Self::Custom(r) => px(r.0 * NOMINAL_REM_PX),
+            Self::Exact(p) => px(p),
             other => px(other.value()),
         }
     }
 
     /// Size in rems, so icons scale with the window's rem size the way
     /// text does.
+    /// Note that [`Self::Exact`] has no rem equivalent; it reports the
+    /// nominal conversion, which is only correct at a 1.0 font scale.
+    /// [`Icon`](crate::Icon) sizes it in pixels instead.
     pub fn rems(self) -> Rems {
         match self {
             Self::Custom(r) => r,
+            Self::Exact(p) => rems(p / NOMINAL_REM_PX),
             other => rems(other.value() / NOMINAL_REM_PX),
         }
     }
@@ -165,6 +178,7 @@ impl IconSize {
     pub const fn value(self) -> f32 {
         match self {
             Self::Custom(_) => NOMINAL_REM_PX,
+            Self::Exact(p) => p,
             Self::Indicator => 10.0,
             Self::XSmall => 12.0,
             Self::Small => 14.0,

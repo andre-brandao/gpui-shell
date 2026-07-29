@@ -7,7 +7,6 @@ use gpui::{App, Hsla, MouseButton, div, prelude::*};
 use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use super::config::PowerActionsConfig;
-use crate::icons;
 
 /// Render the power section (expanded view with actions)
 pub fn render_power_section(cx: &App) -> impl IntoElement {
@@ -25,21 +24,21 @@ fn render_power_actions(config: &PowerActionsConfig, cx: &App) -> impl IntoEleme
         .items_center()
         .child(render_action_button(
             "power-action-sleep",
-            icons::POWER_SLEEP,
+            IconName::Moon,
             "Sleep",
             &config.sleep,
             cx,
         ))
         .child(render_action_button(
             "power-action-reboot",
-            icons::REFRESH,
+            IconName::Refresh,
             "Reboot",
             &config.reboot,
             cx,
         ))
         .child(render_action_button(
             "power-action-poweroff",
-            icons::POWER_BUTTON,
+            IconName::Power,
             "Power off",
             &config.poweroff,
             cx,

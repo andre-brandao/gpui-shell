@@ -6,7 +6,7 @@
 use gpui::{App, ElementId, MouseButton, SharedString, div, prelude::*, px};
 use services::{AccessPoint, NetworkCommand};
 use ui::{
-    ActiveTheme, Color, Icon, IconSize, InputBuffer, Radius, Spacing, TextSize,
+    ActiveTheme, Color, Icon, IconName, IconSize, InputBuffer, Radius, Spacing, TextSize,
     render_masked_input_line,
 };
 
@@ -98,9 +98,9 @@ pub fn render_wifi_section(
                 .items_center()
                 .gap(Spacing::Medium.pixels())
                 .child(
-                    Icon::new(icons::WIFI)
+                    Icon::new(IconName::Wifi)
                         .size(IconSize::XSmall)
-                        .color(Color::Custom(theme.colors.text)),
+                        .color(Color::Default),
                 )
                 .child(
                     div()
@@ -305,7 +305,7 @@ fn render_network_item(
                 div()
                     .id(format!("wifi-known-{}", index))
                     .child(
-                        Icon::new(icons::CHECK)
+                        Icon::new(IconName::Check)
                             .size(IconSize::XSmall)
                             .color(Color::Custom(status_success)),
                     )
@@ -318,7 +318,7 @@ fn render_network_item(
                 div()
                     .id(format!("wifi-lock-{}", index))
                     .child(
-                        Icon::new(icons::LOCK)
+                        Icon::new(IconName::Lock)
                             .size(IconSize::XSmall)
                             .color(Color::Custom(if known {
                                 status_success
@@ -334,9 +334,9 @@ fn render_network_item(
                 div()
                     .id(format!("wifi-connect-{}", index))
                     .child(
-                        Icon::new(icons::CHEVRON_RIGHT)
+                        Icon::new(IconName::ChevronRight)
                             .size(IconSize::XSmall)
-                            .color(Color::Custom(text_muted)),
+                            .color(Color::Muted),
                     )
                     .tooltip(control_center_tooltip("Connect")),
             )
@@ -364,7 +364,7 @@ fn render_network_item(
                         }
                     })
                     .child(
-                        Icon::new(icons::CLOSE)
+                        Icon::new(IconName::Close)
                             .size(IconSize::XSmall)
                             .color(Color::Custom(status_success)),
                     ),
@@ -417,9 +417,9 @@ fn render_password_input(
                 .items_center()
                 .gap(Spacing::Medium.pixels())
                 .child(
-                    Icon::new(icons::WIFI_LOCK)
+                    Icon::new(IconName::Lock)
                         .size(IconSize::XSmall)
-                        .color(Color::Custom(accent_primary)),
+                        .color(Color::Accent),
                 )
                 .child(
                     div()
@@ -437,9 +437,9 @@ fn render_password_input(
                             on_cancel(cx);
                         })
                         .child(
-                            Icon::new(icons::CLOSE)
+                            Icon::new(IconName::Close)
                                 .size(IconSize::XSmall)
-                                .color(Color::Custom(text_muted)),
+                                .color(Color::Muted),
                         ),
                 ),
         )
@@ -518,7 +518,6 @@ pub fn render_refresh_button(cx: &App) -> impl IntoElement {
     // Pre-compute colors for closures
     let interactive_default = theme.colors.element_background;
     let interactive_hover = theme.colors.element_hover;
-    let text_muted = theme.colors.text_muted;
 
     div()
         .id("wifi-refresh")
@@ -539,8 +538,8 @@ pub fn render_refresh_button(cx: &App) -> impl IntoElement {
             .detach();
         })
         .child(
-            Icon::new(icons::REFRESH)
+            Icon::new(IconName::Refresh)
                 .size(IconSize::XSmall)
-                .color(Color::Custom(text_muted)),
+                .color(Color::Muted),
         )
 }

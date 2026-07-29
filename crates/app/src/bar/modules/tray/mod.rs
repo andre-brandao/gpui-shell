@@ -6,7 +6,7 @@ pub use config::TrayConfig;
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
     AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Size,
-    Window, div, img, prelude::*, px, rems,
+    Window, div, img, prelude::*, px,
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
@@ -112,7 +112,7 @@ impl Tray {
                 let render_img = Arc::new(RenderImage::new(vec![frame]));
                 img(render_img).size(px(icon_size)).into_any_element()
             } else {
-                render_icon_name(get_icon_name("", item.id.as_deref()), icon_size, theme)
+                render_icon_name(get_icon_name("", item.id.as_deref()), icon_size)
             }
         } else {
             let name = match &item.icon {
@@ -120,7 +120,7 @@ impl Tray {
                 None => get_icon_name("", item.id.as_deref()),
                 Some(TrayIcon::Pixmap { .. }) => unreachable!(),
             };
-            render_icon_name(name, icon_size, theme)
+            render_icon_name(name, icon_size)
         };
 
         div()
@@ -486,7 +486,7 @@ fn render_menu_item(
                     IconName::ChevronRight
                 })
                 .size(IconSize::XSmall)
-                .color(Color::Custom(text_muted)),
+                .color(Color::Muted),
             )
         })
 }
@@ -519,12 +519,13 @@ impl Render for TrayMenuPanel {
 
 /// Render a tray item that gave us no pixmap, using the closest icon from
 /// the embedded set.
-fn render_icon_name(name: IconName, icon_size: f32, theme: &ui::Theme) -> AnyElement {
-    // `icon_size` is configured in px; icons size in rems so they track the
-    // window's rem size the way the rest of the bar does.
+fn render_icon_name(name: IconName, icon_size: f32) -> AnyElement {
+    // Sized in device pixels rather than rems: these icons sit inline with
+    // raster pixmaps drawn at `px(icon_size)`, so a rem-scaled fallback
+    // would be the odd one out at any font scale but 1.0.
     Icon::new(name)
-        .size(IconSize::Custom(rems(icon_size / 16.0)))
-        .color(Color::Custom(theme.colors.text))
+        .size(IconSize::Exact(icon_size))
+        .color(Color::Default)
         .into_any_element()
 }
 
@@ -535,7 +536,7 @@ fn render_icon_name(name: IconName, icon_size: f32, theme: &ui::Theme) -> AnyEle
 fn lookup_icon(key: &str) -> Option<IconName> {
     match key {
         "discord" | "vesktop" | "slack" | "telegram" | "telegram-desktop" => Some(IconName::Chat),
-        "spotify" => Some(IconName::Headphones),
+        "spotify" => Some(IconName::Music),
         "firefox" | "chrome" | "google-chrome" | "chromium" | "chromium-browser" => {
             Some(IconName::Globe)
         }
@@ -601,7 +602,7 @@ fn infer_icon_from_hint(hint: &str) -> Option<IconName> {
     } else if hint.contains("telegram") || hint.contains("discord") || hint.contains("vesktop") {
         Some(IconName::Chat)
     } else if hint.contains("spotify") {
-        Some(IconName::Headphones)
+        Some(IconName::Music)
     } else if hint.contains("network") || hint.contains("wifi") || hint.contains("nm-") {
         Some(IconName::Wifi)
     } else if hint.contains("bluetooth") || hint.contains("blue") {

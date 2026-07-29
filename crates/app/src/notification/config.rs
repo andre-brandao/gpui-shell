@@ -1,7 +1,9 @@
 //! Notification module configuration.
 
 use serde::{Deserialize, Serialize};
-use ui::IconName;
+use ui::{IconName, IconSource};
+
+use crate::icons::{self, ConfigIcon};
 
 /// Notification popup screen position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -53,37 +55,37 @@ impl Default for NotificationConfig {
     }
 }
 
-/// Notification icons, named from the embedded icon set (e.g. `bell =
-/// "bell_ring"`). Omit a field - or give a name we don't ship - to get the
-/// built-in icon.
+/// Notification icons. Each is either a name from the embedded set (`bell =
+/// "bell_ring"`) or a path to your own file. Omit a field - or give
+/// something we can't resolve - to get the built-in icon.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationIcons {
     #[serde(with = "icon_field")]
-    pub bell: Option<IconName>,
+    pub bell: Option<ConfigIcon>,
     #[serde(with = "icon_field")]
-    pub bell_off: Option<IconName>,
+    pub bell_off: Option<ConfigIcon>,
     #[serde(with = "icon_field")]
-    pub close: Option<IconName>,
+    pub close: Option<ConfigIcon>,
     #[serde(with = "icon_field")]
-    pub dnd: Option<IconName>,
+    pub dnd: Option<ConfigIcon>,
 }
 
 impl NotificationIcons {
-    pub fn bell(&self) -> IconName {
-        self.bell.unwrap_or(IconName::Bell)
+    pub fn bell(&self) -> IconSource {
+        icons::source_or(self.bell.as_ref(), IconName::Bell)
     }
 
-    pub fn bell_off(&self) -> IconName {
-        self.bell_off.unwrap_or(IconName::BellOff)
+    pub fn bell_off(&self) -> IconSource {
+        icons::source_or(self.bell_off.as_ref(), IconName::BellOff)
     }
 
-    pub fn close(&self) -> IconName {
-        self.close.unwrap_or(IconName::Close)
+    pub fn close(&self) -> IconSource {
+        icons::source_or(self.close.as_ref(), IconName::Close)
     }
 
-    pub fn dnd(&self) -> IconName {
-        self.dnd.unwrap_or(IconName::BellOff)
+    pub fn dnd(&self) -> IconSource {
+        icons::source_or(self.dnd.as_ref(), IconName::BellOff)
     }
 }
 
@@ -93,7 +95,7 @@ mod icon_field {
     pub use crate::icons::deserialize_lenient as deserialize;
 
     pub fn serialize<S: serde::Serializer>(
-        icon: &Option<ui::IconName>,
+        icon: &Option<crate::icons::ConfigIcon>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
         match icon {

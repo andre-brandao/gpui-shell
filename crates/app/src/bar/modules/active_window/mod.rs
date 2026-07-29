@@ -95,7 +95,7 @@ impl ActiveWindow {
             {
                 IconName::Chat
             } else if haystack.contains("spotify") {
-                IconName::Headphones
+                IconName::Music
             } else if haystack.contains("thunderbird") {
                 IconName::Mail
             } else if haystack.contains("code")
@@ -287,7 +287,7 @@ impl BarWidget for ActiveWindow {
                 el.child(
                     Icon::new(icon)
                         .size(style::icon(false))
-                        .color(Color::Custom(theme.colors.text)),
+                        .color(Color::Default),
                 )
             })
             .child(

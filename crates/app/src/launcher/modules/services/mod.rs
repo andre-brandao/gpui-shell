@@ -207,7 +207,7 @@ impl LauncherView for ServicesView {
                 None => div().into_any_element(),
             },
             Level::Detail { service, actions } => match actions.get(index) {
-                Some(action) => render_action_row(action, service, selected, cx),
+                Some(action) => render_action_row(action, service, selected),
                 None => div().into_any_element(),
             },
         }
@@ -375,8 +375,6 @@ impl LauncherView for ServicesView {
 }
 
 fn render_service_row(service: &ServiceInfo, selected: bool, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-
     ListItem::new(format!("service-{}", service.name))
         .spacing(ListItemSpacing::Sparse)
         .toggle_state(selected)
@@ -388,7 +386,7 @@ fn render_service_row(service: &ServiceInfo, selected: bool, cx: &App) -> AnyEle
                 .child(
                     Icon::new(service.icon)
                         .size(IconSize::Medium)
-                        .color(Color::Custom(theme.colors.text)),
+                        .color(Color::Default),
                 )
                 .child(
                     Icon::new(icons::service_status_icon(&service.status))
@@ -421,13 +419,7 @@ fn render_service_row(service: &ServiceInfo, selected: bool, cx: &App) -> AnyEle
         .into_any_element()
 }
 
-fn render_action_row(
-    action: &Action,
-    service: &ServiceInfo,
-    selected: bool,
-    cx: &App,
-) -> AnyElement {
-    let theme = cx.theme();
+fn render_action_row(action: &Action, service: &ServiceInfo, selected: bool) -> AnyElement {
     let current = *action == Action::SetMode(service.mode);
 
     ListItem::new(format!("service-action-{}", action.label()))
@@ -436,7 +428,7 @@ fn render_action_row(
         .start_slot(
             Icon::new(action.icon())
                 .size(IconSize::Medium)
-                .color(Color::Custom(theme.colors.text)),
+                .color(Color::Default),
         )
         .child(
             div()
@@ -478,7 +470,7 @@ fn icon_for(name: &str) -> IconName {
         "Network" => IconName::Globe,
         "Bluetooth" => IconName::Bluetooth,
         "UPower" => IconName::BatteryFull,
-        "MPRIS" => IconName::Headphones,
+        "MPRIS" => IconName::Music,
         "Notifications" => IconName::Bell,
         "Tray" => IconName::Menu,
         "Sysinfo" => IconName::Cpu,

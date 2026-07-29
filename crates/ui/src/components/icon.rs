@@ -10,13 +10,15 @@
 //! purpose.
 //!
 //! An [`Icon`] carries an [`IconSource`]: either a curated [`IconName`]
-//! (Embedded), a raster image file on disk (External), or an SVG string path
+//! (Embedded), an image file on disk (External), or an SVG string path
 //! resolved via the consumer app's AssetSource (ExternalSvg). This mirrors
 //! zed's `ui::IconSource` shape with one intentional divergence - engram's
 //! ExternalSvg routes through `svg().path(...)` (the AssetSource) rather
-//! than zed's `svg().external_path(...)` (a direct fs read), because the
-//! primary engram use case for external SVGs is a consumer app bundling
-//! its own brand icons into a combined AssetSource.
+//! than zed's `svg().external_path(...)`, because the primary engram use
+//! case for external SVGs is a consumer app bundling its own brand icons
+//! into a combined AssetSource. `External` is the escape hatch for a path
+//! the app never bundled - a user's own icon, say - and takes the direct
+//! fs read for `.svg`.
 //!
 //! Need an icon that isn't in the catalogue? Either drop the SVG into the
 //! consuming app's own asset source and use [`Icon::from_path`], or open a
@@ -26,7 +28,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::theme::{ActiveTheme, Color};
-use gpui::{App, IntoElement, RenderOnce, SharedString, Window, img, prelude::*, svg};
+use gpui::{App, IntoElement, Length, RenderOnce, SharedString, Window, img, prelude::*, px, svg};
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, EnumString, IntoStaticStr};
 
@@ -47,8 +49,9 @@ pub use crate::theme::IconSize;
 /// battery and Wi-Fi signal ladders, Bluetooth states, Ethernet, and
 /// sensor icons - which a general-purpose UI catalogue has no reason to
 /// ship.
-/// Config files name icons the same way the assets do (`"battery_low"`),
-/// so serde and strum agree on `snake_case`.
+///
+/// Config files name icons the same way the assets do (`"battery_low"`), so
+/// serde and strum agree on `snake_case`.
 #[derive(
     Debug,
     PartialEq,
@@ -127,6 +130,7 @@ pub enum IconName {
     FolderOpen,
     FolderPlus,
     FolderSearch,
+    Gamepad,
     GitBranch,
     GitCommit,
     GitMerge,
@@ -160,6 +164,8 @@ pub enum IconName {
     MicOff,
     Minimize,
     Moon,
+    Mouse,
+    Music,
     Paperclip,
     Pause,
     Pencil,
@@ -189,6 +195,8 @@ pub enum IconName {
     StarFilled,
     Stop,
     Sun,
+    SunDim,
+    SunMedium,
     Table,
     Terminal,
     ThumbsDown,
@@ -204,6 +212,8 @@ pub enum IconName {
     UserPlus,
     UserRound,
     Volume,
+    VolumeLow,
+    VolumeMedium,
     VolumeOff,
     Warning,
     XCircle,
@@ -259,9 +269,10 @@ pub enum IconSource {
     /// consumer app's registered [`AssetSource`](gpui::AssetSource), which
     /// must include [`crate::assets::Assets`] (directly or wrapped).
     Embedded(IconName),
-    /// A raster image file on disk. Rendered through gpui's `img(path)`
-    /// so callers can use arbitrary PNG/JPG sources - typically a
-    /// user-supplied avatar or file-type thumbnail.
+    /// An image file on disk. A `.svg` is read directly by gpui and stays
+    /// tintable; anything else goes through `img(path)`, so callers can use
+    /// arbitrary PNG/JPG sources - a user-supplied avatar, a file-type
+    /// thumbnail, or a user's own icon named in a config file.
     External(Arc<Path>),
     /// An SVG at the given asset path. Rendered via `svg().path(...)`,
     /// which routes through the consumer's AssetSource. Consumer apps that
@@ -275,6 +286,11 @@ impl From<IconName> for IconSource {
     fn from(name: IconName) -> Self {
         Self::Embedded(name)
     }
+}
+
+fn is_svg(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg"))
 }
 
 /// An icon resolved from an [`IconSource`].
@@ -331,7 +347,12 @@ impl RenderOnce for Icon {
             other => other.hsla(colors),
         };
 
-        let size = self.size.rems();
+        // `Exact` is the one size authored in device pixels; everything
+        // else is rems so icons track the window's font scale.
+        let size: Length = match self.size {
+            IconSize::Exact(p) => px(p).into(),
+            other => other.rems().into(),
+        };
 
         match self.source {
             IconSource::Embedded(name) => svg()
@@ -344,6 +365,14 @@ impl RenderOnce for Icon {
                 .size(size)
                 .flex_none()
                 .path(path)
+                .text_color(hsla)
+                .into_any_element(),
+            // An SVG on disk can't go through `img()` - that decodes raster
+            // formats - so it takes gpui's direct-read path instead.
+            IconSource::External(path) if is_svg(&path) => svg()
+                .size(size)
+                .flex_none()
+                .external_path(path.to_string_lossy().into_owned())
                 .text_color(hsla)
                 .into_any_element(),
             IconSource::External(path) => img(path)

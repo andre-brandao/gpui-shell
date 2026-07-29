@@ -126,13 +126,13 @@ impl Settings {
             let mut icons = Vec::new();
 
             if self.privacy.microphone_access() {
-                icons.push(icons::MICROPHONE);
+                icons.push(IconName::Mic);
             }
             if self.privacy.webcam_access() {
-                icons.push(icons::CAMERA);
+                icons.push(IconName::Camera);
             }
             if self.privacy.screenshare_access() {
-                icons.push(icons::SCREENSHARE);
+                icons.push(IconName::ScreenShare);
             }
 
             return icons;
@@ -140,11 +140,11 @@ impl Settings {
 
         // Horizontal mode: keep privacy signal lightweight and avoid icon crowding.
         if self.privacy.screenshare_access() {
-            vec![icons::SCREENSHARE]
+            vec![IconName::ScreenShare]
         } else if self.privacy.webcam_access() {
-            vec![icons::CAMERA]
+            vec![IconName::Camera]
         } else if self.privacy.microphone_access() {
-            vec![icons::MICROPHONE]
+            vec![IconName::Mic]
         } else {
             Vec::new()
         }
@@ -164,12 +164,12 @@ impl Settings {
             .iter()
             .any(|c| matches!(c, ActiveConnectionInfo::Wired { .. }))
         {
-            return icons::ETHERNET;
+            return IconName::Ethernet;
         }
 
         // WiFi status
         if !self.network.wifi_enabled {
-            return icons::WIFI_OFF;
+            return IconName::WifiOff;
         }
 
         // Check for active WiFi connection
@@ -179,9 +179,9 @@ impl Settings {
             .iter()
             .any(|c| matches!(c, ActiveConnectionInfo::WiFi { .. }))
         {
-            icons::WIFI
+            IconName::Wifi
         } else {
-            icons::WIFI_OFF
+            IconName::WifiOff
         }
     }
 
@@ -190,7 +190,7 @@ impl Settings {
         if self.bluetooth.state == BluetoothState::Active
             && self.bluetooth.devices.iter().any(|d| d.connected)
         {
-            Some(icons::BLUETOOTH_CONNECTED)
+            Some(IconName::BluetoothConnected)
         } else {
             None
         }

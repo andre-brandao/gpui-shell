@@ -107,7 +107,22 @@ Each module can be configured in the `[bar.modules.<module_name>]` section.
 
 | Option | Type     | Default | Description          |
 | ------ | -------- | ------- | -------------------- |
-| `icon` | `string` | `"layers"` | Name of a built-in icon (see `crates/assets/icons/`, without the `.svg`). |
+| `icon` | `string` | `"layers"` | Icon for the button. See [Icons](#icons). |
+
+### Icons
+
+Anywhere the config takes an icon, the value is either:
+
+- **a built-in name** — the file stems under `crates/assets/icons/`, without
+  the `.svg`: `icon = "layers"`, `icon = "battery_low"`.
+- **a path to your own file** — anything containing `/`, or starting with
+  `~`: `icon = "~/.config/gpuishell/icons/mine.svg"`. An `.svg` is tinted by
+  the theme like a built-in; PNG and JPG render as-is. A relative path needs
+  a `./` prefix, so a bare name is never mistaken for one.
+
+A value that resolves to neither is ignored with a warning in the log, and
+the built-in icon is used — a stale icon never invalidates the rest of your
+config.
 
 ### Settings Module
 

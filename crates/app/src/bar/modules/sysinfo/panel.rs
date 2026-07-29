@@ -117,11 +117,7 @@ impl SysInfoPanel {
                             .flex()
                             .items_center()
                             .gap(Spacing::Medium.pixels())
-                            .child(
-                                Icon::new(icon)
-                                    .size(IconSize::Medium)
-                                    .color(Color::Custom(theme.colors.text)),
-                            )
+                            .child(Icon::new(icon).size(IconSize::Medium).color(Color::Default))
                             .child(
                                 div()
                                     .text_size(TextSize::Default.rems())
@@ -226,7 +222,7 @@ impl Render for SysInfoPanel {
                     .child(
                         Icon::new(icons::SYSTEM)
                             .size(IconSize::Large)
-                            .color(Color::Custom(theme.colors.text)),
+                            .color(Color::Default),
                     )
                     .child(
                         div()
@@ -290,7 +286,7 @@ impl Render for SysInfoPanel {
                             .child(
                                 Icon::new(icons::NETWORK)
                                     .size(IconSize::Medium)
-                                    .color(Color::Custom(theme.colors.text)),
+                                    .color(Color::Default),
                             )
                             .child(
                                 div()
@@ -341,7 +337,7 @@ impl Render for SysInfoPanel {
                                 .child(
                                     Icon::new(icons::DISK)
                                         .size(IconSize::Medium)
-                                        .color(Color::Custom(text_primary)),
+                                        .color(Color::Default),
                                 )
                                 .child(
                                     div()

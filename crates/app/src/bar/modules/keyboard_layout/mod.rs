@@ -171,7 +171,7 @@ impl KeyboardLayout {
                 None => el.child(
                     Icon::new(KEYBOARD_ICON)
                         .size(style::icon(is_vertical))
-                        .color(Color::Custom(theme.colors.text)),
+                        .color(Color::Default),
                 ),
             })
             .child(if is_vertical {

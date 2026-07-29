@@ -54,9 +54,9 @@ pub fn render_bluetooth_section(cx: &App) -> impl IntoElement {
                         .items_center()
                         .gap(Spacing::Medium.pixels())
                         .child(
-                            Icon::new(icons::BLUETOOTH)
+                            Icon::new(IconName::Bluetooth)
                                 .size(IconSize::XSmall)
-                                .color(Color::Custom(theme.colors.text)),
+                                .color(Color::Default),
                         )
                         .child(
                             div()
@@ -233,7 +233,7 @@ fn render_device_item(
                 div()
                     .id(format!("bt-paired-{}", index))
                     .child(
-                        Icon::new(icons::CHECK)
+                        Icon::new(IconName::Check)
                             .size(IconSize::XSmall)
                             .color(Color::Custom(status_success)),
                     )
@@ -323,7 +323,7 @@ fn render_device_actions(
             let on_connect = on_connect.clone();
             el.child(action_button(
                 format!("bt-connect-{}", index),
-                icons::CHEVRON_RIGHT,
+                IconName::ChevronRight,
                 text_muted,
                 "Connect",
                 Box::new(move |cx| {
@@ -336,7 +336,7 @@ fn render_device_actions(
             let on_disconnect = on_disconnect.clone();
             el.child(action_button(
                 format!("bt-disconnect-{}", index),
-                icons::CLOSE,
+                IconName::Close,
                 status_success,
                 "Disconnect",
                 Box::new(move |cx| {
@@ -349,7 +349,7 @@ fn render_device_actions(
             let on_remove = on_remove.clone();
             el.child(action_button(
                 format!("bt-remove-{}", index),
-                icons::TRASH,
+                IconName::Trash,
                 text_muted,
                 "Remove device",
                 Box::new(move |cx| {
@@ -392,9 +392,6 @@ fn render_battery_indicator(index: usize, level: u8, cx: &App) -> impl IntoEleme
 }
 
 /// Get appropriate icon for device type
-///
-/// Mice and gamepads have no counterpart in the icon set, so they fall
-/// through to the generic Bluetooth icon - the tooltip still names them.
 fn get_device_icon(device: &BluetoothDevice) -> IconName {
     // Check device class/type from icon or name hints
     let name_lower = device.name.to_lowercase();
@@ -404,6 +401,8 @@ fn get_device_icon(device: &BluetoothDevice) -> IconName {
         || name_lower.contains("buds")
     {
         IconName::Headphones
+    } else if name_lower.contains("mouse") {
+        IconName::Mouse
     } else if name_lower.contains("keyboard") {
         IconName::Keyboard
     } else if name_lower.contains("speaker") || name_lower.contains("soundbar") {
@@ -415,10 +414,12 @@ fn get_device_icon(device: &BluetoothDevice) -> IconName {
         IconName::Phone
     } else if name_lower.contains("watch") {
         IconName::Clock
+    } else if name_lower.contains("controller") || name_lower.contains("gamepad") {
+        IconName::Gamepad
     } else if device.connected {
-        icons::BLUETOOTH_CONNECTED
+        IconName::BluetoothConnected
     } else {
-        icons::BLUETOOTH
+        IconName::Bluetooth
     }
 }
 
@@ -498,7 +499,7 @@ fn render_scan_button(discovering: bool, cx: &App) -> impl IntoElement {
             .detach();
         })
         .child(
-            Icon::new(icons::REFRESH)
+            Icon::new(IconName::Refresh)
                 .size(IconSize::XSmall)
                 .color(Color::Custom(icon_color)),
         )
