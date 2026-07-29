@@ -1,9 +1,14 @@
-//! Shared sizing and spacing helpers for bar widgets.
+//! Content helpers for bar widgets: sizes, gaps, and the colour decisions
+//! the bar config drives.
+//!
+//! The chip a widget sits in, and the bar surface under it, are
+//! [`ui::patterns::BarChip`] and [`ui::patterns::BarSurface`] - this module
+//! only decides what to hand them.
 //!
 //! Font sizes come from `TextSize` (XSmall/Small for vertical, Small/Medium for horizontal).
 
 use gpui::{AnyElement, Hsla, IntoElement, div, prelude::*, px};
-use ui::{IconSize, Radius, Spacing, TextSize, Theme};
+use ui::{IconSize, Spacing, TextSize, Theme};
 
 use crate::bar::config::BarConfig;
 
@@ -11,12 +16,6 @@ use crate::bar::config::BarConfig;
 pub const CHIP_GAP: f32 = Spacing::XSmall.value();
 /// Tighter gap used inside grouped widgets like workspaces and tray.
 pub const GROUP_GAP: f32 = Spacing::XSmall.value();
-/// Common vertical padding used inside compact bar widgets.
-pub const CHIP_PADDING_Y: f32 = 3.0;
-/// Shared outer breathing room around each widget shell.
-pub const CHIP_OUTER_MARGIN: f32 = 2.0;
-/// Section gap between widgets once per-widget outer breathing room is applied.
-pub const BAR_SECTION_GAP: f32 = 0.0;
 /// Standard tray icon button size.
 pub const TRAY_ITEM_SIZE: f32 = 24.0;
 /// Workspace pill height.
@@ -35,55 +34,8 @@ pub const SECTION_DIVIDER_HEIGHT: f32 = 14.0;
 pub const VERTICAL_TEXT_LINE_WIDTH: f32 = 20.0;
 
 #[inline(always)]
-fn shell_radius(is_vertical: bool) -> f32 {
-    if is_vertical {
-        Radius::Small.value()
-    } else {
-        Radius::Large.value()
-    }
-}
-
-#[inline(always)]
-fn shell_padding_y(is_vertical: bool) -> f32 {
-    if is_vertical {
-        CHIP_PADDING_Y
-    } else {
-        CHIP_PADDING_Y + 1.0
-    }
-}
-
-#[inline(always)]
-fn shell_height(is_vertical: bool) -> Option<f32> {
-    if is_vertical { None } else { Some(24.0) }
-}
-
-/// Horizontal padding for compact bar widgets.
-#[inline(always)]
-pub fn chip_padding_x(is_vertical: bool) -> f32 {
-    if is_vertical {
-        Spacing::XSmall.value()
-    } else {
-        Spacing::Medium.value()
-    }
-}
-
-#[inline(always)]
 pub fn group_gap(is_vertical: bool) -> f32 {
     if is_vertical { GROUP_GAP } else { 3.0 }
-}
-
-#[inline(always)]
-fn group_padding_x(is_vertical: bool) -> f32 {
-    if is_vertical {
-        2.0
-    } else {
-        Spacing::Medium.value() - 1.0
-    }
-}
-
-#[inline(always)]
-fn widget_outer_margin_x(is_vertical: bool) -> f32 {
-    if is_vertical { CHIP_OUTER_MARGIN } else { 2.0 }
 }
 
 /// Icon size tuned for bar density.
@@ -129,15 +81,6 @@ pub fn widget_background(theme: &Theme, bar: &BarConfig) -> Hsla {
 }
 
 #[inline(always)]
-pub fn group_background(theme: &Theme, bar: &BarConfig) -> Hsla {
-    if bar.widget_background {
-        theme.colors.surface_background
-    } else {
-        theme.colors.border_transparent
-    }
-}
-
-#[inline(always)]
 pub fn widget_border(theme: &Theme, bar: &BarConfig, is_vertical: bool) -> Hsla {
     if bar.widget_border {
         if is_vertical {
@@ -150,96 +93,14 @@ pub fn widget_border(theme: &Theme, bar: &BarConfig, is_vertical: bool) -> Hsla 
     }
 }
 
-/// Apply the compact shared shell used by single bar widgets.
-pub fn bar_widget_shell(
-    theme: &Theme,
-    bar: &BarConfig,
-    is_vertical: bool,
-    is_interactive: bool,
-    content: impl IntoElement,
-) -> AnyElement {
-    let hover_bg = if bar.widget_background {
+/// Resting fill of an interactive widget under the pointer.
+#[inline(always)]
+pub fn widget_hover_background(theme: &Theme, bar: &BarConfig) -> Hsla {
+    if bar.widget_background {
         theme.colors.elevated_surface_background
     } else {
         theme.colors.element_hover
-    };
-
-    div()
-        .when(is_vertical, |el| {
-            el.w_full().flex().flex_col().items_center()
-        })
-        .when(!is_vertical, |el| el.flex().items_center())
-        .justify_center()
-        .px(px(chip_padding_x(is_vertical)))
-        .py(px(shell_padding_y(is_vertical)))
-        .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
-        .rounded(px(shell_radius(is_vertical)))
-        .bg(widget_background(theme, bar))
-        .when(bar.widget_border, |el| {
-            el.border_1()
-                .border_color(widget_border(theme, bar, is_vertical))
-        })
-        .when(is_interactive, |el| {
-            el.cursor_pointer().hover(move |style| style.bg(hover_bg))
-        })
-        .child(content)
-        .into_any_element()
-}
-
-/// Apply the shared outer spacing used by all visible bar widgets.
-pub fn bar_widget_slot(is_vertical: bool, content: impl IntoElement) -> AnyElement {
-    if is_vertical {
-        div()
-            .w_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .py(px(CHIP_OUTER_MARGIN))
-            .child(content)
-            .into_any_element()
-    } else {
-        div()
-            .mx(px(widget_outer_margin_x(is_vertical)))
-            .my(px(CHIP_OUTER_MARGIN))
-            .child(content)
-            .into_any_element()
     }
-}
-
-/// Apply the grouped shell used by composite bar widgets.
-pub fn bar_group_shell(
-    theme: &Theme,
-    bar: &BarConfig,
-    is_vertical: bool,
-    is_interactive: bool,
-    content: impl IntoElement,
-) -> AnyElement {
-    let hover_bg = if bar.widget_background {
-        theme.colors.elevated_surface_background
-    } else {
-        theme.colors.element_hover
-    };
-
-    div()
-        .when(is_vertical, |el| {
-            el.w_full().flex().flex_col().items_center()
-        })
-        .when(!is_vertical, |el| el.flex().items_center())
-        .justify_center()
-        .px(px(group_padding_x(is_vertical)))
-        .py(px(shell_padding_y(is_vertical)))
-        .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
-        .rounded(px(shell_radius(is_vertical)))
-        .bg(group_background(theme, bar))
-        .when(bar.widget_border, |el| {
-            el.border_1()
-                .border_color(widget_border(theme, bar, is_vertical))
-        })
-        .when(is_interactive, |el| {
-            el.cursor_pointer().hover(move |style| style.bg(hover_bg))
-        })
-        .child(content)
-        .into_any_element()
 }
 
 /// Render a compact icon/value pair for status widgets.

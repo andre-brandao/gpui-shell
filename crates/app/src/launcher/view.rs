@@ -12,8 +12,8 @@
 //!   return a single element for their entire body. When this returns `Some`,
 //!   the launcher skips the item loop.
 
-use gpui::{AnyElement, App, div, prelude::*, px};
-use ui::{ActiveTheme, Radius, Spacing, TextSize};
+use gpui::{AnyElement, App};
+use ui::patterns::footer_hints;
 
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]
@@ -143,47 +143,12 @@ pub trait LauncherView: Send + Sync {
     }
 
     /// Render content for the footer action bar.
-    fn render_footer_bar(&self, vx: &ViewContext, cx: &App) -> AnyElement {
-        render_footer_hints(default_footer_actions(vx), cx)
+    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
+        footer_hints(vec![("Open", "Enter"), ("Close", "Esc")], cx)
     }
 }
 
 /// Returns true if the query starts with a view prefix.
 pub fn is_prefix(query: &str, prefix: &str) -> bool {
     query.starts_with(prefix)
-}
-
-/// Render the default footer action hints.
-pub fn render_footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let text_muted = theme.colors.text_muted;
-    let interactive_default = theme.colors.element_background;
-
-    div()
-        .flex()
-        .items_center()
-        .gap(Spacing::XLarge.pixels())
-        .text_size(TextSize::Small.rems())
-        .text_color(text_muted)
-        .children(actions.into_iter().map(|(action, key)| {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(Spacing::Medium.value() - 2.0))
-                .child(action)
-                .child(
-                    div()
-                        .px(px(Spacing::Medium.value() - 2.0))
-                        .py(px(2.))
-                        .rounded(px(Radius::Small.value() - 1.0))
-                        .bg(interactive_default)
-                        .text_size(TextSize::XSmall.rems())
-                        .child(key),
-                )
-        }))
-        .into_any_element()
-}
-
-fn default_footer_actions(_vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-    vec![("Open", "Enter"), ("Close", "Esc")]
 }

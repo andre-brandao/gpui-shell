@@ -7,11 +7,15 @@
 //! the same widgets.
 
 pub mod components;
+pub mod patterns;
 pub mod styles;
 mod theme;
 pub mod traits;
 
 pub use components::*;
+// `patterns` is intentionally not re-exported: composite, shell-specific
+// surfaces stay behind `ui::patterns::` so they never blend into the
+// primitive set. See the module docs.
 pub use styles::ElevationIndex;
 pub use theme::{
     ActiveTheme, Appearance, Base16Palette, Color, IconSize, Radius, Spacing, StatusColors,

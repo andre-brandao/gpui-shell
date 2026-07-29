@@ -3,14 +3,14 @@
 //! This module provides a configurable shell bar for any screen edge.
 
 use gpui::{
-    AnyElement, App, Bounds, Context, DisplayId, FontWeight, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
-    point, prelude::*, px,
+    AnyElement, App, Bounds, Context, DisplayId, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, prelude::*, px,
 };
-use ui::{ActiveTheme, Spacing, TextSize};
+use ui::ActiveTheme;
+use ui::patterns::BarSurface;
 
 use super::config::BarPosition;
-use super::modules::{Widget, style};
+use super::modules::Widget;
 use crate::config::{ActiveConfig, Config};
 
 /// The main bar view.
@@ -19,13 +19,6 @@ struct Bar {
     start_widgets: Vec<Widget>,
     center_widgets: Vec<Widget>,
     end_widgets: Vec<Widget>,
-}
-
-#[derive(Clone, Copy)]
-enum SectionAlign {
-    Start,
-    Center,
-    End,
 }
 
 impl Bar {
@@ -40,128 +33,23 @@ impl Bar {
             end_widgets: Widget::create_many(&config.end, cx),
         }
     }
-
-    fn render_section(
-        is_vertical: bool,
-        align: SectionAlign,
-        children: Vec<AnyElement>,
-    ) -> impl IntoElement {
-        let section = div();
-
-        if is_vertical {
-            section
-                .flex()
-                .w_full()
-                .flex_col()
-                .items_center()
-                .gap(px(style::BAR_SECTION_GAP))
-                .when(matches!(align, SectionAlign::Center), |this| {
-                    this.flex_1().justify_center()
-                })
-                .when(matches!(align, SectionAlign::Start), |this| {
-                    this.justify_start()
-                })
-                .when(matches!(align, SectionAlign::End), |this| {
-                    this.justify_end()
-                })
-                .children(children)
-        } else {
-            section
-                .flex()
-                .h_full()
-                .items_center()
-                .gap(px(style::BAR_SECTION_GAP))
-                .when(matches!(align, SectionAlign::Start), |this| {
-                    this.flex_1().justify_start()
-                })
-                .when(matches!(align, SectionAlign::Center), |this| {
-                    this.flex_1().justify_center().overflow_hidden()
-                })
-                .when(matches!(align, SectionAlign::End), |this| {
-                    this.flex_1().justify_end()
-                })
-                .children(children)
-        }
-    }
 }
 
 impl Render for Bar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
-        let theme = cx.theme();
         let bar = &cx.config().bar;
-        let is_vertical = self.position.is_vertical();
 
-        let start_elements: Vec<AnyElement> =
-            self.start_widgets.iter().map(|w| w.render()).collect();
-        let center_elements: Vec<AnyElement> =
-            self.center_widgets.iter().map(|w| w.render()).collect();
-        let end_elements: Vec<AnyElement> = self.end_widgets.iter().map(|w| w.render()).collect();
+        let start: Vec<AnyElement> = self.start_widgets.iter().map(|w| w.render()).collect();
+        let center: Vec<AnyElement> = self.center_widgets.iter().map(|w| w.render()).collect();
+        let end: Vec<AnyElement> = self.end_widgets.iter().map(|w| w.render()).collect();
 
-        let root = div()
-            .size_full()
-            .flex()
-            .text_size(TextSize::Small.rems())
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(theme.colors.text)
-            .bg(theme.colors.background)
-            .border_color(theme.colors.border);
-
-        if is_vertical {
-            root.flex_col()
-                .items_center()
-                .px(px(1.0))
-                .py(Spacing::Medium.pixels())
-                .when(
-                    bar.show_border && matches!(self.position, BarPosition::Left),
-                    |this| this.border_r_1(),
-                )
-                .when(
-                    bar.show_border && matches!(self.position, BarPosition::Right),
-                    |this| this.border_l_1(),
-                )
-                .child(Self::render_section(
-                    is_vertical,
-                    SectionAlign::Start,
-                    start_elements,
-                ))
-                .child(Self::render_section(
-                    is_vertical,
-                    SectionAlign::Center,
-                    center_elements,
-                ))
-                .child(Self::render_section(
-                    is_vertical,
-                    SectionAlign::End,
-                    end_elements,
-                ))
-        } else {
-            root.items_center()
-                .px(px(bar.padding))
-                .when(
-                    bar.show_border && matches!(self.position, BarPosition::Top),
-                    |this| this.border_b_1(),
-                )
-                .when(
-                    bar.show_border && matches!(self.position, BarPosition::Bottom),
-                    |this| this.border_t_1(),
-                )
-                .child(Self::render_section(
-                    is_vertical,
-                    SectionAlign::Start,
-                    start_elements,
-                ))
-                .child(Self::render_section(
-                    is_vertical,
-                    SectionAlign::Center,
-                    center_elements,
-                ))
-                .child(Self::render_section(
-                    is_vertical,
-                    SectionAlign::End,
-                    end_elements,
-                ))
-        }
+        BarSurface::new(self.position.edge())
+            .border(bar.show_border)
+            .padding(px(bar.padding))
+            .start(start)
+            .center(center)
+            .end(end)
     }
 }
 

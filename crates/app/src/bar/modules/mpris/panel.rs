@@ -2,6 +2,7 @@
 
 use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
+use ui::patterns::PanelSurface;
 use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
@@ -420,10 +421,7 @@ impl Render for MprisPanel {
             .w_full()
             .h_full()
             .p(Spacing::XLarge.pixels())
-            .bg(theme.colors.background)
-            .border_1()
-            .border_color(theme.colors.border)
-            .rounded(Radius::Large.pixels())
+            .panel_surface(cx)
             .overflow_hidden()
             .child(
                 div()

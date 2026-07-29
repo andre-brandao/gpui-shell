@@ -16,7 +16,9 @@ use ui::{
 };
 
 use self::config::WallpaperConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use ui::patterns::footer_hints;
+
+use crate::launcher::view::{LauncherView, ViewContext};
 use crate::state::AppState;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
@@ -418,6 +420,6 @@ impl LauncherView for WallpaperView {
     }
 
     fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        render_footer_hints(vec![("Apply", "Enter"), ("Close", "Esc")], cx)
+        footer_hints(vec![("Apply", "Enter"), ("Close", "Esc")], cx)
     }
 }

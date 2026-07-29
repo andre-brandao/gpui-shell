@@ -17,10 +17,8 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use modules::{HelpView, all_views};
-use ui::{
-    ActiveTheme, IconSize, InputBuffer, Radius, Spacing, TextSize, VariableList,
-    VariableListScrollHandle, render_input_line,
-};
+use ui::patterns::LauncherFrame;
+use ui::{ActiveTheme, InputBuffer, VariableList, VariableListScrollHandle, render_input_line};
 use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
 
 use crate::config::Config;
@@ -390,8 +388,6 @@ impl Render for Launcher {
             self.focus_handle.focus(window, cx);
         }
 
-        let theme = cx.theme();
-
         let view_name = self.current_view_name().to_string();
         let prefix_hints = self.footer_prefix_hints();
         let placeholder = self.placeholder();
@@ -420,15 +416,6 @@ impl Render for Launcher {
         let header = current_view.render_header(&vx, cx);
         let footer = current_view.render_footer(&vx, cx);
         let content = current_view.render_content(&vx, cx);
-
-        // Pre-compute colors for closures
-        let text_primary = theme.colors.text;
-        let text_muted = theme.colors.text_muted;
-        let text_secondary = theme.colors.text;
-        let text_disabled = theme.colors.text_disabled;
-        let bg_primary = theme.colors.background;
-        let border_default = theme.colors.border;
-        let interactive_default = theme.colors.element_background;
 
         div()
             .id("launcher")
@@ -542,128 +529,57 @@ impl Render for Launcher {
                 }),
             )
             .size_full()
-            .bg(bg_primary)
-            .border_1()
-            .border_color(border_default)
-            .rounded(Radius::Large.pixels())
-            .text_color(text_primary)
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            // Search input area
             .child(
-                div()
-                    .w_full()
-                    .px(Spacing::XLarge.pixels())
-                    .py(Spacing::Large.pixels())
-                    .flex()
-                    .items_center()
-                    .gap(Spacing::Large.pixels())
-                    // Search icon
-                    .child(
+                // Chrome lives in `ui::patterns`; the body is ours. List
+                // views go through `VariableList`, which only builds the
+                // rows gpui actually needs - layout cost in gpui is per
+                // element and independent of visibility, so building all N
+                // rows to show ~8 is the whole cost. Header and footer sit
+                // outside the list because it owns its own scroll.
+                LauncherFrame::new(render_input_line(&self.input, &placeholder, cx))
+                    .badge(view_name)
+                    .hints(prefix_hints)
+                    .actions(footer_bar)
+                    .children(header)
+                    .child(if let Some(content) = content {
                         div()
-                            .text_size(IconSize::Medium.pixels())
-                            .text_color(text_muted)
-                            .child(""),
-                    )
-                    // Search text
-                    .child(
+                            .id("view-scroll")
+                            .flex_1()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.scroll_handle)
+                            .child(content)
+                            .into_any_element()
+                    } else {
+                        // `gpui::list` sizes itself from its own style, not
+                        // from its rows, so it needs a parent with a
+                        // definite height to measure against - `flex_1` on
+                        // the list itself resolves to zero and it renders
+                        // no rows at all.
                         div()
                             .flex_1()
-                            .text_size(TextSize::Medium.rems())
-                            .text_color(text_primary)
-                            .child(render_input_line(&self.input, &placeholder, cx)),
-                    )
-                    // View badge (right side)
-                    .child(
-                        div()
-                            .px(Spacing::Medium.pixels())
-                            .py(px(3.))
-                            .rounded(Radius::Small.pixels())
-                            .bg(interactive_default)
-                            .text_size(TextSize::Small.rems())
-                            .text_color(text_secondary)
-                            .child(view_name),
-                    ),
-            )
-            // Divider line
-            .child(div().w_full().h(px(1.)).bg(border_default))
-            // View content. List views go through `VariableList`, which
-            // only builds the rows gpui actually needs - layout cost in
-            // gpui is per element and independent of visibility, so
-            // building all N rows to show ~8 is the whole cost. Header and
-            // footer sit outside the list because it owns its own scroll.
-            .child(
-                div()
-                    .id("view-content")
-                    .flex_1()
-                    .flex()
-                    .flex_col()
-                    .py(Spacing::XSmall.pixels())
-                    .when_some(header, |el, h| el.child(h))
-                    .map(|el| {
-                        if let Some(content) = content {
-                            el.child(
-                                div()
-                                    .id("view-scroll")
-                                    .flex_1()
-                                    .overflow_y_scroll()
-                                    .track_scroll(&self.scroll_handle)
-                                    .child(content),
+                            .overflow_hidden()
+                            .child(
+                                VariableList::new(
+                                    self.list_state.clone(),
+                                    cx.processor(|this, ix: usize, _window, cx| {
+                                        let (slot, query) = this.parse_query();
+                                        let vx = ViewContext {
+                                            query: &query,
+                                            selected_index: this.selected_index,
+                                        };
+                                        this.view(slot).render_item(
+                                            ix,
+                                            ix == this.selected_index,
+                                            &vx,
+                                            cx,
+                                        )
+                                    }),
+                                )
+                                .h_full(),
                             )
-                        } else {
-                            // `gpui::list` sizes itself from its own style,
-                            // not from its rows, so it needs a parent with a
-                            // definite height to measure against - `flex_1`
-                            // on the list itself resolves to zero and it
-                            // renders no rows at all.
-                            el.child(
-                                div().flex_1().overflow_hidden().child(
-                                    VariableList::new(
-                                        self.list_state.clone(),
-                                        cx.processor(|this, ix: usize, _window, cx| {
-                                            let (slot, query) = this.parse_query();
-                                            let vx = ViewContext {
-                                                query: &query,
-                                                selected_index: this.selected_index,
-                                            };
-                                            this.view(slot).render_item(
-                                                ix,
-                                                ix == this.selected_index,
-                                                &vx,
-                                                cx,
-                                            )
-                                        }),
-                                    )
-                                    .h_full(),
-                                ),
-                            )
-                        }
+                            .into_any_element()
                     })
-                    .when_some(footer, |el, f| el.child(f)),
-            )
-            // Bottom footer bar
-            .child(div().w_full().h(px(1.)).bg(border_default))
-            .child(
-                div()
-                    .w_full()
-                    .px(Spacing::XLarge.pixels())
-                    .py(Spacing::Medium.pixels())
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    // Left side - prefix hints
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(Spacing::Medium.pixels())
-                            .text_size(TextSize::XSmall.rems())
-                            .text_color(text_disabled)
-                            .child(div().flex().items_center().gap(px(4.)).child(prefix_hints)),
-                    )
-                    // Right side - action hints from view
-                    .child(footer_bar),
+                    .children(footer),
             )
     }
 }

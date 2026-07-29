@@ -31,6 +31,7 @@ use gpui::{
 };
 use services::{NetworkCommand, UPowerCommand};
 use std::rc::Rc;
+use ui::patterns::PanelSurface;
 use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 use crate::keybinds::{
@@ -244,7 +245,6 @@ impl Render for ControlCenter {
             let upower = AppState::upower(cx).get();
             let brightness_state = AppState::brightness(cx).get();
             let show_brightness = brightness_state.max != 0;
-            let bg_secondary = theme.colors.surface_background;
             let border_subtle = theme.colors.border_variant;
             let interactive_default = theme.colors.element_background;
             let interactive_hover = theme.colors.element_hover;
@@ -329,10 +329,7 @@ impl Render for ControlCenter {
                 .key_context("ControlCenter")
                 .w_full()
                 .p(Spacing::Large.pixels())
-                .bg(theme.colors.background)
-                .border_1()
-                .border_color(theme.colors.border)
-                .rounded(Radius::Large.pixels())
+                .panel_surface(cx)
                 .text_color(theme.colors.text)
                 .flex()
                 .flex_col()
@@ -563,10 +560,7 @@ impl Render for ControlCenter {
                                 .gap(Spacing::Medium.pixels())
                                 .px(Spacing::Medium.pixels())
                                 .py(Spacing::XSmall.pixels())
-                                .bg(bg_secondary)
-                                .border_1()
-                                .border_color(border_subtle)
-                                .rounded(Radius::Medium.pixels())
+                                .panel_card(cx)
                                 .child(
                                     div()
                                         .flex_1()
@@ -656,10 +650,7 @@ impl Render for ControlCenter {
                     div()
                         .id("control-center-volume")
                         .p(Spacing::Medium.pixels())
-                        .bg(bg_secondary)
-                        .border_1()
-                        .border_color(border_subtle)
-                        .rounded(Radius::Medium.pixels())
+                        .panel_card(cx)
                         .child(sliders::render_volume_slider(cx)),
                 )
                 .when(show_brightness, |el| {
@@ -667,10 +658,7 @@ impl Render for ControlCenter {
                         div()
                             .id("control-center-brightness")
                             .p(Spacing::Medium.pixels())
-                            .bg(bg_secondary)
-                            .border_1()
-                            .border_color(border_subtle)
-                            .rounded(Radius::Medium.pixels())
+                            .panel_card(cx)
                             .child(sliders::render_brightness_slider(cx)),
                     )
                 })
@@ -685,10 +673,7 @@ impl Render for ControlCenter {
                             .id("control-center-dropdown")
                             .w_full()
                             .p(Spacing::Medium.pixels())
-                            .bg(bg_secondary)
-                            .border_1()
-                            .border_color(border_subtle)
-                            .rounded(Radius::Medium.pixels())
+                            .panel_card(cx)
                             .flex()
                             .flex_col()
                             .gap(Spacing::Medium.pixels())

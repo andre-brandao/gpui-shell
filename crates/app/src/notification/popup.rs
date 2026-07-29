@@ -9,7 +9,8 @@ use gpui::{
     layer_shell::*, prelude::*, px,
 };
 use services::{Notification, NotificationCommand, NotificationSubscriber};
-use ui::{ActiveTheme, Radius, Spacing, TextSize};
+use ui::patterns::PanelSurface;
+use ui::{ActiveTheme, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::AppState;
@@ -63,10 +64,7 @@ impl Render for NotificationPopupStack {
 
                         div()
                             .overflow_hidden()
-                            .bg(theme.colors.background)
-                            .border_1()
-                            .border_color(theme.colors.border)
-                            .rounded(Radius::Large.pixels())
+                            .panel_surface(cx)
                             .p(Spacing::Medium.pixels())
                             .hover(move |el| {
                                 el.bg(theme.colors.element_hover)

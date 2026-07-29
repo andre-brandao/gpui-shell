@@ -6,7 +6,9 @@ use gpui::{AnyElement, App, div, prelude::*, px, rgba};
 use ui::{ActiveTheme, Color, Label, LabelCommon, Radius, Spacing, TextSize};
 
 use self::config::{WebConfig, WebProviderConfig};
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use ui::patterns::footer_hints;
+
+use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Web search view - search the web with various providers.
 pub struct WebSearchView {
@@ -288,7 +290,7 @@ impl LauncherView for WebSearchView {
         } else {
             vec![("Search", "Enter"), ("Close", "Esc")]
         };
-        render_footer_hints(actions, cx)
+        footer_hints(actions, cx)
     }
 }
 

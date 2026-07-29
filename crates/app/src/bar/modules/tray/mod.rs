@@ -11,6 +11,7 @@ use gpui::{
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use std::sync::Arc;
+use ui::patterns::PanelSurface;
 use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use super::{BarWidget, BarWidgetShell, style};
@@ -515,10 +516,7 @@ impl Render for TrayMenuPanel {
         div()
             .id("systray-menu-panel")
             .size_full()
-            .bg(theme.colors.background)
-            .border_1()
-            .border_color(theme.colors.border)
-            .rounded(Radius::Large.pixels())
+            .panel_surface(cx)
             .text_color(theme.colors.text)
             .overflow_hidden()
             .child(

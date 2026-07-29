@@ -10,7 +10,9 @@ use ui::{
 };
 
 use self::config::WorkspacesConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use ui::patterns::footer_hints;
+
+use crate::launcher::view::{LauncherView, ViewContext};
 use crate::state::AppState;
 
 /// Workspaces view - displays and switches between workspaces.
@@ -141,6 +143,6 @@ impl LauncherView for WorkspacesView {
     }
 
     fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        render_footer_hints(vec![("Switch", "Enter"), ("Close", "Esc")], cx)
+        footer_hints(vec![("Switch", "Enter"), ("Close", "Esc")], cx)
     }
 }

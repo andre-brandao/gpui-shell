@@ -6,6 +6,7 @@ use super::icons;
 use crate::state::watch;
 use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
+use ui::patterns::PanelSurface;
 use ui::{ActiveTheme, IconSize, Radius, Spacing, TextSize};
 
 /// SysInfo panel content showing detailed system information.
@@ -211,10 +212,7 @@ impl Render for SysInfoPanel {
             .w_full()
             .h_full()
             .p(Spacing::XLarge.pixels())
-            .bg(theme.colors.background)
-            .border_1()
-            .border_color(theme.colors.border)
-            .rounded(Radius::Large.pixels())
+            .panel_surface(cx)
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
             .flex()

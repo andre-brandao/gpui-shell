@@ -1,6 +1,7 @@
 use gpui::prelude::*;
 use gpui::{Context, MouseButton, Render, ScrollHandle, Window, div, px};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
+use ui::patterns::PanelSurface;
 use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
@@ -89,10 +90,7 @@ impl Render for NotificationCenter {
         div()
             .id("notification-center")
             .size_full()
-            .bg(theme.colors.background)
-            .border_1()
-            .border_color(theme.colors.border)
-            .rounded(Radius::Large.pixels())
+            .panel_surface(cx)
             .p(Spacing::Medium.pixels())
             .flex()
             .flex_col()

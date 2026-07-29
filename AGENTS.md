@@ -26,6 +26,9 @@ crates/
 ├── app/         Main binary, UI components (bar, launcher, panels)
 ├── services/    System integration (D-Bus, compositor, audio, network, etc.)
 ├── ui/          Shared components and theme system
+│   ├── components/  Primitives (Button, List, ...) - re-exported by `use ui::*`
+│   └── patterns/    Composite shell surfaces (LauncherFrame) - always
+│                    spelled `ui::patterns::X`, never in the root glob
 └── assets/      Embedded SVG icons
 ```
 
@@ -58,6 +61,10 @@ Services are global singletons accessed via `AppState` (`crates/app/src/state.rs
   system controls
 - **Panel System** (`crates/app/src/panel.rs`) — Only one panel open at a time
 - **OSD** (`crates/app/src/osd/`) — Volume/brightness on-screen indicators
+
+Their chrome lives in `ui::patterns` (`LauncherFrame`, `BarSurface`/`BarChip`,
+`OsdIndicator`, `PanelSurface`); state, keybindings and config stay in `app`.
+Every pattern has a story under "Shell Patterns" in `cargo run -p story`.
 
 ### Compositor Support
 

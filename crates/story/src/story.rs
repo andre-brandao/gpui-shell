@@ -61,6 +61,11 @@ pub enum StoryCategory {
     Feedback,
     Navigation,
     Layout,
+    /// Composite shell surfaces from `ui::patterns` - bespoke, not
+    /// primitives. Last in the sidebar, and kept in its own group, so the
+    /// component set above it stays readable as a component set.
+    #[strum(serialize = "Shell Patterns")]
+    Patterns,
 }
 
 pub struct StoryEntry {
@@ -312,6 +317,27 @@ pub static STORIES: &[StoryEntry] = &[
         name: "Squircle",
         category: StoryCategory::Layout,
         build: stories::squircle::build,
+    },
+    // Shell Patterns
+    StoryEntry {
+        name: "Launcher",
+        category: StoryCategory::Patterns,
+        build: stories::launcher::build,
+    },
+    StoryEntry {
+        name: "Bar",
+        category: StoryCategory::Patterns,
+        build: stories::bar::build,
+    },
+    StoryEntry {
+        name: "Panel",
+        category: StoryCategory::Patterns,
+        build: stories::panel::build,
+    },
+    StoryEntry {
+        name: "OSD",
+        category: StoryCategory::Patterns,
+        build: stories::osd::build,
     },
 ];
 
