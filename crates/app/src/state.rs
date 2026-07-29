@@ -1,14 +1,15 @@
 //! Application-wide runtime state stored as a GPUI global.
 
 use std::collections::HashMap;
-use std::future::Future;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use anyhow::Context as _;
 use futures_signals::signal::{Signal, SignalExt};
 use futures_util::StreamExt;
 use gpui::{AnyWindowHandle, App, Context, DisplayId, Global, Window};
+use services::{ManagedService, ServiceMode};
+
+use crate::config::Config;
 
 /// Maps each bar window to the display it was explicitly opened on.
 ///
@@ -114,112 +115,50 @@ pub(crate) struct Services {
     pub wallpaper: services::WallpaperSubscriber,
 }
 
-const SERVICE_INIT_TIMEOUT: Duration = Duration::from_secs(5);
-
-fn init_sync_service<T>(name: &'static str, init: impl FnOnce() -> T) -> T {
-    let started = Instant::now();
-    tracing::info!("Initializing {name} service");
-    let service = init();
-    tracing::info!("Initialized {name} service in {:?}", started.elapsed());
-    service
-}
-
-async fn init_async_service<T, F>(name: &'static str, future: F) -> anyhow::Result<T>
-where
-    F: Future<Output = anyhow::Result<T>>,
-{
-    let started = Instant::now();
-    tracing::info!("Initializing {name} service");
-
-    let service = tokio::time::timeout(SERVICE_INIT_TIMEOUT, future)
-        .await
-        .with_context(|| format!("Timed out initializing {name} service"))??;
-
-    tracing::info!("Initialized {name} service in {:?}", started.elapsed());
-    Ok(service)
-}
-
-async fn init_optional_service<T, F, G>(
-    name: &'static str,
-    future: F,
-    fallback: G,
-) -> anyhow::Result<T>
-where
-    F: Future<Output = anyhow::Result<T>>,
-    G: Future<Output = anyhow::Result<T>>,
-{
-    match init_async_service(name, future).await {
-        Ok(service) => Ok(service),
-        Err(err) => {
-            tracing::warn!("{name} service unavailable during startup: {err:#}");
-            fallback
-                .await
-                .with_context(|| format!("Failed to initialize fallback for {name} service"))
-        }
+impl Services {
+    /// Every service the shell can inspect and control.
+    ///
+    /// NOTE: keep in sync with the struct above - a new field is not added
+    /// here automatically.
+    pub(crate) fn managed(&self) -> [&dyn ManagedService; 12] {
+        [
+            &self.audio,
+            &self.network,
+            &self.bluetooth,
+            &self.upower,
+            &self.mpris,
+            &self.notification,
+            &self.tray,
+            &self.sysinfo,
+            &self.privacy,
+            &self.wallpaper,
+            &self.brightness,
+            &self.compositor,
+        ]
     }
 }
 
+/// Build every service. Only the compositor connects here - the rest are
+/// inert until [`AppState::start_services`] applies the configured modes.
 pub(crate) async fn init_services() -> anyhow::Result<Services> {
-    let applications = init_sync_service("applications", services::ApplicationsService::new);
-    let audio = init_sync_service("audio", services::AudioSubscriber::new);
-    let bluetooth = init_optional_service(
-        "bluetooth",
-        services::BluetoothSubscriber::new(),
-        services::BluetoothSubscriber::unavailable(),
-    )
-    .await?;
-    let brightness =
-        init_async_service("brightness", services::BrightnessSubscriber::new()).await?;
-    let compositor =
-        init_async_service("compositor", services::CompositorSubscriber::new()).await?;
-    let mpris = init_optional_service(
-        "mpris",
-        services::MprisSubscriber::new(),
-        services::MprisSubscriber::unavailable(),
-    )
-    .await?;
-    let network = init_optional_service(
-        "network",
-        services::NetworkSubscriber::new(),
-        services::NetworkSubscriber::unavailable(),
-    )
-    .await?;
-    let notification = init_async_service("notification", services::NotificationSubscriber::new())
-        .await
-        .unwrap_or_else(|err| {
-            tracing::warn!("Notification service unavailable during startup: {err:#}");
-            services::NotificationSubscriber::disabled()
-        });
-    let privacy = init_sync_service("privacy", services::PrivacySubscriber::new);
-    let sysinfo = init_sync_service("sysinfo", services::SysInfoSubscriber::new);
-    let tray = init_optional_service(
-        "tray",
-        services::TraySubscriber::new(),
-        services::TraySubscriber::unavailable(),
-    )
-    .await?;
-    let upower = init_optional_service(
-        "upower",
-        services::UPowerSubscriber::new(),
-        services::UPowerSubscriber::unavailable(),
-    )
-    .await?;
-    let wallpaper = init_sync_service("wallpaper", services::WallpaperSubscriber::new);
+    let started = Instant::now();
+    let compositor = services::CompositorSubscriber::new().await?;
+    tracing::info!("Connected to the compositor in {:?}", started.elapsed());
 
     Ok(Services {
-        applications,
-        audio,
-        bluetooth,
-        brightness,
+        applications: services::ApplicationsService::new(),
+        audio: services::AudioSubscriber::new(),
+        bluetooth: services::BluetoothSubscriber::new(),
+        brightness: services::BrightnessSubscriber::new(),
         compositor,
-        mpris,
-        network,
-        notification,
-        privacy,
-        sysinfo,
-        tray,
-        upower,
-        wallpaper,
+        mpris: services::MprisSubscriber::new(),
+        network: services::NetworkSubscriber::new(),
+        notification: services::NotificationSubscriber::new(),
+        privacy: services::PrivacySubscriber::new(),
+        sysinfo: services::SysInfoSubscriber::new(),
+        tray: services::TraySubscriber::new(),
+        upower: services::UPowerSubscriber::new(),
+        wallpaper: services::WallpaperSubscriber::new(),
     })
 }
 
@@ -256,9 +195,32 @@ pub struct AppState {
 impl Global for AppState {}
 
 impl AppState {
-    /// Initialize the global app state.
+    /// Initialize the global app state and bring services up.
     pub(crate) fn init(services: Services, cx: &mut App) {
         cx.set_global(Self { services });
+        Self::start_services(cx);
+    }
+
+    /// Apply the configured startup mode to every service, starting the
+    /// eager ones. Lazy services start on first access, `off` ones never do.
+    fn start_services(cx: &App) {
+        let config = Config::global(cx);
+        for service in Self::services(cx).managed() {
+            if !service.controllable() {
+                continue;
+            }
+
+            let mode = config.service_mode(service.name());
+            service.lifecycle().set_mode(mode);
+            if mode == ServiceMode::Eager {
+                service.start();
+            }
+        }
+    }
+
+    /// Every service, for the launcher's services view.
+    pub fn managed_services(cx: &App) -> [&dyn ManagedService; 12] {
+        Self::services(cx).managed()
     }
 
     /// Get the global app state.
@@ -279,17 +241,23 @@ impl AppState {
 
     #[inline(always)]
     pub fn audio(cx: &App) -> &services::AudioSubscriber {
-        &Self::services(cx).audio
+        let service = &Self::services(cx).audio;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn bluetooth(cx: &App) -> &services::BluetoothSubscriber {
-        &Self::services(cx).bluetooth
+        let service = &Self::services(cx).bluetooth;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn brightness(cx: &App) -> &services::BrightnessSubscriber {
-        &Self::services(cx).brightness
+        let service = &Self::services(cx).brightness;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
@@ -299,41 +267,57 @@ impl AppState {
 
     #[inline(always)]
     pub fn mpris(cx: &App) -> &services::MprisSubscriber {
-        &Self::services(cx).mpris
+        let service = &Self::services(cx).mpris;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn network(cx: &App) -> &services::NetworkSubscriber {
-        &Self::services(cx).network
+        let service = &Self::services(cx).network;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn notification(cx: &App) -> &services::NotificationSubscriber {
-        &Self::services(cx).notification
+        let service = &Self::services(cx).notification;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn privacy(cx: &App) -> &services::PrivacySubscriber {
-        &Self::services(cx).privacy
+        let service = &Self::services(cx).privacy;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn sysinfo(cx: &App) -> &services::SysInfoSubscriber {
-        &Self::services(cx).sysinfo
+        let service = &Self::services(cx).sysinfo;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn tray(cx: &App) -> &services::TraySubscriber {
-        &Self::services(cx).tray
+        let service = &Self::services(cx).tray;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn upower(cx: &App) -> &services::UPowerSubscriber {
-        &Self::services(cx).upower
+        let service = &Self::services(cx).upower;
+        service.ensure_started();
+        service
     }
 
     #[inline(always)]
     pub fn wallpaper(cx: &App) -> &services::WallpaperSubscriber {
-        &Self::services(cx).wallpaper
+        let service = &Self::services(cx).wallpaper;
+        service.ensure_started();
+        service
     }
 }

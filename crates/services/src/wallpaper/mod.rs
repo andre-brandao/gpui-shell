@@ -10,7 +10,7 @@ use std::thread;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use tracing::{debug, error, warn};
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Supported wallpaper engines.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -36,19 +36,17 @@ pub enum WallpaperCommand {
 }
 
 /// Reactive wallpaper subscriber.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WallpaperSubscriber {
     data: Mutable<WallpaperData>,
-    status: Mutable<ServiceStatus>,
+    lifecycle: Lifecycle,
 }
 
 impl WallpaperSubscriber {
-    /// Create a new wallpaper subscriber and start the daemon.
+    /// Create a new wallpaper subscriber. The daemon is spawned by
+    /// [`ManagedService::start`].
     pub fn new() -> Self {
-        let data = Mutable::new(WallpaperData::default());
-        let status = Mutable::new(ServiceStatus::Active);
-        start_daemon();
-        Self { data, status }
+        Self::default()
     }
 
     /// Get a signal that emits when wallpaper state changes.
@@ -59,11 +57,6 @@ impl WallpaperSubscriber {
     /// Get the current wallpaper data snapshot.
     pub fn get(&self) -> WallpaperData {
         self.data.get_cloned()
-    }
-
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
     }
 
     /// Execute a wallpaper command.
@@ -78,15 +71,35 @@ impl WallpaperSubscriber {
     }
 }
 
-impl Default for WallpaperSubscriber {
-    fn default() -> Self {
-        Self::new()
+impl ManagedService for WallpaperSubscriber {
+    fn name(&self) -> &'static str {
+        "Wallpaper"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        size_of::<WallpaperData>()
+            + self
+                .data
+                .lock_ref()
+                .current
+                .as_ref()
+                .map_or(0, |path| path.as_os_str().len())
+    }
+
+    /// Stopping only detaches the shell: `swww-daemon` is an external process
+    /// and keeps the current wallpaper up.
+    fn start(&self) {
+        start_daemon(self.lifecycle.begin());
     }
 }
 
 /// Start the swww daemon if it's not already running.
-fn start_daemon() {
-    thread::spawn(|| {
+fn start_daemon(token: RunToken) {
+    thread::spawn(move || {
         // Check if swww is already running
         let running = Command::new("swww")
             .arg("query")
@@ -96,13 +109,20 @@ fn start_daemon() {
 
         if running {
             debug!("swww daemon already running");
+            token.active();
             return;
         }
 
         debug!("Starting swww daemon");
         match Command::new("swww-daemon").spawn() {
-            Ok(_) => debug!("swww daemon started"),
-            Err(e) => warn!("Failed to start swww daemon: {}", e),
+            Ok(_) => {
+                debug!("swww daemon started");
+                token.active();
+            }
+            Err(e) => {
+                warn!("Failed to start swww daemon: {}", e);
+                token.error(e.to_string());
+            }
         }
     });
 }

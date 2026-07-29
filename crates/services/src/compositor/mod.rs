@@ -15,6 +15,7 @@ use anyhow::Result;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use tracing::info;
 
+use crate::lifecycle::{Lifecycle, ManagedService, ServiceMode};
 pub use types::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Window,
     WindowGeometry, Workspace,
@@ -31,6 +32,7 @@ pub use types::{
 pub struct CompositorSubscriber {
     data: Mutable<CompositorState>,
     backend: CompositorBackend,
+    lifecycle: Lifecycle,
 }
 
 impl CompositorSubscriber {
@@ -61,7 +63,14 @@ impl CompositorSubscriber {
             CompositorBackend::Mango => mango::start_listener(data.clone()),
         }
 
-        Ok(Self { data, backend })
+        let lifecycle = Lifecycle::new(ServiceMode::Eager);
+        lifecycle.begin().active();
+
+        Ok(Self {
+            data,
+            backend,
+            lifecycle,
+        })
     }
 
     /// Get a signal that emits when compositor state changes.
@@ -100,6 +109,58 @@ impl CompositorSubscriber {
         };
         self.data.set(new_state);
         Ok(())
+    }
+}
+
+impl ManagedService for CompositorSubscriber {
+    fn name(&self) -> &'static str {
+        "Compositor"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<CompositorState>()
+            + data.keyboard_layout.len()
+            + data.submap.as_ref().map_or(0, String::len)
+            + data
+                .workspaces
+                .iter()
+                .map(|ws| size_of::<Workspace>() + ws.name.len() + ws.monitor.len())
+                .sum::<usize>()
+            + data
+                .monitors
+                .iter()
+                .map(|monitor| size_of::<Monitor>() + monitor.name.len())
+                .sum::<usize>()
+            + data
+                .windows
+                .iter()
+                .map(|window| {
+                    size_of::<Window>()
+                        + window.id.len()
+                        + window.app_id.len()
+                        + window.title.len()
+                        + window.monitor.len()
+                })
+                .sum::<usize>()
+            + data.active_window.as_ref().map_or(0, |window| {
+                size_of::<ActiveWindow>()
+                    + window.title.len()
+                    + window.class.len()
+                    + window.address.len()
+            })
+    }
+
+    /// The shell has no meaning without a compositor connection, so this one
+    /// is brought up by [`CompositorSubscriber::new`] and shown read-only.
+    fn start(&self) {}
+
+    fn controllable(&self) -> bool {
+        false
     }
 }
 

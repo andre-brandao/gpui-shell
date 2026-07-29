@@ -10,7 +10,7 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use sysinfo::{Components, Disks, Networks, System};
 use tracing::debug;
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Network speed and IP data.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -132,24 +132,17 @@ impl SysInfoData {
 ///
 /// This subscriber monitors system resources via sysinfo
 /// and provides reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SysInfoSubscriber {
     data: Mutable<SysInfoData>,
-    status: Mutable<ServiceStatus>,
+    lifecycle: Lifecycle,
 }
 
 impl SysInfoSubscriber {
-    /// Create a new sysinfo subscriber and start monitoring.
-    ///
-    /// Polls system information every 2 seconds.
+    /// Create a new sysinfo subscriber. Polling starts with
+    /// [`ManagedService::start`], every 2 seconds.
     pub fn new() -> Self {
-        let data = Mutable::new(SysInfoData::default());
-        let status = Mutable::new(ServiceStatus::Active);
-
-        // Start the polling listener
-        start_listener(data.clone());
-
-        Self { data, status }
+        Self::default()
     }
 
     /// Get a signal that emits when system info changes.
@@ -161,16 +154,30 @@ impl SysInfoSubscriber {
     pub fn get(&self) -> SysInfoData {
         self.data.get_cloned()
     }
-
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
-    }
 }
 
-impl Default for SysInfoSubscriber {
-    fn default() -> Self {
-        Self::new()
+impl ManagedService for SysInfoSubscriber {
+    fn name(&self) -> &'static str {
+        "Sysinfo"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<SysInfoData>()
+            + data
+                .disks
+                .iter()
+                .map(|disk| size_of::<DiskInfo>() + disk.mount_point.len())
+                .sum::<usize>()
+            + data.network.ip.as_ref().map_or(0, String::len)
+    }
+
+    fn start(&self) {
+        start_listener(self.data.clone(), self.lifecycle.begin());
     }
 }
 
@@ -184,7 +191,7 @@ fn format_speed(kb_per_sec: u32) -> String {
 }
 
 /// Start the polling listener thread.
-fn start_listener(data: Mutable<SysInfoData>) {
+fn start_listener(data: Mutable<SysInfoData>, token: RunToken) {
     thread::spawn(move || {
         let mut system = System::new();
         let mut components = Components::new_with_refreshed_list();
@@ -193,8 +200,9 @@ fn start_listener(data: Mutable<SysInfoData>) {
         let mut last_check: Option<Instant> = None;
         let mut last_received: u64 = 0;
         let mut last_transmitted: u64 = 0;
+        token.active();
 
-        loop {
+        while token.alive() {
             let new_data = fetch_system_info(
                 &mut system,
                 &mut components,

@@ -20,6 +20,7 @@ use zbus::{
 
 use crate::ServiceStatus;
 use crate::applications::icons::lookup_icon;
+use crate::lifecycle::{Lifecycle, ManagedService};
 
 const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
@@ -76,49 +77,17 @@ pub enum NotificationCommand {
 }
 
 /// Event-driven notification service.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NotificationSubscriber {
     data: Mutable<NotificationData>,
-    status: Mutable<ServiceStatus>,
-    conn: Option<Connection>,
+    lifecycle: Lifecycle,
 }
 
 impl NotificationSubscriber {
-    /// Create the notification daemon and begin listening on D-Bus.
-    pub async fn new() -> anyhow::Result<Self> {
-        let conn = crate::bus::session().await?;
-        let data = Mutable::new(NotificationData::default());
-        let status = Mutable::new(ServiceStatus::Initializing);
-        let server = NotificationServer::new(data.clone(), conn.clone());
-        conn.object_server().at(OBJECT_PATH, server).await?;
-
-        let dbus_proxy = DBusProxy::new(&conn).await?;
-        let flags = RequestNameFlags::AllowReplacement;
-        if dbus_proxy.request_name(NAME, flags.into()).await? == RequestNameReply::InQueue {
-            warn!("Bus name '{NAME}' already owned, notifications will be unavailable");
-            status.set(ServiceStatus::Unavailable);
-            return Ok(Self {
-                data,
-                status,
-                conn: None,
-            });
-        }
-
-        status.set(ServiceStatus::Active);
-        Ok(Self {
-            data,
-            status,
-            conn: Some(conn),
-        })
-    }
-
-    /// Fallback subscriber when D-Bus notification name is unavailable.
-    pub fn disabled() -> Self {
-        Self {
-            data: Mutable::new(NotificationData::default()),
-            status: Mutable::new(ServiceStatus::Unavailable),
-            conn: None,
-        }
+    /// Create the notification subscriber. The D-Bus daemon is claimed by
+    /// [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn subscribe(&self) -> MutableSignalCloned<NotificationData> {
@@ -127,11 +96,6 @@ impl NotificationSubscriber {
 
     pub fn get(&self) -> NotificationData {
         self.data.get_cloned()
-    }
-
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
     }
 
     pub fn latest_popup(&self) -> Option<Notification> {
@@ -193,11 +157,13 @@ impl NotificationSubscriber {
     }
 
     async fn emit_action_invoked(&self, id: u32, action_key: &str) {
-        if let Some(conn) = &self.conn
-            && let Ok(iface) = conn
-                .object_server()
-                .interface::<_, NotificationServer>(OBJECT_PATH)
-                .await
+        let Ok(conn) = crate::bus::session().await else {
+            return;
+        };
+        if let Ok(iface) = conn
+            .object_server()
+            .interface::<_, NotificationServer>(OBJECT_PATH)
+            .await
         {
             let ctx = iface.signal_emitter();
             let _ = NotificationServer::action_invoked(ctx, id, action_key).await;
@@ -205,8 +171,9 @@ impl NotificationSubscriber {
     }
 
     async fn dismiss_by_id(&self, id: u32) -> anyhow::Result<()> {
-        if let Some(conn) = &self.conn {
-            let proxy = NotificationsProxy::new(conn).await?;
+        if self.lifecycle.is_up() {
+            let conn = crate::bus::session().await?;
+            let proxy = NotificationsProxy::new(&conn).await?;
             let _ = proxy.close_notification(id).await;
         }
         remove_notification(&self.data, id);
@@ -214,9 +181,112 @@ impl NotificationSubscriber {
     }
 }
 
-impl Default for NotificationSubscriber {
-    fn default() -> Self {
-        Self::disabled()
+impl ManagedService for NotificationSubscriber {
+    fn name(&self) -> &'static str {
+        "Notifications"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    /// Notification bodies and their action labels are kept in history, so
+    /// they dominate what this service retains.
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<NotificationData>()
+            + data.popup_ids.len() * size_of::<u32>()
+            + data
+                .notifications
+                .iter()
+                .map(|notification| {
+                    size_of::<Notification>()
+                        + notification.app_name.len()
+                        + notification.app_icon.len()
+                        + notification.summary.len()
+                        + notification.body.len()
+                        + notification
+                            .app_icon_path
+                            .as_ref()
+                            .map_or(0, |path| path.as_os_str().len())
+                        + notification
+                            .image_path
+                            .as_ref()
+                            .map_or(0, |path| path.as_os_str().len())
+                        + notification
+                            .actions
+                            .iter()
+                            .map(|(key, label)| key.len() + label.len())
+                            .sum::<usize>()
+                })
+                .sum::<usize>()
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        let data = self.data.clone();
+
+        tokio::spawn(async move {
+            let conn = match crate::bus::session().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    warn!("Failed to connect to the session bus: {e}");
+                    token.error(e.to_string());
+                    return;
+                }
+            };
+
+            // A previous run may still own the object path.
+            let _ = conn
+                .object_server()
+                .remove::<NotificationServer, _>(OBJECT_PATH)
+                .await;
+
+            let server = NotificationServer::new(data, conn.clone());
+            if let Err(e) = conn.object_server().at(OBJECT_PATH, server).await {
+                warn!("Failed to serve the notification interface: {e}");
+                token.error(e.to_string());
+                return;
+            }
+
+            let flags = RequestNameFlags::AllowReplacement;
+            match DBusProxy::new(&conn).await {
+                Ok(proxy) => match proxy.request_name(NAME, flags.into()).await {
+                    Ok(RequestNameReply::InQueue) => {
+                        warn!("Bus name '{NAME}' already owned, notifications unavailable");
+                        token.set(ServiceStatus::Unavailable);
+                    }
+                    Ok(_) => token.active(),
+                    Err(e) => {
+                        warn!("Failed to request bus name '{NAME}': {e}");
+                        token.error(e.to_string());
+                    }
+                },
+                Err(e) => {
+                    warn!("Failed to reach the session bus: {e}");
+                    token.error(e.to_string());
+                }
+            }
+        });
+    }
+
+    /// Releases the bus name as well: a stopped notification daemon must let
+    /// another one take over.
+    fn stop(&self) {
+        self.lifecycle.stop();
+
+        tokio::spawn(async move {
+            let Ok(conn) = crate::bus::session().await else {
+                return;
+            };
+            let _ = conn
+                .object_server()
+                .remove::<NotificationServer, _>(OBJECT_PATH)
+                .await;
+            if let Ok(proxy) = DBusProxy::new(&conn).await {
+                let _ = proxy.release_name(NAME).await;
+            }
+        });
     }
 }
 

@@ -11,7 +11,7 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use inotify::{EventMask, Inotify, WatchMask};
 use tracing::{debug, error, warn};
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 const WEBCAM_DEVICE_PATH: &str = "/dev/video0";
 
@@ -81,35 +81,17 @@ impl PrivacyData {
 ///
 /// This subscriber monitors media access via PipeWire and webcam device
 /// usage via inotify, providing reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PrivacySubscriber {
     data: Mutable<PrivacyData>,
-    pipewire_status: Mutable<ServiceStatus>,
-    webcam_status: Mutable<ServiceStatus>,
+    lifecycle: Lifecycle,
 }
 
 impl PrivacySubscriber {
-    /// Create a new privacy subscriber and start monitoring.
+    /// Create a new privacy subscriber. Monitoring starts with
+    /// [`ManagedService::start`].
     pub fn new() -> Self {
-        let initial_data = PrivacyData {
-            nodes: Vec::new(),
-            webcam_access: is_device_in_use(WEBCAM_DEVICE_PATH),
-        };
-        let data = Mutable::new(initial_data);
-        let pipewire_status = Mutable::new(ServiceStatus::Active);
-        let webcam_status = Mutable::new(ServiceStatus::Active);
-
-        // Start PipeWire listener
-        start_pipewire_listener(data.clone(), pipewire_status.clone());
-
-        // Start webcam watcher
-        start_webcam_watcher(data.clone(), webcam_status.clone());
-
-        Self {
-            data,
-            pipewire_status,
-            webcam_status,
-        }
+        Self::default()
     }
 
     /// Get a signal that emits when privacy state changes.
@@ -121,44 +103,49 @@ impl PrivacySubscriber {
     pub fn get(&self) -> PrivacyData {
         self.data.get_cloned()
     }
-
-    /// Get the current service status.
-    ///
-    /// Merges PipeWire and webcam watcher statuses — an error in either
-    /// subsystem is surfaced, so failures are not masked by the other.
-    /// When both subsystems report errors, the PipeWire error takes priority.
-    pub fn status(&self) -> ServiceStatus {
-        let pw = self.pipewire_status.get_cloned();
-        let wc = self.webcam_status.get_cloned();
-        match (&pw, &wc) {
-            (ServiceStatus::Error(e), _) => ServiceStatus::Error(e.clone()),
-            (_, ServiceStatus::Error(e)) => ServiceStatus::Error(e.clone()),
-            (ServiceStatus::Initializing, _) | (_, ServiceStatus::Initializing) => {
-                ServiceStatus::Initializing
-            }
-            _ => ServiceStatus::Active,
-        }
-    }
 }
 
-impl Default for PrivacySubscriber {
-    fn default() -> Self {
-        Self::new()
+impl ManagedService for PrivacySubscriber {
+    fn name(&self) -> &'static str {
+        "Privacy"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        size_of::<PrivacyData>() + self.data.lock_ref().nodes.len() * size_of::<ApplicationNode>()
+    }
+
+    /// Both watchers share one run token: an error in either surfaces as the
+    /// service's status, and stopping silences both.
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        self.data.lock_mut().webcam_access = is_device_in_use(WEBCAM_DEVICE_PATH);
+        start_pipewire_listener(self.data.clone(), token.clone());
+        start_webcam_watcher(self.data.clone(), token.clone());
+        token.active();
     }
 }
 
 /// Start the PipeWire listener thread for media stream tracking.
-fn start_pipewire_listener(data: Mutable<PrivacyData>, pipewire_status: Mutable<ServiceStatus>) {
+///
+/// ponytail: `pipewire::MainLoopBox::run` has no cross-thread quit handle, so
+/// a stopped listener's thread lives until the process exits - it just stops
+/// publishing. Restarting privacy repeatedly leaks one idle thread per
+/// restart; wire up a `pw_loop` quit signal if that ever matters.
+fn start_pipewire_listener(data: Mutable<PrivacyData>, token: RunToken) {
     thread::spawn(move || {
-        if let Err(e) = run_pipewire_listener(data) {
+        if let Err(e) = run_pipewire_listener(data, token.clone()) {
             error!("PipeWire listener error: {}", e);
-            *pipewire_status.lock_mut() = ServiceStatus::Error(None);
+            token.error(e.to_string());
         }
     });
 }
 
 /// Run the PipeWire listener (blocking).
-fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
+fn run_pipewire_listener(data: Mutable<PrivacyData>, token: RunToken) -> anyhow::Result<()> {
     use pipewire::{context::ContextBox, main_loop::MainLoopBox};
 
     let mainloop = MainLoopBox::new(None)?;
@@ -168,10 +155,14 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
 
     let data_add = data.clone();
     let data_remove = data.clone();
+    let token_add = token.clone();
 
     let _listener = registry
         .add_listener_local()
         .global(move |global| {
+            if !token_add.alive() {
+                return;
+            }
             if let Some(props) = global.props
                 && let Some(media_class) = props.get("media.class")
             {
@@ -189,6 +180,9 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
             }
         })
         .global_remove(move |id| {
+            if !token.alive() {
+                return;
+            }
             let mut guard = data_remove.lock_mut();
             let before_len = guard.nodes.len();
             guard.nodes.retain(|n| n.id != id);
@@ -205,17 +199,20 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
 }
 
 /// Start the webcam watcher thread.
-fn start_webcam_watcher(data: Mutable<PrivacyData>, webcam_status: Mutable<ServiceStatus>) {
+fn start_webcam_watcher(data: Mutable<PrivacyData>, token: RunToken) {
     thread::spawn(move || {
-        if let Err(e) = run_webcam_watcher(data) {
+        if let Err(e) = run_webcam_watcher(data, token.clone()) {
             warn!("Webcam watcher error: {}", e);
-            *webcam_status.lock_mut() = ServiceStatus::Error(None);
+            token.error(e.to_string());
         }
     });
 }
 
 /// Run the webcam watcher (blocking).
-fn run_webcam_watcher(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
+///
+/// ponytail: `read_events_blocking` only returns on a device event, so a
+/// stopped watcher exits at the next webcam open/close rather than at once.
+fn run_webcam_watcher(data: Mutable<PrivacyData>, token: RunToken) -> anyhow::Result<()> {
     // Check if webcam device exists
     if !Path::new(WEBCAM_DEVICE_PATH).exists() {
         warn!("Webcam device not found: {}", WEBCAM_DEVICE_PATH);
@@ -235,7 +232,7 @@ fn run_webcam_watcher(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
 
     let mut buffer = [0; 1024];
 
-    loop {
+    while token.alive() {
         let events = inotify.read_events_blocking(&mut buffer)?;
 
         for event in events {
@@ -256,6 +253,8 @@ fn run_webcam_watcher(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
             }
         }
     }
+
+    Ok(())
 }
 
 /// Check how many processes have a device file open.

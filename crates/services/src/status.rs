@@ -13,6 +13,8 @@ pub enum ServiceStatus {
     Initializing,
     /// Service stopped due to error.
     Error(Option<String>),
+    /// Not started, or stopped on request.
+    Stopped,
     /// Service intentionally disabled or unavailable.
     Unavailable,
 }
@@ -29,6 +31,7 @@ impl ServiceStatus {
             ServiceStatus::Active => "󰄬",       // Check mark
             ServiceStatus::Initializing => "󰥔", // Loading spinner
             ServiceStatus::Error(_) => "󰅚",     // Error X
+            ServiceStatus::Stopped => "󰐊",      // Play (start me)
             ServiceStatus::Unavailable => "󰪎",  // Disabled
         }
     }
@@ -39,6 +42,7 @@ impl ServiceStatus {
             ServiceStatus::Active => "Active",
             ServiceStatus::Initializing => "Starting",
             ServiceStatus::Error(_) => "Error",
+            ServiceStatus::Stopped => "Stopped",
             ServiceStatus::Unavailable => "Unavailable",
         }
     }

@@ -15,7 +15,7 @@ use futures_util::stream::select_all;
 use tracing::{debug, error, info, warn};
 use zbus::Connection;
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 pub use dbus::{BatteryLevel, BatteryState, DeviceType, WarningLevel};
 use dbus::{DeviceProxy, PowerProfilesProxy, UPowerService};
 
@@ -308,58 +308,17 @@ pub enum UPowerCommand {
 ///
 /// This subscriber monitors battery status and power profiles via D-Bus signals,
 /// providing reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UPowerSubscriber {
     data: Mutable<UPowerData>,
-    status: Mutable<ServiceStatus>,
-    conn: Connection,
+    lifecycle: Lifecycle,
 }
 
 impl UPowerSubscriber {
-    /// Create a new UPower subscriber and start monitoring.
-    pub async fn new() -> Result<Self> {
-        let conn = crate::bus::system().await?;
-        let status = Mutable::new(ServiceStatus::Initializing);
-
-        let data = match UPowerData::init(&conn).await {
-            Ok(d) => {
-                status.set(ServiceStatus::Active);
-                d
-            }
-            Err(e) => {
-                error!("Failed to initialize UPower data: {}", e);
-                status.set(ServiceStatus::Error(None));
-                UPowerData::default()
-            }
-        };
-
-        let data = Mutable::new(data);
-
-        let subscriber = Self {
-            data: data.clone(),
-            status: status.clone(),
-            conn: conn.clone(),
-        };
-
-        // Spawn the monitoring task
-        let sub_for_task = subscriber.clone();
-        tokio::spawn(async move {
-            if let Err(e) = sub_for_task.run().await {
-                error!("UPower subscriber error: {}", e);
-                *sub_for_task.status.lock_mut() = ServiceStatus::Error(None);
-            }
-        });
-
-        Ok(subscriber)
-    }
-
-    /// Fallback subscriber used when UPower is unavailable during startup.
-    pub async fn unavailable() -> Result<Self> {
-        Ok(Self {
-            data: Mutable::new(UPowerData::default()),
-            status: Mutable::new(ServiceStatus::Unavailable),
-            conn: crate::bus::system().await?,
-        })
+    /// Create a new UPower subscriber. Monitoring starts with
+    /// [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get a signal that emits when data changes.
@@ -370,11 +329,6 @@ impl UPowerSubscriber {
     /// Get the current data snapshot.
     pub fn get(&self) -> UPowerData {
         self.data.get_cloned()
-    }
-
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
     }
 
     /// Execute a command.
@@ -396,7 +350,8 @@ impl UPowerSubscriber {
 
     /// Set the power profile.
     async fn set_power_profile(&self, profile: PowerProfile) -> Result<()> {
-        let pp = PowerProfilesProxy::new(&self.conn).await?;
+        let conn = crate::bus::system().await?;
+        let pp = PowerProfilesProxy::new(&conn).await?;
         pp.set_active_profile(profile.as_str()).await?;
         debug!("Set power profile to: {:?}", profile);
         Ok(())
@@ -404,19 +359,21 @@ impl UPowerSubscriber {
 
     /// Refresh all data from D-Bus.
     async fn refresh(&self) -> Result<()> {
-        let new_data = UPowerData::init(&self.conn).await?;
+        let conn = crate::bus::system().await?;
+        let new_data = UPowerData::init(&conn).await?;
         self.data.set(new_data);
         debug!("Refreshed UPower data");
         Ok(())
     }
 
     /// Run the event monitoring loop.
-    async fn run(&self) -> Result<()> {
+    async fn run(&self, token: RunToken) -> Result<()> {
         info!("UPower subscriber started");
 
-        let upower = UPowerService::new(&self.conn).await?;
+        let conn = crate::bus::system().await?;
+        let upower = UPowerService::new(&conn).await?;
         let device = upower.get_display_device().await?;
-        let device_proxy = DeviceProxy::builder(&self.conn)
+        let device_proxy = DeviceProxy::builder(&conn)
             .path(device.inner().path())?
             .build()
             .await?;
@@ -546,7 +503,7 @@ impl UPowerSubscriber {
             .boxed();
 
         // Create stream for power profile changes (if available)
-        let profile_stream = match PowerProfilesProxy::new(&self.conn).await {
+        let profile_stream = match PowerProfilesProxy::new(&conn).await {
             Ok(pp) => pp
                 .receive_active_profile_changed()
                 .await
@@ -583,12 +540,41 @@ impl UPowerSubscriber {
         ]);
 
         // Process events
-        while (events.next().await).is_some() {
+        while token.alive() && (events.next().await).is_some() {
             // Events are processed in their respective handlers
         }
 
         warn!("UPower event stream ended unexpectedly");
         Ok(())
+    }
+
+    /// Bring the subscriber up: fetch a snapshot, then monitor.
+    async fn run_from_scratch(&self, token: RunToken) {
+        let conn = match crate::bus::system().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                error!("Failed to connect to the system bus: {}", e);
+                token.error(e.to_string());
+                return;
+            }
+        };
+
+        match UPowerData::init(&conn).await {
+            Ok(data) => {
+                self.data.set(data);
+                token.active();
+            }
+            Err(e) => {
+                error!("Failed to initialize UPower data: {}", e);
+                token.error(e.to_string());
+                return;
+            }
+        }
+
+        if let Err(e) = self.run(token.clone()).await {
+            error!("UPower subscriber error: {}", e);
+            token.error(e.to_string());
+        }
     }
 
     /// Helper to update a single battery field.
@@ -601,5 +587,25 @@ impl UPowerSubscriber {
             updater(battery);
         }
         // If battery is None, we ignore the update - a full refresh would be needed
+    }
+}
+
+impl ManagedService for UPowerSubscriber {
+    fn name(&self) -> &'static str {
+        "UPower"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        size_of::<UPowerData>()
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        let subscriber = self.clone();
+        tokio::spawn(async move { subscriber.run_from_scratch(token).await });
     }
 }

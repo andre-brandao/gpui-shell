@@ -9,6 +9,7 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod bus;
 pub mod compositor;
+pub mod lifecycle;
 pub mod mpris;
 pub mod network;
 #[allow(clippy::too_many_arguments)]
@@ -33,6 +34,7 @@ pub use compositor::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
     Monitor, Window, WindowGeometry, Workspace,
 };
+pub use lifecycle::{Lifecycle, ManagedService, RunToken, ServiceMode};
 pub use mpris::{
     MprisCommand, MprisData, MprisPlayerData, MprisPlayerMetadata, MprisSubscriber, PlaybackStatus,
     PlayerCommand,

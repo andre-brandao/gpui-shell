@@ -85,6 +85,18 @@ impl Launcher {
             cx.notify();
         });
 
+        // Keeps the services view live while a service starts, errors or is
+        // stopped from the view itself.
+        let status_signals: Vec<_> = AppState::managed_services(cx)
+            .into_iter()
+            .map(|service| service.status_signal())
+            .collect();
+        for signal in status_signals {
+            watch(cx, signal, |_, _, cx| {
+                cx.notify();
+            });
+        }
+
         let launcher_config = Config::global(cx).launcher.clone();
         let views = all_views(&launcher_config);
         let help_view = HelpView::new(&launcher_config.modules.help, &views);

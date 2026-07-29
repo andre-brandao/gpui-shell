@@ -18,52 +18,23 @@ use std::thread;
 use std::time::Duration;
 use tracing::{debug, error, warn};
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Event-driven Bluetooth subscriber.
 ///
 /// This subscriber monitors Bluetooth adapter and device state via BlueZ D-Bus
 /// and provides reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BluetoothSubscriber {
     data: Mutable<BluetoothData>,
-    status: Mutable<ServiceStatus>,
-    conn: zbus::Connection,
+    lifecycle: Lifecycle,
 }
 
 impl BluetoothSubscriber {
-    /// Create a new Bluetooth subscriber and start monitoring.
-    pub async fn new() -> anyhow::Result<Self> {
-        let conn = crate::bus::system().await?;
-        let status = Mutable::new(ServiceStatus::Initializing);
-
-        let initial_data = match fetch_bluetooth_data(&conn).await {
-            Ok(data) => {
-                status.set(ServiceStatus::Active);
-                data
-            }
-            Err(e) => {
-                error!("Failed to fetch initial bluetooth data: {}", e);
-                status.set(ServiceStatus::Error(None));
-                BluetoothData::default()
-            }
-        };
-
-        let data = Mutable::new(initial_data);
-
-        // Start the D-Bus listener
-        start_listener(data.clone(), status.clone(), conn.clone());
-
-        Ok(Self { data, status, conn })
-    }
-
-    /// Fallback subscriber used when Bluetooth is unavailable during startup.
-    pub async fn unavailable() -> anyhow::Result<Self> {
-        Ok(Self {
-            data: Mutable::new(BluetoothData::default()),
-            status: Mutable::new(ServiceStatus::Unavailable),
-            conn: crate::bus::system().await?,
-        })
+    /// Create a new Bluetooth subscriber. Monitoring starts with
+    /// [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get a signal that emits when Bluetooth state changes.
@@ -76,14 +47,10 @@ impl BluetoothSubscriber {
         self.data.get_cloned()
     }
 
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
-    }
-
     /// Execute a Bluetooth command.
     pub async fn dispatch(&self, command: BluetoothCommand) -> anyhow::Result<()> {
-        let bluetooth = BluetoothDbus::new(&self.conn).await?;
+        let conn = crate::bus::system().await?;
+        let bluetooth = BluetoothDbus::new(&conn).await?;
 
         match command {
             BluetoothCommand::Toggle => {
@@ -107,7 +74,7 @@ impl BluetoothSubscriber {
                 bluetooth.start_discovery().await?;
 
                 // Auto-stop discovery after 15 seconds
-                let conn = self.conn.clone();
+                let conn = conn.clone();
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
                     if let Ok(bt) = BluetoothDbus::new(&conn).await {
@@ -177,12 +144,59 @@ async fn fetch_bluetooth_data(conn: &zbus::Connection) -> anyhow::Result<Bluetoo
     })
 }
 
+impl ManagedService for BluetoothSubscriber {
+    fn name(&self) -> &'static str {
+        "Bluetooth"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<BluetoothData>()
+            + data
+                .devices
+                .iter()
+                .map(|device| {
+                    size_of::<BluetoothDevice>() + device.name.len() + device.path.as_str().len()
+                })
+                .sum::<usize>()
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        let data = self.data.clone();
+
+        tokio::spawn(async move {
+            let conn = match crate::bus::system().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    error!("Failed to connect to the system bus: {}", e);
+                    token.error(e.to_string());
+                    return;
+                }
+            };
+
+            match fetch_bluetooth_data(&conn).await {
+                Ok(fetched) => {
+                    data.set(fetched);
+                    token.active();
+                }
+                Err(e) => {
+                    error!("Failed to fetch initial bluetooth data: {}", e);
+                    token.error(e.to_string());
+                }
+            }
+
+            start_listener(data, token, conn);
+        });
+    }
+}
+
 /// Start the D-Bus listener in a dedicated thread.
-fn start_listener(
-    data: Mutable<BluetoothData>,
-    status: Mutable<ServiceStatus>,
-    conn: zbus::Connection,
-) {
+fn start_listener(data: Mutable<BluetoothData>, token: RunToken, conn: zbus::Connection) {
     thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -194,22 +208,26 @@ fn start_listener(
                     "Failed to create Tokio runtime for Bluetooth listener: {}",
                     e
                 );
-                *status.lock_mut() = ServiceStatus::Error(None);
+                token.error(e.to_string());
                 return;
             }
         };
 
         rt.block_on(async move {
-            if let Err(e) = run_listener(data, conn).await {
+            if let Err(e) = run_listener(data, conn, token.clone()).await {
                 error!("Bluetooth listener error: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
+                token.error(e.to_string());
             }
         });
     });
 }
 
 /// Run the Bluetooth service listener.
-async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> anyhow::Result<()> {
+async fn run_listener(
+    data: Mutable<BluetoothData>,
+    conn: zbus::Connection,
+    token: RunToken,
+) -> anyhow::Result<()> {
     let bluetooth = BluetoothDbus::new(&conn).await?;
 
     // Set up streams for interface changes
@@ -230,7 +248,7 @@ async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> a
     let rfkill_rx = setup_rfkill_monitor();
 
     // Main event loop
-    loop {
+    while token.alive() {
         let event_occurred = tokio::select! {
             Some(_) = interfaces_added.next() => {
                 debug!("Bluetooth interfaces added");
@@ -277,10 +295,15 @@ async fn run_listener(data: Mutable<BluetoothData>, conn: zbus::Connection) -> a
             }
         };
 
-        if event_occurred && let Ok(new_data) = fetch_bluetooth_data(&conn).await {
+        if event_occurred
+            && token.alive()
+            && let Ok(new_data) = fetch_bluetooth_data(&conn).await
+        {
             *data.lock_mut() = new_data;
         }
     }
+
+    Ok(())
 }
 
 /// Set up rfkill monitoring via inotify.

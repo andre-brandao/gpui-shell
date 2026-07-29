@@ -3,9 +3,11 @@
 mod persistence;
 mod theme;
 
+use std::collections::BTreeMap;
+
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
-use services::FileWatcher;
+use services::{FileWatcher, ServiceMode};
 use ui::Theme;
 
 pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
@@ -25,6 +27,9 @@ pub struct Config {
     pub notification: NotificationConfig,
     pub control_center: ControlCenterConfig,
     pub dock: DockConfig,
+    /// Startup mode per service, keyed by the lowercased service name
+    /// (`audio`, `tray`, ...). Services absent from the map start eagerly.
+    pub services: BTreeMap<String, ServiceMode>,
     /// Watch config.toml for changes and hot-reload (requires restart to change).
     pub watch_config: bool,
     /// Watch theme.toml for changes and hot-reload (requires restart to change).
@@ -40,6 +45,7 @@ impl Default for Config {
             notification: NotificationConfig::default(),
             control_center: ControlCenterConfig::default(),
             dock: DockConfig::default(),
+            services: BTreeMap::new(),
             watch_config: true,
             watch_theme: true,
         }
@@ -70,6 +76,24 @@ impl Config {
         cx.set_global(theme);
         cx.set_global(config);
         Self::start_hot_reload(cx);
+    }
+
+    /// Startup mode configured for a service.
+    pub fn service_mode(&self, name: &str) -> ServiceMode {
+        self.services
+            .get(&name.to_lowercase())
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Set a service's startup mode and persist it.
+    pub fn set_service_mode(name: &str, mode: ServiceMode, cx: &mut App) {
+        Self::global_mut(cx)
+            .services
+            .insert(name.to_lowercase(), mode);
+        if let Err(err) = Self::save(cx) {
+            tracing::warn!("Failed to persist service mode: {}", err);
+        }
     }
 
     /// Get the global config.
@@ -197,5 +221,30 @@ impl ActiveConfig for App {
     #[inline(always)]
     fn config(&self) -> &Config {
         Config::global(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_modes_round_trip_through_toml() {
+        let mut config = Config::default();
+        assert_eq!(config.service_mode("Tray"), ServiceMode::Eager);
+
+        config
+            .services
+            .insert("tray".to_string(), ServiceMode::Lazy);
+        config
+            .services
+            .insert("bluetooth".to_string(), ServiceMode::Off);
+
+        let encoded = toml::to_string_pretty(&config).expect("config serializes");
+        let decoded: Config = toml::from_str(&encoded).expect("config parses back");
+
+        assert_eq!(decoded.service_mode("Tray"), ServiceMode::Lazy);
+        assert_eq!(decoded.service_mode("Bluetooth"), ServiceMode::Off);
+        assert_eq!(decoded.service_mode("Audio"), ServiceMode::Eager);
     }
 }

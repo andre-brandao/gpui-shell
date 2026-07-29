@@ -51,6 +51,14 @@ AppState::compositor(cx).dispatch(CompositorCommand::FocusWorkspace(id));
 
 Services are global singletons accessed via `AppState` (`crates/app/src/state.rs`).
 
+Each one implements `ManagedService` (`crates/services/src/lifecycle.rs`): a
+`Lifecycle` owns its status and a run generation, `start()` (re)runs the
+listener with a fresh `RunToken`, and listeners must check `token.alive()` in
+their loop so a stop or restart retires them. Startup mode per service lives in
+`config.toml` under `[services]` (`eager`, `lazy` or `off`); lazy services start
+on first `AppState::x(cx)` access. The `;s` launcher view shows status, retained
+state size and the restart/stop/mode actions.
+
 ### UI Components
 
 - **Bar** (`crates/app/src/bar/`) — Wayland layer shell status bar with pluggable
