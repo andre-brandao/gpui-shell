@@ -2,6 +2,8 @@
 //!
 //! Shared by both binaries so the two views always exercise the same set.
 
+use std::sync::OnceLock;
+
 use ui::{Base16Palette, ThemeScheme, builtin_schemes};
 
 /// Palettes offered by the switcher.
@@ -10,17 +12,24 @@ use ui::{Base16Palette, ThemeScheme, builtin_schemes};
 /// 16 colors is that the derivation has to hold up on palettes it was not
 /// tuned against. A light scheme and a low-contrast one catch far more than
 /// another dark grey would.
-pub fn schemes() -> Vec<ThemeScheme> {
-    let mut schemes = builtin_schemes();
-    for (name, description, colors) in EXTRA_SCHEMES {
-        match Base16Palette::from_hex(colors) {
-            Ok(palette) => schemes.push(ThemeScheme::new(*name, *description, palette)),
-            // A malformed palette here is a typo in this file, not user
-            // input - surface it rather than silently showing fewer schemes.
-            Err(err) => eprintln!("story: scheme `{name}` is malformed: {err}"),
+///
+/// Parsed once. The switcher is rebuilt on every frame, and every animated
+/// component on screen drives frames - so anything allocated here would be
+/// allocated dozens of times a second for a list that never changes.
+pub fn schemes() -> &'static [ThemeScheme] {
+    static SCHEMES: OnceLock<Vec<ThemeScheme>> = OnceLock::new();
+    SCHEMES.get_or_init(|| {
+        let mut schemes = builtin_schemes();
+        for (name, description, colors) in EXTRA_SCHEMES {
+            match Base16Palette::from_hex(colors) {
+                Ok(palette) => schemes.push(ThemeScheme::new(*name, *description, palette)),
+                // A malformed palette here is a typo in this file, not user
+                // input - surface it rather than silently showing fewer schemes.
+                Err(err) => eprintln!("story: scheme `{name}` is malformed: {err}"),
+            }
         }
-    }
-    schemes
+        schemes
+    })
 }
 
 type SchemeSpec = (&'static str, &'static str, &'static [&'static str; 16]);

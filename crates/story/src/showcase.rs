@@ -10,6 +10,21 @@
 //! neighbouring components only show up when they're neighbours.
 //!
 //! Run with: `cargo run -p story --bin showcase`.
+//!
+//! # A note on frame rate
+//!
+//! gpui only renders when something asks it to, and a continuously animating
+//! component asks on every frame. Because this page puts ~40 cards in one
+//! render, each of those frames rebuilds all of them - measured at ~42fps
+//! release, against ~110fps for the gallery, which only ever builds one
+//! story. The cost is linear in card count (~0.4ms per card); no single card
+//! is pathological, and splitting cards into child entities does not help,
+//! because gpui re-renders clean child views on animation frames too.
+//!
+//! So the animated cards are gated behind a toggle. Off - the default - the
+//! page requests no frames at all and sits idle, which is what you want from
+//! a window left open next to an editor. On, the spinners spin and the page
+//! pays for it.
 
 #![allow(
     clippy::print_stderr,
@@ -35,6 +50,8 @@ use schemes::schemes;
 const DEMO_IMAGE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/demo/avatar.jpg");
 
 struct Showcase {
+    /// Gates the continuously animating cards. See the module docs.
+    animations_on: bool,
     checkbox_small: ToggleState,
     checkbox_default: ToggleState,
     checkbox_large: ToggleState,
@@ -105,6 +122,7 @@ impl Showcase {
         })
         .detach();
         Self {
+            animations_on: false,
             checkbox_small: ToggleState::Selected,
             checkbox_default: ToggleState::Unselected,
             checkbox_large: ToggleState::Selected,
@@ -217,8 +235,26 @@ impl Render for Showcase {
                     )
                     .child(Headline::new("gpui-shell showcase").size(HeadlineSize::Medium)),
             )
+            .child(
+                h_flex().gap(Spacing::Small.pixels()).flex_wrap().child(
+                    Switch::new("toggle-animations", self.animations_on)
+                        .size(SwitchSize::Small)
+                        .label("Animations")
+                        .on_click({
+                            let weak = weak.clone();
+                            move |state, _window, cx| {
+                                let on = state.selected();
+                                weak.update(cx, |this, cx| {
+                                    this.animations_on = on;
+                                    cx.notify();
+                                })
+                                .ok();
+                            }
+                        }),
+                ),
+            )
             .child(h_flex().gap(Spacing::Small.pixels()).flex_wrap().children(
-                schemes().into_iter().map(|scheme| {
+                schemes().iter().map(|scheme| {
                     let is_current = scheme.name == current_theme;
                     let name = scheme.name.clone();
                     let palette = scheme.palette;
@@ -733,18 +769,18 @@ impl Render for Showcase {
                         h_flex()
                             .gap(Spacing::Small.pixels())
                             .items_center()
-                            .child(gpui::img(DEMO_IMAGE).w(px(120.0)).h(px(68.0)))
+                            .child(gpui::img(demo_image_path()).w(px(120.0)).h(px(68.0)))
                             .child(
-                                gpui::img(DEMO_IMAGE)
+                                gpui::img(demo_image_path())
                                     .w(px(120.0))
                                     .h(px(68.0))
                                     .rounded(Radius::Small.pixels()),
                             )
-                            .child(gpui::img(DEMO_IMAGE).size(px(56.0)).rounded_full()),
+                            .child(gpui::img(demo_image_path()).size(px(56.0)).rounded_full()),
                     )
                     .child({
                         use gpui::StyledImage as _;
-                        gpui::img(DEMO_IMAGE)
+                        gpui::img(demo_image_path())
                             .grayscale(true)
                             .w(px(280.0))
                             .h(px(72.0))
@@ -1105,57 +1141,8 @@ impl Render for Showcase {
                 colors,
             )
             .into_any_element(),
-            // -------- CircularProgress + Spinner --------
-            card(
-                "CircularProgress & Spinner",
-                v_flex()
-                    .gap(Spacing::Small.pixels())
-                    .child(
-                        h_flex()
-                            .gap(Spacing::Medium.pixels())
-                            .items_center()
-                            .child(CircularProgress::new(0.25, 1.0, px(28.0)))
-                            .child(CircularProgress::new(0.5, 1.0, px(28.0)))
-                            .child(CircularProgress::new(0.75, 1.0, px(28.0)))
-                            .child(CircularProgress::new(1.0, 1.0, px(28.0)))
-                            .child(CircularProgress::new(0.6, 1.0, px(40.0))),
-                    )
-                    .child(
-                        h_flex()
-                            .gap(Spacing::Medium.pixels())
-                            .items_center()
-                            .child(Spinner::new().size(IconSize::XSmall))
-                            .child(Spinner::new().size(IconSize::Small))
-                            .child(Spinner::new())
-                            .child(Spinner::new().size(IconSize::XLarge))
-                            .child(Spinner::new().color(Color::Accent))
-                            .child(Label::new("Loading...").color(Color::Muted)),
-                    ),
-                colors,
-            )
-            .into_any_element(),
-            // -------- Skeleton --------
-            card(
-                "Skeleton",
-                h_flex()
-                    .gap(Spacing::Medium.pixels())
-                    .items_start()
-                    .child(
-                        h_flex()
-                            .gap(Spacing::Small.pixels())
-                            .items_center()
-                            .child(Skeleton::circle(px(36.0)))
-                            .child(
-                                v_flex()
-                                    .gap(px(4.0))
-                                    .child(Skeleton::new().width(px(100.0)).height(px(12.0)))
-                                    .child(Skeleton::new().width(px(60.0)).height(px(10.0))),
-                            ),
-                    )
-                    .child(skeleton_text(3, px(160.0))),
-                colors,
-            )
-            .into_any_element(),
+            // The continuously animating cards live in `animated_cards` and
+            // are only built when the toggle is on - see the module docs.
             // -------- DescriptionList --------
             card(
                 "DescriptionList",
@@ -1321,6 +1308,14 @@ impl Render for Showcase {
             .into_any_element(),
         ];
 
+        let cards = {
+            let mut cards = cards;
+            if self.animations_on {
+                cards.extend(animated_cards(colors));
+            }
+            cards
+        };
+
         const COLS: usize = 5;
         let mut columns: Vec<Vec<gpui::AnyElement>> = (0..COLS).map(|_| Vec::new()).collect();
         for (i, card) in cards.into_iter().enumerate() {
@@ -1431,6 +1426,73 @@ impl Showcase {
                 .ok();
             })
     }
+}
+
+/// The cards that animate continuously, and therefore drive a repaint every
+/// frame while they are on screen. Built only when the toggle is on.
+/// Filesystem path to the demo image.
+///
+/// Built as a `PathBuf` on purpose: `img()` reads a `&str` as an asset
+/// resource to look up in the registered `AssetSource`, so passing the path
+/// as a string silently renders nothing.
+fn demo_image_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(DEMO_IMAGE)
+}
+
+fn animated_cards(colors: ThemeColors) -> Vec<gpui::AnyElement> {
+    vec![
+        // -------- CircularProgress + Spinner --------
+        card(
+            "CircularProgress & Spinner",
+            v_flex()
+                .gap(Spacing::Small.pixels())
+                .child(
+                    h_flex()
+                        .gap(Spacing::Medium.pixels())
+                        .items_center()
+                        .child(CircularProgress::new(0.25, 1.0, px(28.0)))
+                        .child(CircularProgress::new(0.5, 1.0, px(28.0)))
+                        .child(CircularProgress::new(0.75, 1.0, px(28.0)))
+                        .child(CircularProgress::new(1.0, 1.0, px(28.0)))
+                        .child(CircularProgress::new(0.6, 1.0, px(40.0))),
+                )
+                .child(
+                    h_flex()
+                        .gap(Spacing::Medium.pixels())
+                        .items_center()
+                        .child(Spinner::new().size(IconSize::XSmall))
+                        .child(Spinner::new().size(IconSize::Small))
+                        .child(Spinner::new())
+                        .child(Spinner::new().size(IconSize::XLarge))
+                        .child(Spinner::new().color(Color::Accent))
+                        .child(Label::new("Loading...").color(Color::Muted)),
+                ),
+            colors,
+        )
+        .into_any_element(),
+        // -------- Skeleton --------
+        card(
+            "Skeleton",
+            h_flex()
+                .gap(Spacing::Medium.pixels())
+                .items_start()
+                .child(
+                    h_flex()
+                        .gap(Spacing::Small.pixels())
+                        .items_center()
+                        .child(Skeleton::circle(px(36.0)))
+                        .child(
+                            v_flex()
+                                .gap(px(4.0))
+                                .child(Skeleton::new().width(px(100.0)).height(px(12.0)))
+                                .child(Skeleton::new().width(px(60.0)).height(px(10.0))),
+                        ),
+                )
+                .child(skeleton_text(3, px(160.0))),
+            colors,
+        )
+        .into_any_element(),
+    ]
 }
 
 fn card(title: &'static str, body: impl IntoElement, colors: ThemeColors) -> impl IntoElement {

@@ -455,7 +455,7 @@ impl Gallery {
         h_flex()
             .gap(Spacing::XSmall.pixels())
             .flex_wrap()
-            .children(schemes().into_iter().map(move |scheme| {
+            .children(schemes().iter().map(move |scheme| {
                 let is_current = scheme.name == current;
                 let weak = weak.clone();
                 let name = scheme.name.clone();
