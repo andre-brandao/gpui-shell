@@ -282,8 +282,10 @@ mod tests {
 
     #[test]
     fn stored_theme_round_trips_through_toml() {
-        let mut theme = Theme::default();
-        theme.font_size = px(15.0);
+        let mut theme = Theme {
+            font_size: px(15.0),
+            ..Default::default()
+        };
         theme.set_overrides(ThemeColorsRefinement {
             text_accent: Some(gpui::hsla(0.5, 1.0, 0.5, 1.0)),
             ..Default::default()
@@ -309,8 +311,10 @@ mod tests {
 
     #[test]
     fn font_size_is_independent_of_the_palette() {
-        let mut theme = Theme::default();
-        theme.font_size = px(18.0);
+        let mut theme = Theme {
+            font_size: px(18.0),
+            ..Default::default()
+        };
         theme.set_palette("Other", Base16Palette::default());
         assert_eq!(theme.font_size, px(18.0));
     }
