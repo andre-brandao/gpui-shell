@@ -10,7 +10,7 @@ use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
-use ui::{ActiveTheme, Color, Icon, IconName};
+use ui::{ActiveTheme, Color, Icon, IconName, LabelCommon, h_flex, v_flex};
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
@@ -233,32 +233,15 @@ impl BarWidget for ActiveWindow {
         }
 
         let vertical_lines = self.vertical_lines(15);
-        let text_primary = theme.colors.text;
-        let text_secondary = theme.colors.text;
+        let text_color = theme.colors.text;
 
-        div()
+        v_flex()
             .id("active-window")
-            .flex()
-            .flex_col()
             .items_center()
             .gap(px(1.0))
-            .children(
-                vertical_lines
-                    .into_iter()
-                    .enumerate()
-                    .map(move |(idx, line)| {
-                        style::vertical_text_line(
-                            div()
-                                .text_size(style::label_size(true).rems())
-                                .text_color(if idx == 0 {
-                                    text_primary
-                                } else {
-                                    text_secondary
-                                })
-                                .child(line),
-                        )
-                    }),
-            )
+            .children(vertical_lines.into_iter().map(move |line| {
+                style::vertical_text_line(style::bar_label(line, true, text_color))
+            }))
             .into_any_element()
     }
 
@@ -276,10 +259,8 @@ impl BarWidget for ActiveWindow {
             None
         };
 
-        div()
+        h_flex()
             .id("active-window")
-            .flex()
-            .items_center()
             .justify_center()
             .gap(px(style::CHIP_GAP))
             .max_w(px(460.0))
@@ -291,15 +272,7 @@ impl BarWidget for ActiveWindow {
                         .color(Color::Default),
                 )
             })
-            .child(
-                div()
-                    .flex_shrink(1.)
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_size(style::label_size(false).rems())
-                    .text_color(theme.colors.text)
-                    .child(title),
-            )
+            .child(style::bar_label(title, false, theme.colors.text).truncate())
             .into_any_element()
     }
 }

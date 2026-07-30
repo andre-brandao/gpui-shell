@@ -3,9 +3,11 @@
 mod config;
 pub use config::KeyboardLayoutConfig;
 
-use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, Color, Icon, IconName};
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName, LabelLike,
+};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -148,48 +150,37 @@ impl KeyboardLayout {
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        div()
-            .id("keyboard-layout")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, _event, _window, _cx| {
-                    this.next_layout();
-                }),
+        let name_label = style::bar_label(short_name, is_vertical, theme.colors.text);
+
+        ButtonLike::new("keyboard-layout")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, _, _, _| {
+                this.next_layout();
+            }))
+            .child(
+                style::stack(is_vertical)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    .map(|el| match flag {
+                        // A country emoji is a glyph, not an icon asset, so it
+                        // is sized as text - at the icon's rem size.
+                        Some(flag) => el.child(
+                            LabelLike::new()
+                                .size_rems(style::icon(is_vertical).rems())
+                                .child(flag),
+                        ),
+                        None => el.child(
+                            Icon::new(KEYBOARD_ICON)
+                                .size(style::icon(is_vertical))
+                                .color(Color::Default),
+                        ),
+                    })
+                    .child(if is_vertical {
+                        style::vertical_text_line(name_label)
+                    } else {
+                        name_label.into_any_element()
+                    }),
             )
-            .map(|el| match flag {
-                Some(flag) => el.child(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(style::icon(is_vertical).rems())
-                        .child(flag),
-                ),
-                None => el.child(
-                    Icon::new(KEYBOARD_ICON)
-                        .size(style::icon(is_vertical))
-                        .color(Color::Default),
-                ),
-            })
-            .child(if is_vertical {
-                style::vertical_text_line(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(style::label_size(is_vertical).rems())
-                        .text_color(theme.colors.text)
-                        .child(short_name),
-                )
-            } else {
-                div()
-                    .flex_shrink_0()
-                    .text_size(style::label_size(is_vertical).rems())
-                    .text_color(theme.colors.text)
-                    .child(short_name)
-                    .into_any_element()
-            })
             .into_any_element()
     }
 }

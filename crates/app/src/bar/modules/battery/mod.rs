@@ -3,7 +3,7 @@
 mod config;
 pub use config::BatteryConfig;
 
-use gpui::{AnyElement, Context, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, prelude::*, px};
 use services::{BatteryState, UPowerData};
 use ui::{ActiveTheme, Color, Icon, IconName};
 
@@ -108,11 +108,8 @@ impl Battery {
         view: BatteryView,
         is_vertical: bool,
     ) -> AnyElement {
-        div()
+        style::stack(is_vertical)
             .id("battery-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
             .gap(px(style::CHIP_GAP))
             .when_some(view.icon, |el, icon| {
                 el.child(
@@ -122,19 +119,11 @@ impl Battery {
                 )
             })
             .when(!view.text.is_empty(), |this| {
+                let label = style::bar_label(view.text, is_vertical, view.text_color);
                 this.child(if is_vertical {
-                    style::vertical_text_line(
-                        div()
-                            .text_size(style::label_size(is_vertical).rems())
-                            .text_color(view.text_color)
-                            .child(view.text),
-                    )
+                    style::vertical_text_line(label)
                 } else {
-                    div()
-                        .text_size(style::label_size(is_vertical).rems())
-                        .text_color(view.text_color)
-                        .child(view.text)
-                        .into_any_element()
+                    label.into_any_element()
                 })
             })
             .into_any_element()

@@ -5,14 +5,17 @@ pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Size,
-    Window, div, img, prelude::*, px,
+    AnyElement, App, ClickEvent, Context, ElementId, Pixels, Point, Render, RenderImage,
+    SharedString, Size, Window, div, img, prelude::*, px,
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use std::sync::Arc;
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Disableable, Divider,
+    Icon, IconName, IconSize, Label, LabelCommon, List, ListItem, Spacing, TextSize,
+};
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::{ActiveConfig, Config};
@@ -42,13 +45,7 @@ impl Tray {
 
     /// Handle left-clicking on a tray item.
     /// Opens menu panel if the item has a menu, otherwise calls Activate.
-    fn on_item_click(
-        &self,
-        item: &TrayItem,
-        event: &gpui::MouseDownEvent,
-        window: &Window,
-        cx: &mut App,
-    ) {
+    fn on_item_click(&self, item: &TrayItem, at: Point<Pixels>, window: &Window, cx: &mut App) {
         if let Some(menu) = item.menu.clone() {
             let panel_id = format!("systray-{}", item.name);
             let subscriber = self.subscriber.clone();
@@ -56,7 +53,7 @@ impl Tray {
             let config = Config::global(cx);
             let panel_size = Size::new(px(250.0), px(400.0));
             let (anchor, margin) =
-                panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+                panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
 
             let config = PanelConfig {
                 width: 250.0,
@@ -96,11 +93,9 @@ impl Tray {
         item: TrayItem,
         icon_size: f32,
         item_size: f32,
-        theme: &ui::Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let item_name_right = item.name.clone();
-        let item_name_middle = item.name.clone();
+        let aux_item_name = item.name.clone();
 
         let icon_element: AnyElement = if let Some((w, h, data)) = item.icon_pixmap() {
             let mut bgra = data.to_vec();
@@ -123,50 +118,36 @@ impl Tray {
             render_icon_name(name, icon_size)
         };
 
-        div()
-            .id(ElementId::Name(SharedString::from(format!(
-                "tray-item-{}",
-                item.name
-            ))))
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(item_size))
-            .rounded(Radius::Small.pixels())
-            .cursor_pointer()
-            .bg(theme.colors.border_transparent)
-            .hover(move |s| s.bg(theme.colors.elevated_surface_background))
-            .active(move |s| s.bg(theme.colors.element_active))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event, window, cx| {
-                    this.on_item_click(&item, event, window, cx);
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, _event, _window, cx| {
-                    this.dispatch_command(
-                        TrayCommand::ContextMenu {
-                            item_name: item_name_right.clone(),
-                        },
-                        cx,
-                    );
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Middle,
-                cx.listener(move |this, _event, _window, cx| {
-                    this.dispatch_command(
-                        TrayCommand::SecondaryActivate {
-                            item_name: item_name_middle.clone(),
-                        },
-                        cx,
-                    );
-                }),
-            )
-            .child(icon_element)
-            .into_any_element()
+        // `item_size` is the hit target; the icon is drawn at `icon_size`, so
+        // the difference becomes the button's own padding.
+        let padding_y = px(((item_size - icon_size) / 2.0).max(0.0));
+
+        ButtonLike::new(ElementId::Name(SharedString::from(format!(
+            "tray-item-{}",
+            item.name
+        ))))
+        .style(ButtonStyle::Ghost)
+        .width(px(item_size))
+        .padding(px(0.0), padding_y)
+        .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+            this.on_item_click(&item, event.position(), window, cx);
+        }))
+        .on_aux_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
+            let command = if event.is_middle_click() {
+                TrayCommand::SecondaryActivate {
+                    item_name: aux_item_name.clone(),
+                }
+            } else if event.is_right_click() {
+                TrayCommand::ContextMenu {
+                    item_name: aux_item_name.clone(),
+                }
+            } else {
+                return;
+            };
+            this.dispatch_command(command, cx);
+        }))
+        .child(icon_element)
+        .into_any_element()
     }
 
     fn render_tray_strip(
@@ -174,21 +155,17 @@ impl Tray {
         items: Vec<TrayItem>,
         icon_size: f32,
         item_size: f32,
-        theme: &ui::Theme,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        div()
+        style::stack(is_vertical)
             .id("systray")
-            .flex()
-            .when(is_vertical, |this| this.flex_col())
-            .items_center()
             .justify_center()
             .gap(px(style::group_gap(is_vertical)))
             .children(
                 items
                     .into_iter()
-                    .map(|item| self.render_tray_item(item, icon_size, item_size, theme, cx)),
+                    .map(|item| self.render_tray_item(item, icon_size, item_size, cx)),
             )
             .into_any_element()
     }
@@ -204,8 +181,7 @@ impl BarWidget for Tray {
         let config = &cx.config().bar.modules.tray;
         let icon_size = config.icon_size;
         let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
-        let theme = cx.theme().clone();
-        self.render_tray_strip(items, icon_size, item_size, &theme, true, cx)
+        self.render_tray_strip(items, icon_size, item_size, true, cx)
     }
 
     fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -213,8 +189,7 @@ impl BarWidget for Tray {
         let config = &cx.config().bar.modules.tray;
         let icon_size = config.icon_size;
         let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
-        let theme = cx.theme().clone();
-        self.render_tray_strip(items, icon_size, item_size, &theme, false, cx)
+        self.render_tray_strip(items, icon_size, item_size, false, cx)
     }
 }
 
@@ -311,16 +286,7 @@ impl TrayMenuPanel {
         depth: usize,
         cx: &mut Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        let theme = cx.theme();
         let mut elements = Vec::new();
-
-        // Pre-compute colors for closures
-        let border_subtle = theme.colors.border_variant;
-        let interactive_hover = theme.colors.element_hover;
-        let text_primary = theme.colors.text;
-        let text_muted = theme.colors.text_muted;
-        let text_disabled = theme.colors.text_disabled;
-        let accent_primary = theme.colors.accent;
 
         for layout in items {
             let MenuLayout(id, props, children) = layout;
@@ -340,7 +306,7 @@ impl TrayMenuPanel {
             if props.type_.as_deref() == Some("separator")
                 || (label.is_empty() && children.is_empty())
             {
-                elements.push(render_menu_separator(border_subtle).into_any_element());
+                elements.push(render_menu_separator().into_any_element());
                 continue;
             }
 
@@ -348,7 +314,6 @@ impl TrayMenuPanel {
             let is_enabled = props.enabled.unwrap_or(true);
             let has_submenu = !children.is_empty();
             let is_expanded = has_submenu && self.is_submenu_expanded(menu_id);
-            let indent = depth as f32 * Spacing::Large.value();
 
             elements.push(
                 render_menu_item(
@@ -358,12 +323,7 @@ impl TrayMenuPanel {
                     is_enabled,
                     has_submenu,
                     is_expanded,
-                    indent,
-                    interactive_hover,
-                    text_primary,
-                    text_muted,
-                    text_disabled,
-                    accent_primary,
+                    depth,
                     cx,
                 )
                 .into_any_element(),
@@ -381,12 +341,12 @@ impl TrayMenuPanel {
 }
 
 /// Render a separator line
-fn render_menu_separator(border_color: gpui::Hsla) -> impl IntoElement {
+fn render_menu_separator() -> impl IntoElement {
     div()
         .w_full()
         .px(Spacing::Medium.pixels())
         .py(Spacing::XSmall.pixels())
-        .child(div().h(px(1.)).w_full().bg(border_color))
+        .child(Divider::horizontal())
 }
 
 /// Render a single menu item
@@ -398,16 +358,9 @@ fn render_menu_item(
     is_enabled: bool,
     has_submenu: bool,
     is_expanded: bool,
-    indent: f32,
-    interactive_hover: gpui::Hsla,
-    text_primary: gpui::Hsla,
-    text_muted: gpui::Hsla,
-    text_disabled: gpui::Hsla,
-    accent_primary: gpui::Hsla,
+    depth: usize,
     cx: &mut Context<TrayMenuPanel>,
 ) -> impl IntoElement {
-    let _theme = cx.theme();
-
     // Checkbox/radio indicator
     let toggle_indicator = props.toggle_type.as_ref().and_then(|toggle_type| {
         let is_checked = props.toggle_state == Some(1);
@@ -420,75 +373,50 @@ fn render_menu_item(
         Some((icon, is_checked))
     });
 
-    let label_owned = label.to_string();
-    let text_color = if !is_enabled {
-        text_disabled
-    } else {
-        text_primary
-    };
-
-    div()
-        .id(ElementId::Name(SharedString::from(format!(
-            "menu-item-{}",
-            menu_id
-        ))))
-        .flex()
-        .items_center()
-        .gap(Spacing::Medium.pixels())
-        .w_full()
-        .pl(px(Spacing::Medium.value() + indent))
-        .pr(Spacing::Medium.pixels())
-        .py(px(Spacing::XSmall.value() + 2.0))
-        .rounded(Radius::Small.pixels())
-        .mx(Spacing::XSmall.pixels())
-        .when(is_enabled, |el| {
-            el.cursor_pointer().hover(move |s| s.bg(interactive_hover))
-        })
-        .when(!is_enabled, |el| el.cursor_default())
-        .when(is_enabled && !has_submenu, |el| {
-            el.on_click(cx.listener(move |this, _, window, cx| {
-                this.activate_menu_item(menu_id, window, cx);
-            }))
-        })
-        .when(has_submenu, |el| {
-            el.on_click(cx.listener(move |this, _, _window, cx| {
-                this.toggle_submenu(menu_id, cx);
-            }))
-        })
-        // Toggle indicator (checkbox/radio)
-        .when_some(toggle_indicator, |el, (icon, is_checked)| {
-            el.child(
-                Icon::new(icon)
-                    .size(IconSize::Small)
-                    .color(Color::Custom(if is_checked {
-                        accent_primary
-                    } else {
-                        text_muted
-                    })),
-            )
-        })
-        // Label
-        .child(
-            div()
-                .flex_1()
-                .text_size(TextSize::Small.rems())
-                .text_color(text_color)
-                .overflow_hidden()
-                .text_ellipsis()
-                .child(label_owned),
+    ListItem::new(ElementId::Name(SharedString::from(format!(
+        "menu-item-{}",
+        menu_id
+    ))))
+    // A submenu row stays clickable even when the item itself is disabled -
+    // collapsing it is the panel's own affordance, not the app's action.
+    .disabled(!is_enabled && !has_submenu)
+    .indent_level(depth)
+    .indent_step_size(Spacing::Large.pixels())
+    .on_click(cx.listener(move |this, _, window, cx| {
+        if has_submenu {
+            this.toggle_submenu(menu_id, cx);
+        } else {
+            this.activate_menu_item(menu_id, window, cx);
+        }
+    }))
+    .when_some(toggle_indicator, |el, (icon, is_checked)| {
+        el.start_slot(Icon::new(icon).size(IconSize::Small).color(if is_checked {
+            Color::Accent
+        } else {
+            Color::Muted
+        }))
+    })
+    .child(
+        Label::new(label.to_string())
+            .size(TextSize::Small)
+            .color(if is_enabled {
+                Color::Default
+            } else {
+                Color::Disabled
+            })
+            .truncate(),
+    )
+    .when(has_submenu, |el| {
+        el.end_slot(
+            Icon::new(if is_expanded {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
+            })
+            .size(IconSize::XSmall)
+            .color(Color::Muted),
         )
-        // Submenu indicator with rotation animation
-        .when(has_submenu, |el| {
-            el.child(
-                Icon::new(if is_expanded {
-                    IconName::ChevronDown
-                } else {
-                    IconName::ChevronRight
-                })
-                .size(IconSize::XSmall)
-                .color(Color::Muted),
-            )
-        })
+    })
 }
 
 impl Render for TrayMenuPanel {
@@ -508,7 +436,11 @@ impl Render for TrayMenuPanel {
                     .size_full()
                     .py(Spacing::XSmall.pixels())
                     .overflow_y_scroll()
-                    .child(div().flex().flex_col().gap(px(1.)).children(menu_items)),
+                    .child(
+                        List::new()
+                            .empty_message("This item has no menu")
+                            .children(menu_items),
+                    ),
             )
     }
 }

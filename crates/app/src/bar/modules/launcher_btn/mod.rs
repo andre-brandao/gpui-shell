@@ -4,8 +4,8 @@ mod config;
 pub use config::LauncherBtnConfig;
 
 use crate::launcher;
-use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*};
-use ui::{Color, Icon, IconName, IconSource};
+use gpui::{AnyElement, Context, Window, prelude::*};
+use ui::{ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName, IconSource};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -27,17 +27,13 @@ impl LauncherBtn {
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        div()
-            .id("launcher-btn")
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |_, _, _, cx| {
-                    launcher::toggle(None, cx);
-                }),
-            )
+        // The chip around this button already paints the hover and owns the
+        // padding, so the button itself stays transparent and unpadded.
+        ButtonLike::new("launcher-btn")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(move |_, _, _, cx| {
+                launcher::toggle(None, cx);
+            }))
             .child(
                 Icon::new(icon)
                     .size(style::icon(is_vertical))

@@ -1,6 +1,11 @@
-use gpui::{AnyElement, App, Context, MouseButton, Render, Size, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, App, ClickEvent, Context, Pixels, Point, Render, Size, Window, prelude::*, px,
+};
 use services::{NotificationCommand, NotificationData, NotificationSubscriber};
-use ui::{ActiveTheme, Color, Icon, IconSource, TextSize};
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconSource, Label,
+    LabelCommon, TextSize,
+};
 
 use crate::bar::modules::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -29,7 +34,7 @@ impl NotificationWidget {
         Self { subscriber, data }
     }
 
-    fn toggle_center(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
+    fn toggle_center(&self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let config = Config::global(cx);
         let notification_config = &config.notification;
         let panel_size = Size::new(
@@ -37,7 +42,7 @@ impl NotificationWidget {
             px(notification_config.center_height),
         );
         let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
         let subscriber = self.subscriber.clone();
         dispatch_notification_command(subscriber.clone(), NotificationCommand::MarkAllRead);
 
@@ -64,35 +69,32 @@ impl NotificationWidget {
         let unread = self.data.unread_count;
         let badge_color = theme.colors.accent;
 
-        div()
-            .id("notification-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| this.toggle_center(event, window, cx)),
-            )
+        ButtonLike::new("notification-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
+                this.toggle_center(event.position(), window, cx)
+            }))
             .child(
-                Icon::new(icon)
-                    .size(style::icon(is_vertical))
-                    .color(Color::Custom(if self.data.dnd {
-                        theme.colors.text_muted
-                    } else {
-                        theme.colors.text
-                    })),
+                style::stack(is_vertical)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    .child(
+                        Icon::new(icon)
+                            .size(style::icon(is_vertical))
+                            .color(Color::Custom(if self.data.dnd {
+                                theme.colors.text_muted
+                            } else {
+                                theme.colors.text
+                            })),
+                    )
+                    .when(unread > 0, |el| {
+                        el.child(
+                            Label::new(unread.to_string())
+                                .size(TextSize::XSmall)
+                                .color(Color::Custom(badge_color)),
+                        )
+                    }),
             )
-            .when(unread > 0, |el| {
-                el.child(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(TextSize::XSmall.rems())
-                        .text_color(badge_color)
-                        .child(unread.to_string()),
-                )
-            })
             .into_any_element()
     }
 }

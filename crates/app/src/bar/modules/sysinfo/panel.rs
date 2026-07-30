@@ -6,13 +6,19 @@ use crate::state::watch;
 use gpui::{App, Context, FontWeight, Hsla, ScrollHandle, Window, div, prelude::*, px};
 use services::{SysInfoData, SysInfoSubscriber};
 use ui::patterns::PanelSurface;
-use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
+use ui::{
+    ActiveTheme, Color, Divider, Icon, IconName, IconSize, Label, LabelCommon, ProgressBar,
+    Spacing, TextSize, h_flex, v_flex,
+};
 
 /// SysInfo panel content showing detailed system information.
 pub struct SysInfoPanel {
     data: SysInfoData,
     scroll_handle: ScrollHandle,
 }
+
+/// Width of the icon gutter every info row aligns to.
+const ROW_GUTTER: f32 = 32.0;
 
 impl SysInfoPanel {
     /// Create a new SysInfo panel with the given subscriber.
@@ -36,56 +42,40 @@ impl SysInfoPanel {
         label: &str,
         value: &str,
         color: Option<Hsla>,
-        cx: &App,
     ) -> impl IntoElement {
-        let theme = cx.theme();
-        let text_color = color.unwrap_or(theme.colors.text);
+        let value_color = color.map_or(Color::Default, Color::Custom);
 
-        div()
+        h_flex()
             .w_full()
-            .flex()
-            .items_center()
             .py(Spacing::Medium.pixels())
             .child(
-                div().w(px(32.)).child(
-                    Icon::new(icon)
-                        .size(IconSize::Large)
-                        .color(Color::Custom(text_color)),
-                ),
-            )
-            .child(
                 div()
-                    .flex_1()
-                    .text_size(TextSize::Default.rems())
-                    .text_color(theme.colors.text)
-                    .child(label.to_string()),
+                    .w(px(ROW_GUTTER))
+                    .child(Icon::new(icon).size(IconSize::Large).color(value_color)),
             )
+            .child(h_flex().flex_1().child(Label::new(label.to_string())))
             .child(
-                div()
-                    .text_size(TextSize::Default.rems())
-                    .text_color(text_color)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(value.to_string()),
+                Label::new(value.to_string())
+                    .color(value_color)
+                    .weight(FontWeight::MEDIUM),
             )
     }
 
     fn render_progress_bar(usage: u32, cx: &App) -> impl IntoElement {
-        let theme = cx.theme();
-        let color = theme.colors.status.from_percentage(usage);
-        let width_percent = usage.min(100) as f32;
+        let colors = cx.theme().colors();
 
-        div()
-            .w_full()
-            .h(px(4.))
-            .rounded(px(2.))
-            .bg(theme.colors.elevated_surface_background)
-            .child(
-                div()
-                    .h_full()
-                    .rounded(px(2.))
-                    .bg(color)
-                    .w(gpui::relative(width_percent / 100.0)),
-            )
+        ProgressBar::new(usage.min(100) as f32, 100.)
+            .fg_color(colors.status.from_percentage(usage))
+            .bg_color(colors.elevated_surface_background)
+    }
+
+    /// A card header: icon plus title, the shape every section in this panel
+    /// opens with.
+    fn render_section_header(icon: IconName, title: &str) -> impl IntoElement {
+        h_flex()
+            .gap(Spacing::Medium.pixels())
+            .child(Icon::new(icon).size(IconSize::Medium).color(Color::Default))
+            .child(Label::new(title.to_string()).weight(FontWeight::MEDIUM))
     }
 
     fn render_usage_section(
@@ -95,51 +85,26 @@ impl SysInfoPanel {
         details: &str,
         cx: &App,
     ) -> impl IntoElement {
-        let theme = cx.theme();
-        let color = theme.colors.status.from_percentage(usage);
+        let color = cx.theme().colors.status.from_percentage(usage);
 
-        div()
+        v_flex()
             .w_full()
             .p(Spacing::Large.pixels())
-            .bg(theme.colors.surface_background)
-            .rounded(Radius::Medium.pixels())
-            .flex()
-            .flex_col()
+            .panel_card(cx)
             .gap(Spacing::Medium.pixels())
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                h_flex()
                     .justify_between()
+                    .child(Self::render_section_header(icon, title))
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(Spacing::Medium.pixels())
-                            .child(Icon::new(icon).size(IconSize::Medium).color(Color::Default))
-                            .child(
-                                div()
-                                    .text_size(TextSize::Default.rems())
-                                    .text_color(theme.colors.text)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(title.to_string()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_size(TextSize::Medium.rems())
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(color)
-                            .child(format!("{}%", usage)),
+                        Label::new(format!("{}%", usage))
+                            .size(TextSize::Medium)
+                            .color(Color::Custom(color))
+                            .weight(FontWeight::BOLD),
                     ),
             )
             .child(Self::render_progress_bar(usage, cx))
-            .child(
-                div()
-                    .text_size(TextSize::Small.rems())
-                    .text_color(theme.colors.text)
-                    .child(details.to_string()),
-            )
+            .child(Label::new(details.to_string()).size(TextSize::Small))
     }
 }
 
@@ -195,13 +160,7 @@ impl Render for SysInfoPanel {
 
         let disks = self.data.disks.clone();
 
-        // Pre-compute theme colors for closures
-        let text_primary = theme.colors.text;
-        let text_secondary = theme.colors.text;
-        let bg_secondary = theme.colors.surface_background;
-        let bg_tertiary = theme.colors.elevated_surface_background;
-
-        div()
+        v_flex()
             .id("sysinfo-panel")
             .w_full()
             .h_full()
@@ -209,14 +168,10 @@ impl Render for SysInfoPanel {
             .panel_surface(cx)
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
-            .flex()
-            .flex_col()
             .gap(Spacing::Large.pixels())
             // Header
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                h_flex()
                     .gap(Spacing::Medium.pixels())
                     .child(
                         Icon::new(IconName::Server)
@@ -224,11 +179,9 @@ impl Render for SysInfoPanel {
                             .color(Color::Default),
                     )
                     .child(
-                        div()
-                            .text_size(TextSize::Large.rems())
-                            .text_color(theme.colors.text)
-                            .font_weight(FontWeight::BOLD)
-                            .child("System Information"),
+                        Label::new("System Information")
+                            .size(TextSize::Large)
+                            .weight(FontWeight::BOLD),
                     ),
             )
             // CPU Section
@@ -257,156 +210,73 @@ impl Render for SysInfoPanel {
                     cx,
                 ))
             })
-            // Divider
-            .child(div().w_full().h(px(1.)).bg(theme.colors.border))
+            .child(Divider::horizontal())
             // Temperature
             .child(Self::render_info_row(
                 temp_icon,
                 "Temperature",
                 &temp_str,
                 temp_color,
-                cx,
             ))
             // Network section
             .child(
-                div()
+                v_flex()
                     .w_full()
                     .p(Spacing::Large.pixels())
-                    .bg(theme.colors.surface_background)
-                    .rounded(Radius::Medium.pixels())
-                    .flex()
-                    .flex_col()
+                    .panel_card(cx)
                     .gap(Spacing::Medium.pixels())
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(Spacing::Medium.pixels())
-                            .child(
-                                Icon::new(IconName::Network)
-                                    .size(IconSize::Medium)
-                                    .color(Color::Default),
-                            )
-                            .child(
-                                div()
-                                    .text_size(TextSize::Default.rems())
-                                    .text_color(theme.colors.text)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child("Network"),
-                            ),
-                    )
+                    .child(Self::render_section_header(IconName::Network, "Network"))
                     .child(Self::render_info_row(
                         IconName::Globe,
                         "IP Address",
                         &ip_str,
                         None,
-                        cx,
                     ))
                     .child(Self::render_info_row(
                         IconName::Download,
                         "Download",
                         &download_str,
                         None,
-                        cx,
                     ))
                     .child(Self::render_info_row(
                         IconName::Upload,
                         "Upload",
                         &upload_str,
                         None,
-                        cx,
                     )),
             )
             // Disks section
             .when(!disks.is_empty(), |el| {
                 el.child(
-                    div()
+                    v_flex()
                         .w_full()
                         .p(Spacing::Large.pixels())
-                        .bg(bg_secondary)
-                        .rounded(Radius::Medium.pixels())
-                        .flex()
-                        .flex_col()
+                        .panel_card(cx)
                         .gap(Spacing::Medium.pixels())
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(Spacing::Medium.pixels())
-                                .child(
-                                    Icon::new(IconName::HardDrive)
-                                        .size(IconSize::Medium)
-                                        .color(Color::Default),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(TextSize::Default.rems())
-                                        .text_color(text_primary)
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child("Disks"),
-                                ),
-                        )
+                        .child(Self::render_section_header(IconName::HardDrive, "Disks"))
                         .children(disks.iter().map(|disk| {
                             let details =
                                 format!("{:.1} GB / {:.1} GB", disk.used_gb, disk.total_gb);
                             let disk_color =
                                 theme.colors.status.from_percentage(disk.usage_percent);
-                            let width_percent = disk.usage_percent.min(100) as f32;
 
-                            div()
-                                .flex()
-                                .flex_col()
+                            v_flex()
                                 .gap(Spacing::XSmall.pixels())
+                                .child(Self::render_info_row(
+                                    IconName::Folder,
+                                    &disk.mount_point,
+                                    &format!("{}%", disk.usage_percent),
+                                    Some(disk_color),
+                                ))
                                 .child(
                                     div()
-                                        .w_full()
-                                        .flex()
-                                        .items_center()
-                                        .py(Spacing::Medium.pixels())
-                                        .child(
-                                            div().w(px(32.)).child(
-                                                Icon::new(IconName::Folder)
-                                                    .size(IconSize::Large)
-                                                    .color(Color::Custom(disk_color)),
-                                            ),
-                                        )
-                                        .child(
-                                            div()
-                                                .flex_1()
-                                                .text_size(TextSize::Default.rems())
-                                                .text_color(text_primary)
-                                                .child(disk.mount_point.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(TextSize::Default.rems())
-                                                .text_color(disk_color)
-                                                .font_weight(FontWeight::MEDIUM)
-                                                .child(format!("{}%", disk.usage_percent)),
-                                        ),
-                                )
-                                .child(
-                                    div().pl(px(32.)).child(
-                                        div()
-                                            .w_full()
-                                            .h(px(4.))
-                                            .rounded(px(2.))
-                                            .bg(bg_tertiary)
-                                            .child(
-                                                div()
-                                                    .h_full()
-                                                    .rounded(px(2.))
-                                                    .bg(disk_color)
-                                                    .w(gpui::relative(width_percent / 100.0)),
-                                            ),
-                                    ),
+                                        .pl(px(ROW_GUTTER))
+                                        .child(Self::render_progress_bar(disk.usage_percent, cx)),
                                 )
                                 .child(
                                     div()
-                                        .pl(px(32.))
-                                        .text_size(TextSize::Small.rems())
-                                        .text_color(text_secondary)
-                                        .child(details),
+                                        .pl(px(ROW_GUTTER))
+                                        .child(Label::new(details).size(TextSize::Small)),
                                 )
                         })),
                 )

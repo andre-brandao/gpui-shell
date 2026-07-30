@@ -3,9 +3,12 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Size, Window, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
-use ui::{ActiveTheme, Color, Icon, IconName};
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName,
+    LabelCommon,
+};
 
 use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -35,12 +38,12 @@ impl Mpris {
         Self { subscriber, data }
     }
 
-    fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
+    fn toggle_panel(&self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
         let panel_size = Size::new(px(380.0), px(420.0));
         let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
         let config = PanelConfig {
             width: 380.0,
             height: 420.0,
@@ -101,37 +104,26 @@ impl Mpris {
     ) -> AnyElement {
         let max_width = cx.config().bar.modules.mpris.max_width;
 
-        div()
-            .id("mpris-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .max_w(px(max_width))
-            .overflow_hidden()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| {
-                    this.toggle_panel(event, window, cx);
-                }),
-            )
+        ButtonLike::new("mpris-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
+                this.toggle_panel(event.position(), window, cx);
+            }))
             .child(
-                Icon::new(icon)
-                    .size(style::icon(is_vertical))
-                    .color(Color::Default),
+                style::stack(is_vertical)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    .max_w(px(max_width))
+                    .overflow_hidden()
+                    .child(
+                        Icon::new(icon)
+                            .size(style::icon(is_vertical))
+                            .color(Color::Default),
+                    )
+                    .when_some(label, |el, label| {
+                        el.child(style::bar_label(label, is_vertical, theme.colors.text).truncate())
+                    }),
             )
-            .when_some(label, |el, label| {
-                el.child(
-                    div()
-                        .flex_shrink(1.)
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .text_size(style::label_size(is_vertical).rems())
-                        .text_color(theme.colors.text)
-                        .child(label),
-                )
-            })
             .into_any_element()
     }
 }

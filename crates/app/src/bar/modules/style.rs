@@ -7,8 +7,11 @@
 //!
 //! Font sizes come from `TextSize` (XSmall/Small for vertical, Small/Medium for horizontal).
 
-use gpui::{AnyElement, Hsla, IntoElement, div, prelude::*, px};
-use ui::{Color, Icon, IconName, IconSize, Spacing, TextSize, Theme};
+use gpui::{AnyElement, Hsla, IntoElement, SharedString, prelude::*, px};
+use ui::{
+    Color, Divider, Icon, IconName, IconSize, Label, LabelCommon, Spacing, TextSize, Theme, h_flex,
+    v_flex,
+};
 
 use crate::bar::config::BarConfig;
 
@@ -103,18 +106,24 @@ pub fn widget_hover_background(theme: &Theme, bar: &BarConfig) -> Hsla {
     }
 }
 
+/// The label a bar widget puts next to its icon, in the size and color the
+/// orientation and state ask for.
+pub fn bar_label(text: impl Into<SharedString>, is_vertical: bool, color: Hsla) -> Label {
+    Label::new(text)
+        .size(label_size(is_vertical))
+        .color(Color::Custom(color))
+}
+
 /// Render a compact icon/value pair for status widgets.
 pub fn bar_stat(
-    _theme: &Theme,
     is_vertical: bool,
     icon_name: IconName,
-    value_text: impl IntoElement,
+    value_text: impl Into<SharedString>,
     color: Hsla,
 ) -> AnyElement {
-    div()
-        .flex()
-        .when(is_vertical, |el| el.flex_col())
-        .items_center()
+    let label = bar_label(value_text, is_vertical, color);
+
+    stack(is_vertical)
         .justify_center()
         .gap(px(CHIP_GAP))
         .child(
@@ -123,39 +132,36 @@ pub fn bar_stat(
                 .color(Color::Custom(color)),
         )
         .child(if is_vertical {
-            vertical_text_line(
-                div()
-                    .flex_shrink(1.)
-                    .text_size(label_size(is_vertical).rems())
-                    .text_color(color)
-                    .child(value_text),
-            )
+            vertical_text_line(label)
         } else {
-            div()
-                .flex_shrink(1.)
-                .text_size(label_size(is_vertical).rems())
-                .text_color(color)
-                .child(value_text)
-                .into_any_element()
+            label.into_any_element()
         })
         .into_any_element()
 }
 
-/// Center a vertical text row to a fixed axis so stacked labels do not drift visually.
-pub fn vertical_text_line(content: impl IntoElement) -> AnyElement {
-    div()
-        .w(px(VERTICAL_TEXT_LINE_WIDTH))
-        .flex()
-        .justify_center()
-        .child(content)
-        .into_any_element()
+/// The flex container a widget lays its content out in: a column on a
+/// vertical bar, a row on a horizontal one, centered either way.
+pub fn stack(is_vertical: bool) -> gpui::Div {
+    if is_vertical {
+        v_flex().items_center()
+    } else {
+        h_flex()
+    }
 }
 
-/// Render the subtle divider used inside dense horizontal widgets.
-pub fn section_divider(color: Hsla) -> AnyElement {
-    div()
-        .w(px(1.0))
-        .h(px(SECTION_DIVIDER_HEIGHT))
-        .bg(color)
+/// The subtle divider used inside dense horizontal widgets. Takes its colour
+/// from the widget border, which the bar config can switch off entirely.
+pub fn section_divider(color: Hsla) -> Divider {
+    Divider::vertical()
+        .color(color)
+        .length(px(SECTION_DIVIDER_HEIGHT))
+}
+
+/// Center a vertical text row to a fixed axis so stacked labels do not drift visually.
+pub fn vertical_text_line(content: impl IntoElement) -> AnyElement {
+    h_flex()
+        .w(px(VERTICAL_TEXT_LINE_WIDTH))
+        .justify_center()
+        .child(content)
         .into_any_element()
 }

@@ -3,9 +3,9 @@
 //! Clicking the widget opens a detailed system information panel.
 
 use crate::panel::{PanelConfig, toggle_panel};
-use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Size, Window, prelude::*, px};
 use services::SysInfoData;
-use ui::{ActiveTheme, IconName};
+use ui::{ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, IconName};
 
 mod config;
 pub use config::SysInfoConfig;
@@ -49,12 +49,12 @@ impl SysInfo {
         }
     }
 
-    fn toggle_panel(&mut self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
+    fn toggle_panel(&mut self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
         let panel_size = Size::new(px(350.0), px(450.0));
         let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
         let config = PanelConfig {
             width: 350.0,
             height: 450.0,
@@ -141,22 +141,19 @@ impl SysInfo {
         stats: Vec<SysInfoStat>,
         is_vertical: bool,
     ) -> AnyElement {
-        div()
-            .id("sysinfo-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| {
-                    this.toggle_panel(event, window, cx);
-                }),
-            )
-            .children(stats.into_iter().map(|stat| {
-                style::bar_stat(cx.theme(), is_vertical, stat.icon, stat.text, stat.color)
+        ButtonLike::new("sysinfo-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
+                this.toggle_panel(event.position(), window, cx);
             }))
+            .child(
+                style::stack(is_vertical)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    .children(stats.into_iter().map(|stat| {
+                        style::bar_stat(is_vertical, stat.icon, stat.text, stat.color)
+                    })),
+            )
             .into_any_element()
     }
 }

@@ -3,9 +3,9 @@
 mod config;
 pub use config::WorkspacesConfig;
 
-use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, prelude::*, px};
 use services::{CompositorCommand, CompositorState};
-use ui::{ActiveTheme, Radius};
+use ui::{ActiveTheme, Radius, h_flex};
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
@@ -128,10 +128,11 @@ impl Workspaces {
         let has_windows = ws.windows > 0;
         let label = Self::workspace_label(ws, is_vertical, config.show_numbers, config.show_icons);
 
-        div()
+        // Not a `ButtonLike`: the pill carries three background states
+        // (active / has windows / empty) and `ButtonStyle` has no per-state
+        // palette to express them.
+        h_flex()
             .id(format!("workspace-{}", ws.id))
-            .flex()
-            .items_center()
             .justify_center()
             .w(if is_vertical {
                 if is_active {
@@ -161,25 +162,18 @@ impl Workspaces {
                     s.bg(theme.colors.element_hover)
                 }
             })
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, _event, _window, _cx| {
-                    this.focus_workspace(workspace_id);
-                }),
-            )
+            .on_click(cx.listener(move |this, _, _, _| {
+                this.focus_workspace(workspace_id);
+            }))
             .when(!label.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_size(style::label_size(is_vertical).rems())
-                        .text_color(if is_active {
-                            theme.colors.background
-                        } else if has_windows {
-                            theme.colors.text
-                        } else {
-                            theme.colors.text_muted
-                        })
-                        .child(label),
-                )
+                let color = if is_active {
+                    theme.colors.background
+                } else if has_windows {
+                    theme.colors.text
+                } else {
+                    theme.colors.text_muted
+                };
+                this.child(style::bar_label(label, is_vertical, color))
             })
             .into_any_element()
     }
@@ -206,11 +200,8 @@ impl Workspaces {
             .filter(|&id| id >= 0)
             .or(self.state.active_workspace_id);
 
-        div()
+        style::stack(is_vertical)
             .id("workspaces")
-            .flex()
-            .when(is_vertical, |this| this.flex_col())
-            .items_center()
             .justify_center()
             .gap(px(style::group_gap(is_vertical)))
             .on_scroll_wheel(
