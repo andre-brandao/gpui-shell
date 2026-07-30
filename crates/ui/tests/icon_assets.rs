@@ -73,3 +73,51 @@ fn every_icon_inherits_its_color() {
         hardcoded.join("\n  ")
     );
 }
+
+/// gpui throws an SVG's colors away and keeps only its alpha
+/// ([`gpui::SvgRenderer`]), so "does it parse" is not enough: an icon that
+/// flattens to a filled box, or to nothing at all, passes every check above
+/// and still renders as a blob or as blank space. This measures what the
+/// renderer actually produces.
+///
+/// Both bounds have caught something real. The brand marks arrived as
+/// multi-variant logos where the wrong pick flattens solid, and two of them
+/// had to be reduced to the single path that defines the silhouette - taking
+/// the wrong path there yields either an empty render or the clip rect, i.e.
+/// full coverage.
+#[test]
+fn every_icon_renders_a_readable_silhouette() {
+    let renderer = gpui::SvgRenderer::new(std::sync::Arc::new(assets::Assets));
+
+    let mut coverage: Vec<(String, f32)> = Vec::new();
+    for name in IconName::iter() {
+        let bytes = assets::Assets
+            .load(&name.path())
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| panic!("{name:?} does not resolve"));
+
+        let image = renderer
+            .render_single_frame(&bytes, 1.0)
+            .unwrap_or_else(|error| panic!("{name:?} failed to render: {error}"));
+
+        let pixels = image.as_bytes(0).expect("rendered frame");
+        let opaque = pixels.chunks_exact(4).filter(|px| px[3] > 8).count();
+        coverage.push((
+            format!("{name:?}"),
+            opaque as f32 / (pixels.len() / 4) as f32,
+        ));
+    }
+
+    // The floor has to clear `WifiZero`, which is legitimately a single dot
+    // (~0.7%) - the lightest mark the set is ever meant to draw.
+    let blank: Vec<&(String, f32)> = coverage.iter().filter(|(_, c)| *c < 0.003).collect();
+    assert!(blank.is_empty(), "icon(s) render essentially nothing: {blank:?}");
+
+    let solid: Vec<&(String, f32)> = coverage.iter().filter(|(_, c)| *c > 0.92).collect();
+    assert!(solid.is_empty(), "icon(s) render as a filled box: {solid:?}");
+
+    coverage.sort_by(|a, b| b.1.total_cmp(&a.1));
+    println!("highest coverage: {:?}", &coverage[..6]);
+    println!("lowest coverage: {:?}", &coverage[coverage.len() - 6..]);
+}

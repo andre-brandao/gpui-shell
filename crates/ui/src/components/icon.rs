@@ -50,6 +50,15 @@ pub use crate::theme::IconSize;
 /// sensor icons - which a general-purpose UI catalogue has no reason to
 /// ship.
 ///
+/// Finally it carries the brand marks a shell has to name out loud, for the
+/// tray and the focused-window label: those come from
+/// [theSVG](https://thesvg.org) rather than Lucide, which ships no logos.
+/// Brand marks are solid glyphs rather than 2px strokes, so they read a
+/// little heavier than the rest of the set at the same size. gpui renders
+/// every SVG down to an alpha mask ([`gpui::SvgRenderer`]), so a multi-colour
+/// logo would flatten into an unreadable blob - each mark here is the
+/// single-colour build, or the one path that defines the silhouette.
+///
 /// Config files name icons the same way the assets do (`"battery_low"`), so
 /// serde and strum agree on `snake_case`.
 #[derive(
@@ -247,6 +256,25 @@ pub enum IconName {
     WifiOff,
     WifiZero,
     Zap,
+    Alacritty,
+    Bitwarden,
+    Chrome,
+    Discord,
+    Dropbox,
+    Firefox,
+    Kde,
+    Neovim,
+    Nextcloud,
+    OnePassword,
+    Slack,
+    Spotify,
+    Syncthing,
+    Tailscale,
+    Telegram,
+    Thunderbird,
+    VisualStudioCode,
+    Wezterm,
+    Zed,
 }
 
 impl IconName {

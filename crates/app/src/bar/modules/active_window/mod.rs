@@ -70,11 +70,43 @@ impl ActiveWindow {
         }
     }
 
+    /// Substring to icon, in match order.
+    ///
+    /// Brand marks first, then the "what it *is*" fallbacks - an editor we
+    /// don't have a logo for is still a `<>`, a terminal is still a prompt.
+    /// Order carries real weight here: the haystack is class *and* title, so
+    /// a generic needle like "code" would otherwise swallow any window whose
+    /// title merely mentions it.
+    const WINDOW_ICON_HINTS: &[(&str, IconName)] = &[
+        ("firefox", IconName::Firefox),
+        // "chromium" does not contain "chrome", so both spellings are needed.
+        ("chrome", IconName::Chrome),
+        ("chromium", IconName::Chrome),
+        ("telegram", IconName::Telegram),
+        ("discord", IconName::Discord),
+        ("vesktop", IconName::Discord),
+        ("slack", IconName::Slack),
+        ("spotify", IconName::Spotify),
+        ("thunderbird", IconName::Thunderbird),
+        ("alacritty", IconName::Alacritty),
+        ("wezterm", IconName::Wezterm),
+        ("neovim", IconName::Neovim),
+        ("nvim", IconName::Neovim),
+        // Zed's app id, not a bare "zed": that is a substring of "optimized"
+        // and "analyzed", which any editor could have in a window title.
+        ("dev.zed", IconName::Zed),
+        ("code", IconName::VisualStudioCode),
+        ("kitty", IconName::Terminal),
+        ("terminal", IconName::Terminal),
+        ("nautilus", IconName::Folder),
+        ("thunar", IconName::Folder),
+        ("dolphin", IconName::Folder),
+        ("files", IconName::Folder),
+    ];
+
     /// Icon for the focused window, keyed off its class/title.
     ///
-    /// The icon set carries no brand marks, so apps map onto what they *are*:
-    /// a browser is a globe, a chat client is a speech bubble, and anything
-    /// unrecognised falls back to a generic window.
+    /// Anything unrecognised falls back to a generic window.
     fn window_icon(&self) -> Option<IconName> {
         let window = self.state.active_window.as_ref()?;
         let haystack = format!(
@@ -84,41 +116,10 @@ impl ActiveWindow {
         );
 
         Some(
-            if haystack.contains("firefox")
-                || haystack.contains("chrome")
-                || haystack.contains("chromium")
-            {
-                IconName::Globe
-            } else if haystack.contains("telegram")
-                || haystack.contains("discord")
-                || haystack.contains("vesktop")
-            {
-                IconName::Chat
-            } else if haystack.contains("spotify") {
-                IconName::Music
-            } else if haystack.contains("thunderbird") {
-                IconName::Mail
-            } else if haystack.contains("code")
-                || haystack.contains("zed")
-                || haystack.contains("neovim")
-                || haystack.contains("nvim")
-            {
-                IconName::Code
-            } else if haystack.contains("kitty")
-                || haystack.contains("alacritty")
-                || haystack.contains("wezterm")
-                || haystack.contains("terminal")
-            {
-                IconName::Terminal
-            } else if haystack.contains("files")
-                || haystack.contains("nautilus")
-                || haystack.contains("thunar")
-                || haystack.contains("dolphin")
-            {
-                IconName::Folder
-            } else {
-                IconName::Layout
-            },
+            Self::WINDOW_ICON_HINTS
+                .iter()
+                .find(|(needle, _)| haystack.contains(needle))
+                .map_or(IconName::Layout, |&(_, icon)| icon),
         )
     }
 

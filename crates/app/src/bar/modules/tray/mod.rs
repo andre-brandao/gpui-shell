@@ -531,26 +531,33 @@ fn render_icon_name(name: IconName, icon_size: f32) -> AnyElement {
 
 /// Map a single identifier to an icon.
 ///
-/// The embedded set carries no brand marks, so tray apps map onto what they
-/// do - a password manager is a lock, a sync client is a cloud.
+/// Apps we ship a brand mark for get it. The rest still map onto what they
+/// *do* - a screenshot tool is a camera, a volume applet is a speaker - which
+/// is also where an app whose mark we don't have lands (Vesktop borrows
+/// Discord's, KDE Connect borrows KDE's).
 fn lookup_icon(key: &str) -> Option<IconName> {
     match key {
-        "discord" | "vesktop" | "slack" | "telegram" | "telegram-desktop" => Some(IconName::Chat),
-        "spotify" => Some(IconName::Music),
-        "firefox" | "chrome" | "google-chrome" | "chromium" | "chromium-browser" => {
-            Some(IconName::Globe)
-        }
-        "thunderbird" => Some(IconName::Mail),
-        "1password" | "bitwarden" => Some(IconName::Lock),
-        "dropbox" | "nextcloud" => Some(IconName::Cloud),
-        "syncthing" | "syncthingtray" => Some(IconName::Refresh),
+        "discord" | "vesktop" => Some(IconName::Discord),
+        "slack" => Some(IconName::Slack),
+        "telegram" | "telegram-desktop" => Some(IconName::Telegram),
+        "spotify" => Some(IconName::Spotify),
+        "firefox" => Some(IconName::Firefox),
+        // Chromium's mark is Chrome's shape in a single colour, and the alpha
+        // mask gpui renders keeps only the shape - so one file serves both.
+        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => Some(IconName::Chrome),
+        "thunderbird" => Some(IconName::Thunderbird),
+        "1password" => Some(IconName::OnePassword),
+        "bitwarden" => Some(IconName::Bitwarden),
+        "dropbox" => Some(IconName::Dropbox),
+        "nextcloud" => Some(IconName::Nextcloud),
+        "syncthing" | "syncthingtray" => Some(IconName::Syncthing),
         "nm-applet" | "network-manager" | "network-manager-applet" => Some(IconName::Wifi),
         "blueman" | "blueman-applet" | "blueman-tray" => Some(IconName::Bluetooth),
         "pasystray" | "pavucontrol" => Some(IconName::Volume),
         "udiskie" => Some(IconName::HardDrive),
         "flameshot" => Some(IconName::Camera),
-        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some(IconName::Phone),
-        "tailscale" | "tailscale-systray" => Some(IconName::Network),
+        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some(IconName::Kde),
+        "tailscale" | "tailscale-systray" => Some(IconName::Tailscale),
         "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => {
             Some(IconName::ScreenShare)
         }
@@ -596,30 +603,51 @@ fn get_icon_name(name: &str, app_id: Option<&str>) -> IconName {
     IconName::Circle
 }
 
+/// Substring to icon, in match order.
+///
+/// Brand marks come first on purpose: "nextcloud" also contains "cloud" and
+/// "syncthing" also contains "sync", and where we ship the mark it beats the
+/// generic bucket. The generic entries below stay as the catch-all for the
+/// applets we have no logo for.
+const ICON_HINTS: &[(&str, IconName)] = &[
+    ("firefox", IconName::Firefox),
+    // "chromium" does not contain "chrome", so both spellings are needed.
+    ("chrome", IconName::Chrome),
+    ("chromium", IconName::Chrome),
+    ("telegram", IconName::Telegram),
+    ("discord", IconName::Discord),
+    ("vesktop", IconName::Discord),
+    ("slack", IconName::Slack),
+    ("spotify", IconName::Spotify),
+    ("thunderbird", IconName::Thunderbird),
+    ("1password", IconName::OnePassword),
+    ("bitwarden", IconName::Bitwarden),
+    ("dropbox", IconName::Dropbox),
+    ("nextcloud", IconName::Nextcloud),
+    ("syncthing", IconName::Syncthing),
+    ("tailscale", IconName::Tailscale),
+    ("kdeconnect", IconName::Kde),
+    ("kde connect", IconName::Kde),
+    ("network", IconName::Wifi),
+    ("wifi", IconName::Wifi),
+    ("nm-", IconName::Wifi),
+    ("bluetooth", IconName::Bluetooth),
+    ("blue", IconName::Bluetooth),
+    ("audio", IconName::Volume),
+    ("volume", IconName::Volume),
+    ("pulse", IconName::Volume),
+    ("battery", IconName::BatteryFull),
+    ("power", IconName::BatteryFull),
+    ("vpn", IconName::Network),
+    ("cloud", IconName::Cloud),
+    ("sync", IconName::Cloud),
+    ("remote", IconName::ScreenShare),
+    ("remmina", IconName::ScreenShare),
+];
+
 fn infer_icon_from_hint(hint: &str) -> Option<IconName> {
-    if hint.contains("chrome") || hint.contains("chromium") {
-        Some(IconName::Globe)
-    } else if hint.contains("telegram") || hint.contains("discord") || hint.contains("vesktop") {
-        Some(IconName::Chat)
-    } else if hint.contains("spotify") {
-        Some(IconName::Music)
-    } else if hint.contains("network") || hint.contains("wifi") || hint.contains("nm-") {
-        Some(IconName::Wifi)
-    } else if hint.contains("bluetooth") || hint.contains("blue") {
-        Some(IconName::Bluetooth)
-    } else if hint.contains("audio") || hint.contains("volume") || hint.contains("pulse") {
-        Some(IconName::Volume)
-    } else if hint.contains("battery") || hint.contains("power") {
-        Some(IconName::BatteryFull)
-    } else if hint.contains("kdeconnect") || hint.contains("kde connect") {
-        Some(IconName::Phone)
-    } else if hint.contains("vpn") {
-        Some(IconName::Network)
-    } else if hint.contains("cloud") || hint.contains("dropbox") || hint.contains("sync") {
-        Some(IconName::Cloud)
-    } else if hint.contains("remote") || hint.contains("remmina") {
-        Some(IconName::ScreenShare)
-    } else {
-        None
-    }
+    ICON_HINTS
+        .iter()
+        .find(|(needle, _)| hint.contains(needle))
+        .map(|&(_, icon)| icon)
 }
