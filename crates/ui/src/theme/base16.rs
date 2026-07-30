@@ -393,10 +393,9 @@ mod tests {
         assert_eq!(light.appearance(), Appearance::Light);
     }
 
-    /// The bug this replaces: the old mapping made `border.subtle`
-    /// (`base07`, the lightest slot) far *more* visible than
-    /// `border.default` (`base04`). A "variant" border must be subtler
-    /// than the default one, i.e. closer to the surface it sits on.
+    /// A "variant" border must be subtler than the default one, i.e. closer
+    /// to the surface it sits on. Easy to invert by accident: `base07` is the
+    /// lightest slot, so mapping it to `border.subtle` makes it the loudest.
     #[test]
     fn border_variant_is_subtler_than_border() {
         let colors = Base16Palette::default().into_colors();

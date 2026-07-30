@@ -138,10 +138,9 @@ impl WebProviderConfig {
 mod tests {
     use super::*;
 
-    /// The regression that showed eight identical globes: a config that lists
-    /// its own providers replaces the default list, so every entry arrived
-    /// with `icon: None` and the fallback was a hardcoded globe. Marks have to
-    /// come from the provider itself, not from `WebConfig::default`.
+    /// A config that lists its own providers replaces the default list, so
+    /// every entry reaches us with `icon: None`. Marks have to come from the
+    /// provider itself, not from `WebConfig::default`.
     #[test]
     fn a_hand_written_provider_list_still_gets_brand_marks() {
         let hand_written: WebConfig = toml::from_str(

@@ -138,8 +138,8 @@ mod tests {
         );
     }
 
-    /// The regression that made a `position = "top"` bar come back vertical:
-    /// a stale glyph must degrade, not fail.
+    /// A stale glyph must degrade, not fail - a strict parse here would take
+    /// every other setting in the file down with it.
     #[test]
     fn an_unresolvable_value_degrades_to_none() {
         assert_eq!(ConfigIcon::parse("\u{f003b}"), None);

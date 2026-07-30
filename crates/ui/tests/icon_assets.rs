@@ -5,8 +5,7 @@
 //! filesystem. A file can be present on disk and still be unreachable at
 //! runtime - if the embed root and [`IconName::path`]'s prefix disagree, every
 //! lookup returns `None` and gpui silently paints nothing where the icon
-//! should be. An earlier version of this test checked the directory instead,
-//! and missed exactly that.
+//! should be. Checking the directory would miss exactly that.
 
 use gpui::AssetSource;
 use strum::IntoEnumIterator;
@@ -79,12 +78,6 @@ fn every_icon_inherits_its_color() {
 /// flattens to a filled box, or to nothing at all, passes every check above
 /// and still renders as a blob or as blank space. This measures what the
 /// renderer actually produces.
-///
-/// Both bounds have caught something real. The brand marks arrived as
-/// multi-variant logos where the wrong pick flattens solid, and two of them
-/// had to be reduced to the single path that defines the silhouette - taking
-/// the wrong path there yields either an empty render or the clip rect, i.e.
-/// full coverage.
 #[test]
 fn every_icon_renders_a_readable_silhouette() {
     let renderer = gpui::SvgRenderer::new(std::sync::Arc::new(assets::Assets));
@@ -112,10 +105,16 @@ fn every_icon_renders_a_readable_silhouette() {
     // The floor has to clear `WifiZero`, which is legitimately a single dot
     // (~0.7%) - the lightest mark the set is ever meant to draw.
     let blank: Vec<&(String, f32)> = coverage.iter().filter(|(_, c)| *c < 0.003).collect();
-    assert!(blank.is_empty(), "icon(s) render essentially nothing: {blank:?}");
+    assert!(
+        blank.is_empty(),
+        "icon(s) render essentially nothing: {blank:?}"
+    );
 
     let solid: Vec<&(String, f32)> = coverage.iter().filter(|(_, c)| *c > 0.92).collect();
-    assert!(solid.is_empty(), "icon(s) render as a filled box: {solid:?}");
+    assert!(
+        solid.is_empty(),
+        "icon(s) render as a filled box: {solid:?}"
+    );
 
     coverage.sort_by(|a, b| b.1.total_cmp(&a.1));
     println!("highest coverage: {:?}", &coverage[..6]);

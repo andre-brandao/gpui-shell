@@ -8,9 +8,9 @@ pub fn theme_path() -> anyhow::Result<PathBuf> {
     Ok(config_dir()?.join("theme.toml"))
 }
 
-/// Read `theme.toml`. A theme we can't parse is reported, not repaired: it
-/// used to be overwritten with the defaults here, which meant saving a
-/// half-edited file - the hot reload fires on every save - destroyed it.
+/// Read `theme.toml`. A theme we can't parse is reported, not repaired:
+/// hot reload fires on every save, so writing the defaults back here would
+/// destroy a file caught mid-edit.
 pub fn load_theme() -> anyhow::Result<Theme> {
     Ok(parse_toml::<StoredTheme>(&theme_path()?)?
         .map_or_else(Theme::default, StoredTheme::into_theme))

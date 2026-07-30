@@ -2,8 +2,8 @@
 //!
 //! `config.toml` is hand-written, so the app never writes to it: a dock pin
 //! toggled from the UI or a service mode set from `;s` lands in `state.toml`
-//! instead. That keeps the two writers apart - a config we failed to parse can
-//! no longer be replaced by defaults the next time something is pinned.
+//! instead. That keeps the two writers apart - a config we failed to parse is
+//! never replaced by defaults the next time something is pinned.
 //!
 //! Each field here overrides its `config.toml` counterpart rather than
 //! replacing it, so a hand-written value stays live until the UI overrides it.

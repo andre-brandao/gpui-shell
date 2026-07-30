@@ -20,20 +20,18 @@
 //! is built inside `Showcase::render`, so a single spinner dirties the whole
 //! page.
 //!
-//! What that costs is *not* rebuilding the cards. Measured with a probe
-//! around the body of `render`, building all ~40 cards takes 0.25ms of a
-//! ~19-23ms frame. The other 99% is what gpui does after `render` returns:
+//! What that costs is *not* rebuilding the cards, which is a small fraction
+//! of a frame. Almost all of it is what gpui does after `render` returns:
 //! `Window::draw` clears the taffy layout engine every frame, so the entire
-//! tree is re-laid-out, re-prepainted and re-painted from scratch. Shrinking
-//! the window to 400x300 does not change the frame time at all, which rules
-//! out fill rate - the cost is per element, not per pixel.
+//! tree is re-laid-out, re-prepainted and re-painted from scratch. The cost
+//! scales with element count, not pixels, so shrinking the window does not
+//! help.
 //!
 //! Two things would actually move the needle, neither of them done here:
 //!
-//! - `opt-level = "z"` in the workspace release profile. Rebuilt at
-//!   `opt-level = 3` the same page goes from ~23ms to ~19ms per frame
-//!   (43 -> 52fps), for ~7MB more binary. Zed's own release profile leaves
-//!   `opt-level` at its default of 3.
+//! - `opt-level = "z"` in the workspace release profile. Building at
+//!   `opt-level = 3` measurably cuts frame time for a larger binary; Zed's
+//!   own release profile leaves `opt-level` at its default of 3.
 //! - `Entity::cached(style)`. A cached child view whose entity is not in
 //!   `dirty_views` skips render/layout/prepaint entirely via
 //!   `Window::reuse_prepaint`, so an animation in one corner stops

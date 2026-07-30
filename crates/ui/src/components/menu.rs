@@ -8,8 +8,8 @@
 //! a focus handle so the dispatch tree routes Down / Up / Enter / Esc to
 //! the right element, and dismissal via [`gpui::DismissEvent`] so callers
 //! can subscribe instead of threading close-callbacks through every entry.
-//! All three demand a `Render` (entity) implementation rather than the
-//! `RenderOnce` builder this used to be.
+//! All three demand a `Render` (entity) implementation rather than a
+//! `RenderOnce` builder.
 //!
 //! ## Building one
 //!

@@ -100,10 +100,8 @@ pub fn service_status_icon(status: &ServiceStatus) -> IconName {
 mod tests {
     use super::*;
 
-    /// Each ramp has to actually change icon across its range - a ramp that
-    /// returns one icon everywhere is a constant wearing a function's coat,
-    /// which is what the first SVG pass left behind for volume and
-    /// brightness.
+    /// Each ramp has to actually change icon across its range - one that
+    /// returns the same icon everywhere is a constant, not a ramp.
     #[test]
     fn the_level_ramps_are_not_constants() {
         let volume = [0, 25, 100].map(|l| volume_icon(l, false));

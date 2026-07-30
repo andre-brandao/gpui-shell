@@ -1,10 +1,10 @@
 //! Disclosure - a chevron toggle for expandable sections / tree rows.
 //!
 //! Mirrors zed's `ui::Disclosure`: a small, ghost-background icon button
-//! that flips between a "closed" and "opened" chevron. Previously rendered
-//! its own `div` with ad-hoc hover/active palettes; now delegates to
-//! [`IconButton`] so hover/active/selected/disabled chrome stays in lockstep
-//! with every other button in the library and only lives in one place.
+//! that flips between a "closed" and "opened" chevron. Delegates to
+//! [`IconButton`] rather than styling its own `div`, so the
+//! hover/active/selected/disabled chrome stays in lockstep with every other
+//! button in the library and only lives in one place.
 
 use std::rc::Rc;
 
