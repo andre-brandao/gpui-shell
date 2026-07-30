@@ -8,7 +8,7 @@ use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
 
 use super::dispatch_notification_command;
-use super::pannel::NotificationCenter;
+use super::panel::NotificationCenter;
 
 /// Notification widget for the bar.
 pub struct NotificationWidget {

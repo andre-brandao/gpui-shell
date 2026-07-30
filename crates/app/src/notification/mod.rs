@@ -2,7 +2,7 @@
 
 mod card;
 mod config;
-mod pannel;
+mod panel;
 mod popup;
 mod widget;
 
