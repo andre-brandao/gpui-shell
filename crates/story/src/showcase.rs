@@ -398,6 +398,7 @@ impl Render for Showcase {
                             .flex_wrap()
                             .child(Button::new("btn-filled", "Filled").style(ButtonStyle::Filled))
                             .child(Button::new("btn-subtle", "Subtle").style(ButtonStyle::Subtle))
+                            .child(Button::new("btn-ghost", "Ghost").style(ButtonStyle::Ghost))
                             .child(
                                 Button::new("btn-outlined", "Outlined")
                                     .style(ButtonStyle::Outlined),

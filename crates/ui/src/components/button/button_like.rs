@@ -15,17 +15,20 @@
 //! escape hatch is a place engram's visual language can drift.
 //!
 //! Mirrors zed's `ui::ButtonLike`, scoped down to the bits engram actually
-//! exercises. Notably absent: dynamic spacing, focus-visible rings,
-//! right-click handling, configurable corner rounding, the `Component`
-//! preview registry. Add them when a real consumer needs them.
+//! exercises. Notably absent: dynamic spacing, focus-visible rings, the
+//! `Component` preview registry. Add them when a real consumer needs them.
+//!
+//! Secondary clicks take gpui's own route rather than zed's: one
+//! [`ButtonLike::on_aux_click`] covering right *and* middle, instead of
+//! zed's right-only `on_right_click` built from a synthesized `ClickEvent`.
 
 use std::rc::Rc;
 
 use crate::theme::{ActiveTheme, Radius};
 use gpui::{
     AnyElement, AnyView, App, ClickEvent, CursorStyle, DefiniteLength, Div, ElementId, FocusHandle,
-    Hsla, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Window, div, prelude::*,
-    relative, transparent_black,
+    Hsla, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Window,
+    div, prelude::*, relative, transparent_black,
 };
 use smallvec::SmallVec;
 
@@ -97,6 +100,10 @@ pub enum ButtonStyle {
     OutlinedGhost,
     /// Transparent until hover. Toolbar / inline-action style.
     Subtle,
+    /// Transparent with no border, tinting only on hover/active. The style
+    /// for dense icon strips - a bar's tray, a toolbar - where a resting
+    /// background would turn the strip into a row of boxes.
+    Ghost,
     /// Fully transparent in every state. Useful for buttons whose text is
     /// the only thing that should ever draw the eye.
     Transparent,
@@ -174,7 +181,7 @@ impl ButtonStyle {
                 background: colors.element_background,
                 border: colors.border,
             },
-            ButtonStyle::Transparent => ButtonLikeStyles {
+            ButtonStyle::Ghost | ButtonStyle::Transparent => ButtonLikeStyles {
                 background: transparent_black(),
                 border: transparent_black(),
             },
@@ -203,6 +210,10 @@ impl ButtonStyle {
             ButtonStyle::Subtle => ButtonLikeStyles {
                 background: colors.element_hover,
                 border: colors.border,
+            },
+            ButtonStyle::Ghost => ButtonLikeStyles {
+                background: colors.ghost_element_hover,
+                border: transparent_black(),
             },
             ButtonStyle::Transparent => ButtonLikeStyles {
                 background: transparent_black(),
@@ -237,6 +248,10 @@ impl ButtonStyle {
                 background: colors.element_active,
                 border: colors.border,
             },
+            ButtonStyle::Ghost => ButtonLikeStyles {
+                background: colors.ghost_element_active,
+                border: transparent_black(),
+            },
             ButtonStyle::Transparent => ButtonLikeStyles {
                 background: transparent_black(),
                 border: transparent_black(),
@@ -261,7 +276,7 @@ impl ButtonStyle {
                 background: transparent_black(),
                 border: colors.border_disabled,
             },
-            ButtonStyle::Transparent => ButtonLikeStyles {
+            ButtonStyle::Ghost | ButtonStyle::Transparent => ButtonLikeStyles {
                 background: transparent_black(),
                 border: transparent_black(),
             },
@@ -341,6 +356,7 @@ pub struct ButtonLike {
     pub(super) cursor_style: CursorStyle,
     pub(super) tooltip: Option<TooltipBuilder>,
     pub(super) on_click: Option<ClickHandler>,
+    pub(super) on_aux_click: Option<ClickHandler>,
     pub(super) children: SmallVec<[AnyElement; 2]>,
     pub(super) horizontal_padding: Option<Pixels>,
     pub(super) vertical_padding: Option<Pixels>,
@@ -363,6 +379,7 @@ impl ButtonLike {
             cursor_style: CursorStyle::PointingHand,
             tooltip: None,
             on_click: None,
+            on_aux_click: None,
             children: SmallVec::new(),
             horizontal_padding: None,
             vertical_padding: None,
@@ -374,6 +391,22 @@ impl ButtonLike {
     /// Set per-corner rounding. `None` means no rounding at all.
     pub(crate) fn rounding(mut self, rounding: impl Into<Option<ButtonLikeRounding>>) -> Self {
         self.rounding = rounding.into();
+        self
+    }
+
+    /// Handle the non-primary mouse buttons - right and middle - in one
+    /// callback. Discriminate with [`ClickEvent::is_right_click`] /
+    /// [`ClickEvent::is_middle_click`].
+    ///
+    /// Right-click deliberately does not move focus or paint the button's
+    /// active state: a secondary click opens a menu, it does not "press" the
+    /// thing it was aimed at. Propagation stops here so an ancestor's own
+    /// secondary handler doesn't fire for the same click.
+    pub fn on_aux_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_aux_click = Some(Rc::new(handler));
         self
     }
 
@@ -493,6 +526,7 @@ impl RenderOnce for ButtonLike {
         let cursor = self.cursor_style;
 
         let on_click = self.on_click;
+        let on_aux_click = self.on_aux_click;
         let tooltip = self.tooltip;
         let focus_handle = self.focus_handle;
         let tab_index = self.tab_index;
@@ -559,6 +593,13 @@ impl RenderOnce for ButtonLike {
             })
             .when_some(on_click.filter(|_| !is_disabled), |this, handler| {
                 this.on_click(move |event, window, cx| handler(event, window, cx))
+            })
+            .when_some(on_aux_click.filter(|_| !is_disabled), |this, handler| {
+                this.on_mouse_down(MouseButton::Right, |_, window, _| window.prevent_default())
+                    .on_aux_click(move |event, window, cx| {
+                        cx.stop_propagation();
+                        handler(event, window, cx)
+                    })
             })
             .children(children)
     }

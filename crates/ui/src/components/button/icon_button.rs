@@ -14,7 +14,7 @@ use gpui::{
 use crate::components::button::button_like::{
     ButtonCommon, ButtonLike, ButtonSize, ButtonStyle, SelectableButton,
 };
-use crate::components::icon::{Icon, IconName, IconSize};
+use crate::components::icon::{Icon, IconSize, IconSource};
 use crate::traits::{Clickable, Disableable, ToggleState, Toggleable};
 
 /// A square icon-only button.
@@ -22,19 +22,31 @@ use crate::traits::{Clickable, Disableable, ToggleState, Toggleable};
 #[must_use = "IconButton does nothing unless rendered"]
 pub struct IconButton {
     base: ButtonLike,
-    icon: IconName,
+    icon: IconSource,
     icon_color: Option<Color>,
     icon_size: Option<IconSize>,
 }
 
 impl IconButton {
-    pub fn new(id: impl Into<ElementId>, icon: IconName) -> Self {
+    /// Takes an [`IconSource`] rather than only an [`IconName`] so a
+    /// user-configured icon (a path from `config.toml`) is still a button
+    /// rather than a hand-rolled clickable div.
+    pub fn new(id: impl Into<ElementId>, icon: impl Into<IconSource>) -> Self {
         Self {
             base: ButtonLike::new(id),
-            icon,
+            icon: icon.into(),
             icon_color: None,
             icon_size: None,
         }
+    }
+
+    /// See [`ButtonLike::on_aux_click`].
+    pub fn on_aux_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.base = self.base.on_aux_click(handler);
+        self
     }
 
     /// Override the icon color. When unset, the color is derived from the
