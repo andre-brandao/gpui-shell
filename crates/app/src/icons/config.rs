@@ -5,7 +5,7 @@
 //! icon with a warning, rather than failing the TOML parse and taking every
 //! other setting in the file down with it.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -27,7 +27,10 @@ use ui::{IconName, IconSource};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigIcon {
     Embedded(IconName),
-    File(PathBuf),
+    /// Held as an `Arc<Path>` rather than a `PathBuf` because [`Self::source`]
+    /// runs once per widget per frame: an `Arc` clone is a refcount bump,
+    /// where rebuilding one from a `PathBuf` would copy the path every time.
+    File(Arc<Path>),
 }
 
 impl ConfigIcon {
@@ -35,7 +38,7 @@ impl ConfigIcon {
     pub fn source(&self) -> IconSource {
         match self {
             Self::Embedded(name) => IconSource::Embedded(*name),
-            Self::File(path) => IconSource::External(Arc::from(path.as_path())),
+            Self::File(path) => IconSource::External(path.clone()),
         }
     }
 
@@ -46,7 +49,7 @@ impl ConfigIcon {
         }
 
         if raw.starts_with('~') || raw.contains('/') {
-            return Some(Self::File(expand_home(raw)));
+            return Some(Self::File(expand_home(raw).into()));
         }
 
         raw.parse().ok().map(Self::Embedded)
@@ -117,7 +120,7 @@ mod tests {
     fn anything_with_a_separator_is_a_path() {
         assert_eq!(
             ConfigIcon::parse("./icons/mine.svg"),
-            Some(ConfigIcon::File(PathBuf::from("./icons/mine.svg")))
+            Some(ConfigIcon::File(Arc::from(Path::new("./icons/mine.svg"))))
         );
     }
 
@@ -129,9 +132,9 @@ mod tests {
 
         assert_eq!(
             ConfigIcon::parse("~/icons/mine.svg"),
-            Some(ConfigIcon::File(PathBuf::from(
+            Some(ConfigIcon::File(Arc::from(Path::new(
                 "/home/tester/icons/mine.svg"
-            )))
+            ))))
         );
     }
 
