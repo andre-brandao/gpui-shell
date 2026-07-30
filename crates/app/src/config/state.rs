@@ -9,16 +9,14 @@
 //! replacing it, so a hand-written value stays live until the UI overrides it.
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::PathBuf;
 
-use anyhow::Context;
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
 use services::ServiceMode;
 
 use super::ActiveConfig;
-use super::persistence::{config_dir, write_toml};
+use super::persistence::{config_dir, parse_toml, write_toml};
 
 /// State written by the shell itself.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -100,14 +98,7 @@ pub(super) fn state_path() -> anyhow::Result<PathBuf> {
 }
 
 fn load() -> anyhow::Result<State> {
-    let path = state_path()?;
-    if !path.exists() {
-        return Ok(State::default());
-    }
-
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read state file: {}", path.display()))?;
-    toml::from_str(&raw).with_context(|| format!("Failed to parse state file: {}", path.display()))
+    Ok(parse_toml(&state_path()?)?.unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -147,7 +138,10 @@ mod tests {
         let encoded = toml::to_string_pretty(&state).expect("state serializes");
         let decoded: State = toml::from_str(&encoded).expect("state parses back");
 
-        assert_eq!(decoded.pinned.as_deref(), Some(&["firefox.desktop".to_string()][..]));
+        assert_eq!(
+            decoded.pinned.as_deref(),
+            Some(&["firefox.desktop".to_string()][..])
+        );
         assert_eq!(decoded.services.get("tray"), Some(&ServiceMode::Off));
     }
 

@@ -65,6 +65,23 @@ impl NotificationData {
     }
 }
 
+/// A notification the shell posts about itself, one per slot: posting the same
+/// slot again replaces its card instead of stacking a second one, so a config
+/// error that re-fires on every bad save stays a single card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalSlot {
+    ConfigError,
+    ThemeError,
+}
+
+impl LocalSlot {
+    /// Slot ids count down from the top of the range and the daemon's count up
+    /// from 1, so the two can never meet.
+    fn id(self) -> u32 {
+        u32::MAX - self as u32
+    }
+}
+
 /// Commands for the notification service.
 #[derive(Debug, Clone)]
 pub enum NotificationCommand {
@@ -109,6 +126,54 @@ impl NotificationSubscriber {
             .filter_map(|id| data.notifications.iter().find(|n| n.id == *id).cloned())
             .take(limit)
             .collect()
+    }
+
+    /// Post a notification from the shell itself. We *are* the notification
+    /// daemon, so it goes straight into the state rather than out over D-Bus -
+    /// which also means it still shows when the bus name went to someone else
+    /// or the service is off.
+    ///
+    /// It stays until dismissed: an error the user has not read yet is worth
+    /// more than a tidy popup stack.
+    pub fn post_local(&self, slot: LocalSlot, summary: String, body: String) {
+        let id = slot.id();
+        let notification = Notification {
+            id,
+            app_name: "GPUi Shell".to_string(),
+            summary,
+            body,
+            urgency: 2,
+            timeout_ms: 0,
+            timestamp_ms: Utc::now().timestamp_millis(),
+            ..Notification::default()
+        };
+
+        let mut data = self.data.lock_mut();
+        data.notifications.retain(|n| n.id != id);
+        data.popup_ids.retain(|n| *n != id);
+        data.notifications.insert(0, notification);
+        // Do-not-disturb still applies: it lands in the center, unread.
+        if !data.dnd {
+            data.popup_ids.insert(0, id);
+        }
+        data.recompute_unread();
+    }
+
+    /// Drop a slot's notification, once whatever it complained about is fixed.
+    /// Only that card goes - nothing else can hold a slot id - and when the
+    /// slot is empty nothing is touched at all: this runs on every good save,
+    /// and every write lock wakes every subscriber.
+    pub fn clear_local(&self, slot: LocalSlot) {
+        let id = slot.id();
+        let posted = self
+            .data
+            .lock_ref()
+            .notifications
+            .iter()
+            .any(|n| n.id == id);
+        if posted {
+            remove_notification(&self.data, id);
+        }
     }
 
     pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
@@ -600,6 +665,59 @@ trait Notifications {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A config error has to reach the center as one sticky card, and the next
+    /// one about the same file must replace it rather than stack - a bad file
+    /// gets saved repeatedly while it is being fixed.
+    #[test]
+    fn a_local_slot_holds_a_single_sticky_notification() {
+        let notifications = NotificationSubscriber::new();
+
+        notifications.post_local(LocalSlot::ConfigError, "first".into(), "body".into());
+        notifications.post_local(LocalSlot::ConfigError, "second".into(), "body".into());
+
+        let data = notifications.get();
+        assert_eq!(data.notifications.len(), 1);
+        assert_eq!(data.notifications[0].summary, "second");
+        assert_eq!(data.unread_count, 1);
+        // Never expires on its own, and sits above the daemon's ids.
+        assert_eq!(data.notifications[0].timeout_ms, 0);
+        assert_eq!(data.popup_ids, vec![u32::MAX]);
+
+        notifications.clear_local(LocalSlot::ConfigError);
+        assert!(notifications.get().notifications.is_empty());
+    }
+
+    /// A file that parses again clears its own card and nothing else: neither
+    /// the other file's, nor anything that came in over the bus.
+    #[test]
+    fn clearing_a_slot_leaves_every_other_notification_alone() {
+        let notifications = NotificationSubscriber::new();
+        notifications.post_local(LocalSlot::ConfigError, "config".into(), String::new());
+        notifications.post_local(LocalSlot::ThemeError, "theme".into(), String::new());
+        notifications
+            .data
+            .lock_mut()
+            .notifications
+            .push(Notification {
+                id: 7,
+                summary: "from an app on the bus".to_string(),
+                ..Notification::default()
+            });
+
+        notifications.clear_local(LocalSlot::ConfigError);
+        // The second call has nothing left to do, and must not take the
+        // neighbours with it.
+        notifications.clear_local(LocalSlot::ConfigError);
+
+        let surviving: Vec<u32> = notifications
+            .get()
+            .notifications
+            .iter()
+            .map(|n| n.id)
+            .collect();
+        assert_eq!(surviving, vec![LocalSlot::ThemeError.id(), 7]);
+    }
 
     #[test]
     fn plain_path_unchanged() {

@@ -66,7 +66,8 @@ state size and the restart/stop/mode actions.
 from `;s`) goes to `state.toml` and overrides its `config.toml` counterpart
 (`crates/app/src/config/state.rs`). A file that stops parsing therefore costs
 the session its settings but never the file - hot reload keeps the last good
-value, and `gpuishell --validate` prints where the parse gave up.
+value, a sticky notification names the file that failed (cleared when it parses
+again), and `gpuishell --validate` prints where the parse gave up.
 
 ### UI Components
 

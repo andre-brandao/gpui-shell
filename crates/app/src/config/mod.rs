@@ -7,13 +7,14 @@ mod theme;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use anyhow::Context;
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
-use services::{FileWatcher, ServiceMode};
+use services::{FileWatcher, LocalSlot, ServiceMode};
 use ui::{StoredTheme, Theme};
 
 pub use state::State;
+
+use crate::state::AppState;
 
 pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
 pub use crate::control_center::ControlCenterConfig;
@@ -102,16 +103,28 @@ impl Config {
     /// stopped parsing mid-edit leaves the running config alone.
     pub fn reload(cx: &mut App) {
         match persistence::load() {
-            Ok(config) => *cx.global_mut::<Config>() = config,
-            Err(err) => tracing::warn!("Failed to reload config from disk: {err:#}"),
+            Ok(config) => {
+                *cx.global_mut::<Config>() = config;
+                AppState::notification(cx).clear_local(LocalSlot::ConfigError);
+            }
+            Err(err) => {
+                tracing::warn!("Failed to reload config from disk: {err:#}");
+                notify_parse_failure(LocalSlot::ConfigError, "config.toml", &err, cx);
+            }
         }
     }
 
     /// Reload theme from disk and replace the global theme.
     fn reload_theme(cx: &mut App) {
         match theme::persistence::load_theme() {
-            Ok(theme) => Theme::set(theme, cx),
-            Err(err) => tracing::warn!("Failed to reload theme from disk: {err:#}"),
+            Ok(theme) => {
+                Theme::set(theme, cx);
+                AppState::notification(cx).clear_local(LocalSlot::ThemeError);
+            }
+            Err(err) => {
+                tracing::warn!("Failed to reload theme from disk: {err:#}");
+                notify_parse_failure(LocalSlot::ThemeError, "theme.toml", &err, cx);
+            }
         }
     }
 
@@ -197,30 +210,19 @@ impl ActiveConfig for App {
 /// non-zero - the point is to check a file before the shell reloads it.
 pub fn validate() -> bool {
     fn check<T: serde::de::DeserializeOwned>(path: anyhow::Result<PathBuf>) -> bool {
-        let path = match path {
-            Ok(path) => path,
+        let verdict = path.and_then(|path| {
+            let verdict = match persistence::parse_toml::<T>(&path)? {
+                Some(_) => "ok",
+                None => "absent, defaults apply",
+            };
+            println!("{}: {verdict}", path.display());
+            Ok(())
+        });
+
+        match verdict {
+            Ok(()) => true,
             Err(err) => {
                 eprintln!("{err:#}");
-                return false;
-            }
-        };
-
-        if !path.exists() {
-            println!("{}: absent, defaults apply", path.display());
-            return true;
-        }
-
-        let parsed = std::fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read {}", path.display()))
-            .and_then(|raw| Ok(toml::from_str::<T>(&raw)?));
-
-        match parsed {
-            Ok(_) => {
-                println!("{}: ok", path.display());
-                true
-            }
-            Err(err) => {
-                eprintln!("{}:\n{err:#}", path.display());
                 false
             }
         }
@@ -232,8 +234,51 @@ pub fn validate() -> bool {
         & check::<State>(state::state_path())
 }
 
+/// Notify about anything [`Config::init`] could not parse. Called once the
+/// notification service exists - `init` runs before it, so it has nobody to
+/// tell. Re-reading two small files beats threading the errors through.
+pub fn report_load_errors(cx: &App) {
+    if let Err(err) = persistence::load() {
+        notify_parse_failure(LocalSlot::ConfigError, "config.toml", &err, cx);
+    }
+
+    if let Err(err) = theme::persistence::load_theme() {
+        notify_parse_failure(LocalSlot::ThemeError, "theme.toml", &err, cx);
+    }
+}
+
+/// Tell the user, where they will actually see it, that a file did not load.
+/// The warning in the log scrolls past unread; this is the visible half of the
+/// same message, and it stays until the file parses again.
+fn notify_parse_failure(slot: LocalSlot, file: &str, err: &anyhow::Error, cx: &App) {
+    AppState::notification(cx).post_local(slot, format!("{file} was not loaded"), one_line(err));
+}
+
+/// Flatten a parse diagnostic into one line. The caret block toml draws is
+/// noise in a notification card, and the reason - `unknown variant ...` - is
+/// the line underneath it.
+fn one_line(err: &anyhow::Error) -> String {
+    format!("{err:#}")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !is_snippet(line))
+        .collect::<Vec<_>>()
+        .join(" - ")
+}
+
+/// A line of the `2 | position = "sideways"` block toml prints under an error.
+fn is_snippet(line: &str) -> bool {
+    line.starts_with('|')
+        || line.contains("^^^")
+        || line
+            .split_once(" | ")
+            .is_some_and(|(number, _)| number.chars().all(|c| c.is_ascii_digit()))
+}
+
 #[cfg(test)]
 mod tests {
+    use anyhow::Context;
+
     use super::*;
 
     /// Hand-written service modes stay readable from `config.toml`; the
@@ -254,6 +299,25 @@ mod tests {
         assert_eq!(decoded.services.get("tray"), Some(&ServiceMode::Lazy));
         assert_eq!(decoded.services.get("bluetooth"), Some(&ServiceMode::Off));
         assert_eq!(decoded.services.get("audio"), None);
+    }
+
+    /// What lands in the notification card: one line, and the reason the parse
+    /// failed has to survive - it is the only part the user can act on.
+    #[test]
+    fn a_parse_diagnostic_flattens_to_one_readable_line() {
+        let err = toml::from_str::<Config>("[bar]\nposition = \"sideways\"\n")
+            .map_err(anyhow::Error::from)
+            .context("Failed to parse /tmp/config.toml")
+            .expect_err("that position does not exist");
+
+        let line = one_line(&err);
+
+        assert_eq!(line.lines().count(), 1, "{line}");
+        assert!(line.contains("Failed to parse /tmp/config.toml"), "{line}");
+        assert!(line.contains("line 2, column 12"), "{line}");
+        assert!(line.contains("unknown variant `sideways`"), "{line}");
+        assert!(!line.contains("^^^"), "{line}");
+        assert!(!line.contains("position = "), "{line}");
     }
 
     /// Parses the config actually on this machine, if there is one. Skips

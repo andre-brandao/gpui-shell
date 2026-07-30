@@ -44,7 +44,7 @@ pub use network::{
     NetworkData, NetworkStatistics, NetworkSubscriber,
 };
 pub use notification::{
-    Notification, NotificationCommand, NotificationData, NotificationSubscriber,
+    LocalSlot, Notification, NotificationCommand, NotificationData, NotificationSubscriber,
 };
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
 pub use status::ServiceStatus;

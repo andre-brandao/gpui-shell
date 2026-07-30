@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use super::Config;
 
@@ -27,17 +28,28 @@ pub fn config_path() -> anyhow::Result<PathBuf> {
 
 pub fn load() -> anyhow::Result<Config> {
     let path = config_path()?;
+    match parse_toml(&path)? {
+        Some(config) => Ok(config),
+        None => {
+            let config = Config::default();
+            write_toml(&path, &config)?;
+            Ok(config)
+        }
+    }
+}
+
+/// Read and parse a TOML file. `Ok(None)` when it isn't there, so every caller
+/// decides for itself what an absent file means.
+pub(super) fn parse_toml<T: DeserializeOwned>(path: &Path) -> anyhow::Result<Option<T>> {
     if !path.exists() {
-        let config = Config::default();
-        write_toml(&path, &config)?;
-        return Ok(config);
+        return Ok(None);
     }
 
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-    let parsed = toml::from_str::<Config>(&raw)
-        .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
-    Ok(parsed)
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let parsed =
+        toml::from_str(&raw).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok(Some(parsed))
 }
 
 /// Serialize `value` into `path`, creating the config directory if needed.
