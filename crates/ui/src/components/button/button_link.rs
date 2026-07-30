@@ -1,12 +1,8 @@
 //! [`ButtonLink`] - an underlined text link that opens a URL.
-//!
-//! Renders as an underlined label with an optional trailing arrow icon to
-//! communicate that clicking navigates outside the app. Has no inner
-//! padding - the link sits flush with surrounding text.
 
 use gpui::{App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window, prelude::*};
 
-use crate::components::button::button_like::ButtonLike;
+use crate::components::button::button_like::{ButtonCommon, ButtonLike, ButtonStyle};
 use crate::components::icon::{Icon, IconName, IconSize};
 use crate::components::label::{Label, LabelCommon};
 use crate::components::stack::h_flex;
@@ -58,7 +54,7 @@ impl RenderOnce for ButtonLink {
         let link = self.link;
 
         // Zero-padding link - matches Zed's ButtonSize::None behavior.
-        let mut btn = ButtonLike::new(id);
+        let mut btn = ButtonLike::new(id).style(ButtonStyle::Transparent);
         btn.base = btn.base.self_start();
         btn.padding(gpui::px(0.0), gpui::px(0.0))
             .child(
