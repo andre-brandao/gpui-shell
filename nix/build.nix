@@ -121,6 +121,24 @@ let
 
       cargoVendorDir = craneLib.vendorCargoDeps {
         inherit src cargoLock;
+
+        # bindgen's clang_macro_fallback drops its scratch .macro_eval.c and
+        # *.pch into the build script's CWD, which is the vendored crate dir -
+        # read-only in the store. The write fails, the fallback silently turns
+        # itself off, and every cast macro (SPA_ID_INVALID, ...) disappears from
+        # the bindings. Point the scratch dir at OUT_DIR instead.
+        overrideVendorCargoPackage =
+          p: drv:
+          if p.name == "libspa-sys" || p.name == "pipewire-sys" then
+            drv.overrideAttrs (_: {
+              postPatch = ''
+                substituteInPlace build.rs \
+                  --replace-fail '.clang_macro_fallback()' \
+                    '.clang_macro_fallback().clang_macro_fallback_build_dir(env::var("OUT_DIR").unwrap())'
+              '';
+            })
+          else
+            drv;
       };
 
     };
