@@ -23,3 +23,9 @@ notice for the subset Lucide derives from Feather.
 `crates/ui/tests/icon_assets.rs` fails if a name has no file, or a file has
 no name — a mismatch is otherwise invisible, since gpui silently paints
 nothing when an icon path doesn't resolve.
+
+No rebuild step to remember: `build.rs` watches this directory, so adding a
+file here invalidates the crate. Without that, `rust-embed` only leaves
+cargo tracking the files it embedded last time, and a new icon resolves on
+disk (so the tests pass) while the shipped binary keeps a bundle that never
+had it.
