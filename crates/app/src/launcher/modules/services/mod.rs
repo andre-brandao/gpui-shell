@@ -20,7 +20,7 @@ use ui::{
 use crate::icons;
 
 use self::config::ServicesConfig;
-use crate::config::Config;
+use crate::config::State;
 
 /// Icon for the services view itself, and for any service without a more
 /// specific one.
@@ -359,7 +359,7 @@ impl LauncherView for ServicesView {
                 if mode == ServiceMode::Off {
                     service.stop();
                 }
-                Config::set_service_mode(name, mode, cx);
+                State::set_service_mode(name, mode, cx);
             }
         }
 

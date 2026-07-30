@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use gpui::{AnyWindowHandle, App, Context, DisplayId, Global, Window};
 use services::{ManagedService, ServiceMode};
 
-use crate::config::Config;
+use crate::config::State;
 
 /// Maps each bar window to the display it was explicitly opened on.
 ///
@@ -204,13 +204,12 @@ impl AppState {
     /// Apply the configured startup mode to every service, starting the
     /// eager ones. Lazy services start on first access, `off` ones never do.
     fn start_services(cx: &App) {
-        let config = Config::global(cx);
         for service in Self::services(cx).managed() {
             if !service.controllable() {
                 continue;
             }
 
-            let mode = config.service_mode(service.name());
+            let mode = State::service_mode(service.name(), cx);
             service.lifecycle().set_mode(mode);
             if mode == ServiceMode::Eager {
                 service.start();

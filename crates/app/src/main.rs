@@ -6,6 +6,7 @@
 //! Usage:
 //!   gpuishell              - Start the shell or open launcher if already running
 //!   gpuishell --input "x"  - Open launcher with prefilled input
+//!   gpuishell --validate   - Check the config files and exit
 
 use crate::ipc::IpcSubscriber;
 use assets::Assets;
@@ -38,6 +39,11 @@ async fn main() {
 
     // Parse command-line arguments
     let args = args::Args::parse();
+
+    // Before the single-instance check: a running shell must not swallow this.
+    if args.validate {
+        std::process::exit(if config::validate() { 0 } else { 1 });
+    }
 
     // Try to acquire single-instance lock or signal existing instance.
     // Secondary path exits immediately after signaling the primary instance.

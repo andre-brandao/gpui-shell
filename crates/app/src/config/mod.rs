@@ -1,14 +1,19 @@
 //! Application configuration stored as a GPUI global.
 
 mod persistence;
+mod state;
 mod theme;
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
+use anyhow::Context;
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
 use services::{FileWatcher, ServiceMode};
-use ui::Theme;
+use ui::{StoredTheme, Theme};
+
+pub use state::State;
 
 pub use crate::bar::config::{BarConfig, BarPosition, ModulesConfig};
 pub use crate::control_center::ControlCenterConfig;
@@ -29,6 +34,8 @@ pub struct Config {
     pub dock: DockConfig,
     /// Startup mode per service, keyed by the lowercased service name
     /// (`audio`, `tray`, ...). Services absent from the map start eagerly.
+    /// Setting a mode from `;s` writes `state.toml`, which then overrides
+    /// this per service.
     pub services: BTreeMap<String, ServiceMode>,
     /// Watch config.toml for changes and hot-reload (requires restart to change).
     pub watch_config: bool,
@@ -56,18 +63,17 @@ impl Global for Config {}
 
 impl Config {
     /// Initialize the global config.
+    ///
+    /// A file we can't parse costs the session its settings, but never the
+    /// file itself: the app only ever writes `state.toml` (see
+    /// [`State`]), and both watchers keep the last good value until the
+    /// next save fixes the file. `gpuishell --validate` reports where the
+    /// parse gave up.
     pub fn init(cx: &mut App) {
-        // ponytail: one bad field discards the whole file. Icon fields are
-        // lenient (see `crate::icons::deserialize_lenient`) because that is
-        // where it bit us, but any other invalid value - a misspelt enum, a
-        // malformed float - still silently reverts every setting to its
-        // default, with only a log line to say so. Fix by surfacing the
-        // parse error in the UI, or by making each section fall back
-        // independently, if it bites again.
         let config = match persistence::load() {
             Ok(config) => config,
             Err(err) => {
-                tracing::warn!("Failed to load config, using defaults: {}", err);
+                tracing::warn!("Failed to load config, using defaults: {err:#}");
                 Config::default()
             }
         };
@@ -75,32 +81,15 @@ impl Config {
         let theme = match theme::persistence::load_theme() {
             Ok(theme) => theme,
             Err(err) => {
-                tracing::warn!("Failed to load theme, using defaults: {}", err);
+                tracing::warn!("Failed to load theme, using defaults: {err:#}");
                 Theme::default()
             }
         };
 
         cx.set_global(theme);
         cx.set_global(config);
+        State::init(cx);
         Self::start_hot_reload(cx);
-    }
-
-    /// Startup mode configured for a service.
-    pub fn service_mode(&self, name: &str) -> ServiceMode {
-        self.services
-            .get(&name.to_lowercase())
-            .copied()
-            .unwrap_or_default()
-    }
-
-    /// Set a service's startup mode and persist it.
-    pub fn set_service_mode(name: &str, mode: ServiceMode, cx: &mut App) {
-        Self::global_mut(cx)
-            .services
-            .insert(name.to_lowercase(), mode);
-        if let Err(err) = Self::save(cx) {
-            tracing::warn!("Failed to persist service mode: {}", err);
-        }
     }
 
     /// Get the global config.
@@ -109,30 +98,12 @@ impl Config {
         cx.global::<Config>()
     }
 
-    /// Get the global config mutably.
-    #[inline(always)]
-    pub fn global_mut(cx: &mut App) -> &mut Config {
-        cx.global_mut::<Config>()
-    }
-
-    /// Replace the global config without persisting it.
-    fn replace(config: Config, cx: &mut App) {
-        *cx.global_mut::<Config>() = config;
-    }
-
-    /// Replace and persist the global config.
-    pub fn set(config: Config, cx: &mut App) {
-        Self::replace(config, cx);
-        if let Err(err) = persistence::save(cx.global::<Config>()) {
-            tracing::warn!("Failed to persist config: {}", err);
-        }
-    }
-
-    /// Reload config from disk and replace the global config.
+    /// Reload config from disk and replace the global config. A file that
+    /// stopped parsing mid-edit leaves the running config alone.
     pub fn reload(cx: &mut App) {
         match persistence::load() {
-            Ok(config) => Self::replace(config, cx),
-            Err(err) => tracing::warn!("Failed to reload config from disk: {}", err),
+            Ok(config) => *cx.global_mut::<Config>() = config,
+            Err(err) => tracing::warn!("Failed to reload config from disk: {err:#}"),
         }
     }
 
@@ -140,18 +111,8 @@ impl Config {
     fn reload_theme(cx: &mut App) {
         match theme::persistence::load_theme() {
             Ok(theme) => Theme::set(theme, cx),
-            Err(err) => tracing::warn!("Failed to reload theme from disk: {}", err),
+            Err(err) => tracing::warn!("Failed to reload theme from disk: {err:#}"),
         }
-    }
-
-    /// Persist the current config to disk.
-    pub fn save(cx: &App) -> anyhow::Result<()> {
-        persistence::save(cx.global::<Config>())
-    }
-
-    /// Persist a provided config to disk.
-    pub fn save_config(config: &Config) -> anyhow::Result<()> {
-        persistence::save(config)
     }
 
     /// Persist current global theme colors to `theme.toml`.
@@ -174,7 +135,7 @@ impl Config {
             let config_path = match persistence::config_path() {
                 Ok(path) => path,
                 Err(err) => {
-                    tracing::warn!("Failed to determine config path for hot reload: {}", err);
+                    tracing::warn!("Failed to determine config path for hot reload: {err:#}");
                     return;
                 }
             };
@@ -198,7 +159,7 @@ impl Config {
             let theme_path = match theme::persistence::theme_path() {
                 Ok(path) => path,
                 Err(err) => {
-                    tracing::warn!("Failed to determine theme path for hot reload: {}", err);
+                    tracing::warn!("Failed to determine theme path for hot reload: {err:#}");
                     return;
                 }
             };
@@ -231,15 +192,55 @@ impl ActiveConfig for App {
     }
 }
 
+/// Parse every config file without applying it, printing each verdict and any
+/// parse diagnostic. `false` when one of them failed, so `--validate` can exit
+/// non-zero - the point is to check a file before the shell reloads it.
+pub fn validate() -> bool {
+    fn check<T: serde::de::DeserializeOwned>(path: anyhow::Result<PathBuf>) -> bool {
+        let path = match path {
+            Ok(path) => path,
+            Err(err) => {
+                eprintln!("{err:#}");
+                return false;
+            }
+        };
+
+        if !path.exists() {
+            println!("{}: absent, defaults apply", path.display());
+            return true;
+        }
+
+        let parsed = std::fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read {}", path.display()))
+            .and_then(|raw| Ok(toml::from_str::<T>(&raw)?));
+
+        match parsed {
+            Ok(_) => {
+                println!("{}: ok", path.display());
+                true
+            }
+            Err(err) => {
+                eprintln!("{}:\n{err:#}", path.display());
+                false
+            }
+        }
+    }
+
+    // `&`, not `&&`: report every file rather than stopping at the first bad one.
+    check::<Config>(persistence::config_path())
+        & check::<StoredTheme>(theme::persistence::theme_path())
+        & check::<State>(state::state_path())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Hand-written service modes stay readable from `config.toml`; the
+    /// overlay that `state.toml` puts on top of them is tested in `state`.
     #[test]
     fn service_modes_round_trip_through_toml() {
         let mut config = Config::default();
-        assert_eq!(config.service_mode("Tray"), ServiceMode::Eager);
-
         config
             .services
             .insert("tray".to_string(), ServiceMode::Lazy);
@@ -250,9 +251,9 @@ mod tests {
         let encoded = toml::to_string_pretty(&config).expect("config serializes");
         let decoded: Config = toml::from_str(&encoded).expect("config parses back");
 
-        assert_eq!(decoded.service_mode("Tray"), ServiceMode::Lazy);
-        assert_eq!(decoded.service_mode("Bluetooth"), ServiceMode::Off);
-        assert_eq!(decoded.service_mode("Audio"), ServiceMode::Eager);
+        assert_eq!(decoded.services.get("tray"), Some(&ServiceMode::Lazy));
+        assert_eq!(decoded.services.get("bluetooth"), Some(&ServiceMode::Off));
+        assert_eq!(decoded.services.get("audio"), None);
     }
 
     /// Parses the config actually on this machine, if there is one. Skips

@@ -59,6 +59,15 @@ their loop so a stop or restart retires them. Startup mode per service lives in
 on first `AppState::x(cx)` access. The `;s` launcher view shows status, retained
 state size and the restart/stop/mode actions.
 
+### Config vs state
+
+`config.toml` and `theme.toml` are hand-written, so the app never writes
+`config.toml`: what the shell persists itself (dock pins, service modes set
+from `;s`) goes to `state.toml` and overrides its `config.toml` counterpart
+(`crates/app/src/config/state.rs`). A file that stops parsing therefore costs
+the session its settings but never the file - hot reload keeps the last good
+value, and `gpuishell --validate` prints where the parse gave up.
+
 ### UI Components
 
 - **Bar** (`crates/app/src/bar/`) — Wayland layer shell status bar with pluggable

@@ -16,7 +16,7 @@ use gpui::{
 use std::collections::HashMap;
 use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
-use crate::config::{ActiveConfig, Config};
+use crate::config::{ActiveConfig, Config, State};
 use crate::state::{AppState, display_id_for_window, record_window_display, watch};
 use item::{DockItem, build_dock_items};
 
@@ -560,7 +560,7 @@ impl Dock {
         dock_items(
             &self.state.windows,
             apps,
-            &cx.config().dock.pinned,
+            State::pinned(cx),
             self.current_monitor_name(window, cx).as_deref(),
         )
     }
@@ -891,7 +891,7 @@ fn window_options(display_id: Option<DisplayId>, cx: &App) -> WindowOptions {
     let item_count = dock_item_count(
         &compositor_state.windows,
         AppState::applications(cx).all(),
-        &config.pinned,
+        State::pinned(cx),
         monitor_name_for_display(display_id, &compositor_state, cx).as_deref(),
     ) + 1;
     let window_size = dock_window_size(
@@ -1004,15 +1004,22 @@ pub fn reload(cx: &mut App) {
 /// Toggle whether `item_key` (a desktop file id) is in the pinned list,
 /// persisting the change.
 pub(crate) fn toggle_pin(item_key: &str, cx: &mut App) {
-    let mut config = cx.config().clone();
-    toggled_pins(&mut config.dock.pinned, item_key);
-    Config::set(config, cx);
+    let mut pinned = State::pinned(cx).to_vec();
+    toggled_pins(&mut pinned, item_key);
+    State::set_pinned(pinned, cx);
 }
 
 /// Initialize the dock using the current global config.
 pub fn init(cx: &mut App) {
     cx.observe_global::<Config>(|cx| {
         tracing::info!("Config changed; reloading dock windows");
+        reload(cx);
+    })
+    .detach();
+
+    // Pins live in `state.toml`, so a pin toggle changes `State`, not `Config`.
+    cx.observe_global::<State>(|cx| {
+        tracing::info!("Pins changed; reloading dock windows");
         reload(cx);
     })
     .detach();

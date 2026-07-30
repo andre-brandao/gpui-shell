@@ -4,6 +4,8 @@
 pub struct Args {
     /// Optional input to prefill in the launcher.
     pub input: Option<String>,
+    /// Parse the config files, report, and exit without starting the shell.
+    pub validate: bool,
 }
 
 impl Args {
@@ -11,6 +13,7 @@ impl Args {
     pub fn parse() -> Self {
         let args: Vec<String> = std::env::args().collect();
         let mut input = None;
+        let mut validate = false;
 
         let mut i = 1;
         while i < args.len() {
@@ -23,10 +26,11 @@ impl Args {
                     std::process::exit(1);
                 }
             } else {
+                validate |= args[i] == "--validate";
                 i += 1;
             }
         }
 
-        Args { input }
+        Args { input, validate }
     }
 }

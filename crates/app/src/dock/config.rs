@@ -64,6 +64,7 @@ pub struct DockConfig {
     /// Icon size in px.
     pub icon_size: f32,
     /// Pinned app identifiers (desktop file names, e.g. `"firefox.desktop"`).
+    /// Pinning from the UI writes `state.toml`, which then overrides this.
     pub pinned: Vec<String>,
 }
 

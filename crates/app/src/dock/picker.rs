@@ -5,7 +5,7 @@ use ui::{ActiveTheme, InputBuffer, Radius, Spacing, render_input_line};
 
 use super::item::desktop_file_id;
 use super::toggle_pin;
-use crate::config::ActiveConfig;
+use crate::config::State;
 use crate::keybinds::{
     Backspace, Cancel, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft, SelectRight,
     SelectWordLeft, SelectWordRight, WordLeft, WordRight,
@@ -35,7 +35,7 @@ impl DockAppPicker {
     }
 
     fn matching_unpinned_apps(&self, cx: &gpui::App) -> Vec<services::Application> {
-        let pinned = &cx.config().dock.pinned;
+        let pinned = State::pinned(cx);
         AppState::applications(cx)
             .search(self.input.text())
             .into_iter()
