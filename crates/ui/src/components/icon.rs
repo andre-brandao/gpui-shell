@@ -51,8 +51,12 @@ pub use crate::theme::IconSize;
 /// ship.
 ///
 /// Finally it carries the brand marks a shell has to name out loud, for the
-/// tray and the focused-window label: those come from
-/// [theSVG](https://thesvg.org) rather than Lucide, which ships no logos.
+/// tray, the focused-window label and the web search providers: those come
+/// from [theSVG](https://thesvg.org) rather than Lucide, which ships no logos.
+/// Their variants are named to round-trip through `snake_case` onto theSVG's
+/// own slug - hence [`Self::Duckduckgo`] and [`Self::Youtube`] rather than the
+/// brands' own capitalisation, which would resolve to `duck_duck_go.svg` and
+/// `you_tube.svg` and break both the asset lookup and the config spelling.
 /// Brand marks are solid glyphs rather than 2px strokes, so they read a
 /// little heavier than the rest of the set at the same size. gpui renders
 /// every SVG down to an alpha mask ([`gpui::SvgRenderer`]), so a multi-colour
@@ -261,11 +265,17 @@ pub enum IconName {
     Chrome,
     Discord,
     Dropbox,
+    Duckduckgo,
     Firefox,
+    Github,
+    Google,
     Kde,
     Neovim,
     Nextcloud,
+    Nixos,
     OnePassword,
+    Reddit,
+    Rust,
     Slack,
     Spotify,
     Syncthing,
@@ -274,6 +284,8 @@ pub enum IconName {
     Thunderbird,
     VisualStudioCode,
     Wezterm,
+    Wikipedia,
+    Youtube,
     Zed,
 }
 

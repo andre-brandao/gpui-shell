@@ -48,9 +48,10 @@ The brand marks are not Lucide. They come from theSVG
 (https://thesvg.org, https://github.com/glincker/thesvg), whose icon library
 is MIT licensed:
 
-    alacritty, bitwarden, chrome, discord, dropbox, firefox, kde, neovim,
-    nextcloud, one_password, slack, spotify, syncthing, tailscale, telegram,
-    thunderbird, visual_studio_code, wezterm, zed
+    alacritty, bitwarden, chrome, discord, dropbox, duckduckgo, firefox,
+    github, google, kde, neovim, nextcloud, nixos, one_password, reddit, rust,
+    slack, spotify, syncthing, tailscale, telegram, thunderbird,
+    visual_studio_code, wezterm, wikipedia, youtube, zed
 
 MIT License
 
