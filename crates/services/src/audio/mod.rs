@@ -18,7 +18,7 @@ use libpulse_binding::{
 };
 use tracing::{debug, error};
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Audio device data.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -31,26 +31,6 @@ pub struct AudioData {
     pub source_volume: u8,
     /// Whether the source is muted.
     pub source_muted: bool,
-}
-
-impl AudioData {
-    /// Get an icon based on sink volume and mute state.
-    pub fn sink_icon(&self) -> &'static str {
-        if self.sink_muted {
-            "󰝟"
-        } else {
-            match self.sink_volume {
-                0 => "󰕿",
-                1..=50 => "󰖀",
-                _ => "󰕾",
-            }
-        }
-    }
-
-    /// Get an icon based on source volume and mute state.
-    pub fn source_icon(&self) -> &'static str {
-        if self.source_muted { "󰍭" } else { "󰍬" }
-    }
 }
 
 /// Commands for controlling audio.
@@ -74,19 +54,17 @@ pub enum AudioCommand {
 ///
 /// This subscriber monitors audio state via PulseAudio's subscribe API
 /// and provides reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AudioSubscriber {
     data: Mutable<AudioData>,
-    status: Mutable<ServiceStatus>,
+    lifecycle: Lifecycle,
 }
 
 impl AudioSubscriber {
-    /// Create a new audio subscriber and start monitoring.
+    /// Create a new audio subscriber. Monitoring starts with
+    /// [`ManagedService::start`].
     pub fn new() -> Self {
-        let data = Mutable::new(AudioData::default());
-        let status = Mutable::new(ServiceStatus::Initializing);
-        start_listener(data.clone(), status.clone());
-        Self { data, status }
+        Self::default()
     }
 
     /// Get a signal that emits when audio state changes.
@@ -97,11 +75,6 @@ impl AudioSubscriber {
     /// Get the current audio data snapshot.
     pub fn get(&self) -> AudioData {
         self.data.get_cloned()
-    }
-
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
     }
 
     /// Execute an audio command.
@@ -191,9 +164,21 @@ impl AudioSubscriber {
     }
 }
 
-impl Default for AudioSubscriber {
-    fn default() -> Self {
-        Self::new()
+impl ManagedService for AudioSubscriber {
+    fn name(&self) -> &'static str {
+        "Audio"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        size_of::<AudioData>()
+    }
+
+    fn start(&self) {
+        start_listener(self.data.clone(), self.lifecycle.begin());
     }
 }
 
@@ -204,7 +189,12 @@ fn volume_to_percent(volume: Volume) -> u8 {
 }
 
 /// Start the PulseAudio event listener thread.
-fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
+///
+/// ponytail: the listener only notices a stop when it comes back from
+/// `mainloop.iterate(true)`, so a stopped service can hold its PulseAudio
+/// connection until the next audio event. Its writes are gated on the token,
+/// so it stays silent in the meantime.
+fn start_listener(data: Mutable<AudioData>, token: RunToken) {
     thread::spawn(move || {
         let mut proplist = Proplist::new().expect("Failed to create PulseAudio proplist");
         let _ = proplist.set_str(APPLICATION_NAME, "gpuishell");
@@ -219,18 +209,18 @@ fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
             .expect("Failed to connect to PulseAudio");
 
         // Wait for context to be ready
-        loop {
+        while token.alive() {
             match mainloop.iterate(true) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
                     error!("PulseAudio mainloop error during connect, stopping listener");
-                    *status.lock_mut() = ServiceStatus::Error(None);
+                    token.error("PulseAudio mainloop error during connect");
                     return;
                 }
                 IterateResult::Success(_) => match context.get_state() {
                     context::State::Ready => break,
                     context::State::Failed | context::State::Terminated => {
                         error!("PulseAudio context failed or terminated, stopping listener");
-                        *status.lock_mut() = ServiceStatus::Error(None);
+                        token.error("PulseAudio context failed or terminated");
                         return;
                     }
                     _ => {}
@@ -239,7 +229,7 @@ fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
         }
 
         debug!("PulseAudio connection established");
-        *status.lock_mut() = ServiceStatus::Active;
+        token.active();
 
         // Shared state for tracking pending queries and results
         let pending_queries = Rc::new(Cell::new(0u32));
@@ -308,7 +298,7 @@ fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
             match mainloop.iterate(false) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
                     error!("PulseAudio mainloop error during initial query, stopping listener");
-                    *status.lock_mut() = ServiceStatus::Error(None);
+                    token.error("PulseAudio mainloop error during initial query");
                     return;
                 }
                 IterateResult::Success(_) => {}
@@ -350,14 +340,14 @@ fn start_listener(data: Mutable<AudioData>, status: Mutable<ServiceStatus>) {
         })));
 
         // Main event loop
-        loop {
+        while token.alive() {
             // Use non-blocking iteration when queries are pending,
             // otherwise block waiting for events
             let has_pending = pending_queries.get() > 0 || needs_refresh.get();
             match mainloop.iterate(!has_pending) {
                 IterateResult::Quit(_) | IterateResult::Err(_) => {
                     error!("PulseAudio mainloop error in event loop, stopping listener");
-                    *status.lock_mut() = ServiceStatus::Error(None);
+                    token.error("PulseAudio mainloop error in event loop");
                     return;
                 }
                 IterateResult::Success(_) => {

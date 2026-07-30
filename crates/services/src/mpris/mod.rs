@@ -14,7 +14,7 @@ use futures_util::stream::select_all;
 use tracing::{debug, error, info, trace, warn};
 use zbus::{Connection, fdo::DBusProxy, zvariant::OwnedValue};
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 const MPRIS_PLAYER_SERVICE_PREFIX: &str = "org.mpris.MediaPlayer2.";
 const EVENT_DEBOUNCE_MS: u64 = 200;
@@ -144,45 +144,17 @@ pub enum PlayerCommand {
 }
 
 /// Reactive MPRIS subscriber.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MprisSubscriber {
     data: Mutable<MprisData>,
-    status: Mutable<ServiceStatus>,
-    conn: Connection,
+    lifecycle: Lifecycle,
 }
 
 impl MprisSubscriber {
-    /// Create a new MPRIS subscriber and start monitoring player changes.
-    pub async fn new() -> anyhow::Result<Self> {
-        let conn = crate::bus::session().await?;
-        let status = Mutable::new(ServiceStatus::Initializing);
-
-        let initial_data = match fetch_mpris_data(&conn).await {
-            Ok(data) => {
-                status.set(ServiceStatus::Active);
-                data
-            }
-            Err(e) => {
-                error!("Failed to fetch initial MPRIS data: {}", e);
-                status.set(ServiceStatus::Error(None));
-                MprisData::default()
-            }
-        };
-
-        let data = Mutable::new(initial_data);
-
-        start_listener(data.clone(), status.clone(), conn.clone());
-
-        Ok(Self { data, status, conn })
-    }
-
-    /// Fallback subscriber used when MPRIS is unavailable during startup.
-    pub async fn unavailable() -> anyhow::Result<Self> {
-        Ok(Self {
-            data: Mutable::new(MprisData::default()),
-            status: Mutable::new(ServiceStatus::Unavailable),
-            conn: crate::bus::session().await?,
-        })
+    /// Create a new MPRIS subscriber. Monitoring starts with
+    /// [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get a signal that emits when MPRIS state changes.
@@ -195,14 +167,10 @@ impl MprisSubscriber {
         self.data.get_cloned()
     }
 
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
-    }
-
     /// Execute a command for a specific player.
     pub async fn dispatch(&self, command: MprisCommand) -> anyhow::Result<()> {
-        let proxy = MprisPlayerProxy::builder(&self.conn)
+        let conn = crate::bus::session().await?;
+        let proxy = MprisPlayerProxy::builder(&conn)
             .destination(command.service_name.as_str())?
             .build()
             .await?;
@@ -223,11 +191,61 @@ impl MprisSubscriber {
             }
         }
 
-        if let Ok(new_data) = fetch_mpris_data(&self.conn).await {
+        if let Ok(new_data) = fetch_mpris_data(&conn).await {
             *self.data.lock_mut() = new_data;
         }
 
         Ok(())
+    }
+}
+
+impl ManagedService for MprisSubscriber {
+    fn name(&self) -> &'static str {
+        "MPRIS"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<MprisData>()
+            + data
+                .players
+                .iter()
+                .map(|player| {
+                    let metadata = player.metadata.as_ref().map_or(0, |meta| {
+                        meta.title.as_ref().map_or(0, String::len)
+                            + meta
+                                .artists
+                                .as_ref()
+                                .map_or(0, |artists| artists.iter().map(String::len).sum::<usize>())
+                    });
+                    size_of::<MprisPlayerData>()
+                        + player.service.len()
+                        + player.art_url.as_ref().map_or(0, String::len)
+                        + metadata
+                })
+                .sum::<usize>()
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        let data = self.data.clone();
+
+        tokio::spawn(async move {
+            let conn = match crate::bus::session().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    error!("Failed to connect to the session bus: {}", e);
+                    token.error(e.to_string());
+                    return;
+                }
+            };
+
+            start_listener(data, token, conn);
+        });
     }
 }
 
@@ -282,7 +300,7 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
 }
 
 /// Start the MPRIS listener in a dedicated thread.
-fn start_listener(data: Mutable<MprisData>, status: Mutable<ServiceStatus>, conn: Connection) {
+fn start_listener(data: Mutable<MprisData>, token: RunToken, conn: Connection) {
     thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -291,14 +309,15 @@ fn start_listener(data: Mutable<MprisData>, status: Mutable<ServiceStatus>, conn
             Ok(rt) => rt,
             Err(e) => {
                 error!("Failed to create Tokio runtime for MPRIS listener: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
+                token.error(e.to_string());
                 return;
             }
         };
 
         rt.block_on(async move {
-            if let Err(e) = run_listener(data, status, conn).await {
+            if let Err(e) = run_listener(data, token.clone(), conn).await {
                 error!("MPRIS listener error: {}", e);
+                token.error(e.to_string());
             }
         });
     });
@@ -307,20 +326,20 @@ fn start_listener(data: Mutable<MprisData>, status: Mutable<ServiceStatus>, conn
 /// Run the MPRIS event listener loop.
 async fn run_listener(
     data: Mutable<MprisData>,
-    status: Mutable<ServiceStatus>,
+    token: RunToken,
     conn: Connection,
 ) -> anyhow::Result<()> {
     info!("MPRIS subscriber started");
 
-    loop {
+    while token.alive() {
         let current = match fetch_mpris_data(&conn).await {
             Ok(value) => {
-                *status.lock_mut() = ServiceStatus::Active;
+                token.active();
                 value
             }
             Err(err) => {
                 error!("Failed to fetch MPRIS data: {}", err);
-                *status.lock_mut() = ServiceStatus::Error(None);
+                token.error(err.to_string());
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 continue;
             }
@@ -395,7 +414,7 @@ async fn run_listener(
         }
 
         let mut events = select_all(streams);
-        loop {
+        while token.alive() {
             let first = match events.next().await {
                 Some(event) => event,
                 None => {
@@ -507,4 +526,6 @@ async fn run_listener(
             }
         }
     }
+
+    Ok(())
 }

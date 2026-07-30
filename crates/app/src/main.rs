@@ -6,6 +6,7 @@
 //! Usage:
 //!   gpuishell              - Start the shell or open launcher if already running
 //!   gpuishell --input "x"  - Open launcher with prefilled input
+//!   gpuishell --validate   - Check the config files and exit
 
 use crate::ipc::IpcSubscriber;
 use assets::Assets;
@@ -17,6 +18,7 @@ mod bar;
 pub mod config;
 pub mod control_center;
 pub mod dock;
+pub mod icons;
 mod ipc;
 mod keybinds;
 pub mod launcher;
@@ -38,6 +40,11 @@ async fn main() {
     // Parse command-line arguments
     let args = args::Args::parse();
 
+    // Before the single-instance check: a running shell must not swallow this.
+    if args.validate {
+        std::process::exit(if config::validate() { 0 } else { 1 });
+    }
+
     // Try to acquire single-instance lock or signal existing instance.
     // Secondary path exits immediately after signaling the primary instance.
     let Some(ipc) = IpcSubscriber::init(&args) else {
@@ -53,6 +60,8 @@ async fn main() {
     let app = application().with_assets(Assets {});
     app.run(move |cx| {
         config::Config::init(cx);
+        // Registers the TextField / Menu keybindings the component set needs.
+        ui::init(cx);
         state::AppState::init(services, cx);
 
         // Register keybindings
@@ -63,6 +72,9 @@ async fn main() {
         notification::init(cx);
         osd::init(cx);
         launcher::init(cx);
+
+        // Now that the notification service is up, say what didn't parse.
+        config::report_load_errors(cx);
 
         ipc.start(cx);
     });

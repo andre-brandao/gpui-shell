@@ -3,10 +3,14 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px, rgba};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, radius, spacing};
+use ui::{
+    ActiveTheme, Color, Icon, IconName, IconSize, Label, LabelCommon, Radius, Spacing, TextSize,
+};
 
 use self::config::ShellConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use ui::patterns::footer_hints;
+
+use crate::launcher::view::{LauncherView, ViewContext};
 
 /// Shell view - executes shell commands in a terminal.
 pub struct ShellView {
@@ -32,8 +36,8 @@ impl LauncherView for ShellView {
         "Shell"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰆍"
+    fn icon(&self) -> IconName {
+        IconName::SquareTerminal
     }
 
     fn description(&self) -> &'static str {
@@ -59,10 +63,10 @@ impl LauncherView for ShellView {
         let query = vx.query.trim();
         let has_command = !query.is_empty();
 
-        let bg_secondary = theme.bg.secondary;
-        let interactive_default = theme.interactive.default;
-        let accent_selection = theme.accent.selection;
-        let interactive_hover = theme.interactive.hover;
+        let bg_secondary = theme.colors.surface_background;
+        let interactive_default = theme.colors.element_background;
+        let accent_selection = theme.colors.element_selected;
+        let interactive_hover = theme.colors.element_hover;
         let icon = self.icon();
 
         Some(
@@ -70,17 +74,17 @@ impl LauncherView for ShellView {
                 .flex_1()
                 .flex()
                 .flex_col()
-                .gap(px(spacing::MD))
-                .p(px(spacing::MD))
+                .gap(Spacing::Large.pixels())
+                .p(Spacing::Large.pixels())
                 .child(
                     div()
                         .w_full()
-                        .p(px(spacing::MD))
+                        .p(Spacing::Large.pixels())
                         .bg(bg_secondary)
-                        .rounded(px(radius::MD))
+                        .rounded(Radius::Medium.pixels())
                         .flex()
                         .flex_col()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
                                 .flex()
@@ -90,13 +94,9 @@ impl LauncherView for ShellView {
                                     div()
                                         .flex()
                                         .items_center()
-                                        .gap(px(spacing::SM))
-                                        .child(
-                                            Label::new(icon)
-                                                .size(LabelSize::Large)
-                                                .color(Color::Default),
-                                        )
-                                        .child(Label::new("Terminal").size(LabelSize::Default))
+                                        .gap(Spacing::Medium.pixels())
+                                        .child(Icon::new(icon).size(IconSize::Large))
+                                        .child(Label::new("Terminal").size(TextSize::Default))
                                         .child(
                                             div()
                                                 .px(px(6.))
@@ -105,7 +105,7 @@ impl LauncherView for ShellView {
                                                 .bg(interactive_default)
                                                 .child(
                                                     Label::new("$")
-                                                        .size(LabelSize::XSmall)
+                                                        .size(TextSize::XSmall)
                                                         .color(Color::Muted),
                                                 ),
                                         ),
@@ -114,10 +114,10 @@ impl LauncherView for ShellView {
                                     div()
                                         .flex()
                                         .items_center()
-                                        .gap(px(spacing::SM))
-                                        .px(px(spacing::SM))
+                                        .gap(Spacing::Medium.pixels())
+                                        .px(Spacing::Medium.pixels())
                                         .py(px(4.))
-                                        .rounded(px(radius::SM))
+                                        .rounded(Radius::Small.pixels())
                                         .when(has_command && vx.selected_index == 0, move |el| {
                                             el.bg(accent_selection)
                                         })
@@ -126,10 +126,10 @@ impl LauncherView for ShellView {
                                         })
                                         .when(!has_command, |el| el.bg(rgba(0x00000033)))
                                         .child(if has_command {
-                                            Label::new("Run").size(LabelSize::Small)
+                                            Label::new("Run").size(TextSize::Small)
                                         } else {
                                             Label::new("Run")
-                                                .size(LabelSize::Small)
+                                                .size(TextSize::Small)
                                                 .color(Color::Disabled)
                                         })
                                         .child(
@@ -140,11 +140,11 @@ impl LauncherView for ShellView {
                                                 .bg(rgba(0x00000044))
                                                 .child(if has_command {
                                                     Label::new("Enter")
-                                                        .size(LabelSize::XSmall)
+                                                        .size(TextSize::XSmall)
                                                         .color(Color::Muted)
                                                 } else {
                                                     Label::new("Enter")
-                                                        .size(LabelSize::XSmall)
+                                                        .size(TextSize::XSmall)
                                                         .color(Color::Disabled)
                                                 }),
                                         ),
@@ -153,44 +153,47 @@ impl LauncherView for ShellView {
                         .child(
                             div()
                                 .w_full()
-                                .p(px(spacing::SM))
+                                .p(Spacing::Medium.pixels())
                                 .bg(rgba(0x00000066))
-                                .rounded(px(radius::SM))
+                                .rounded(Radius::Small.pixels())
                                 .font_family("monospace")
-                                .text_size(theme.font_sizes.base)
+                                .text_size(TextSize::Default.rems())
                                 .child(if has_command {
-                                    Label::new(query.to_string()).color(Color::Default)
+                                    Label::new(query.to_string())
+                                        .color(Color::Default)
+                                        .size(TextSize::Default)
                                 } else {
                                     Label::new("Type a command to execute...")
                                         .color(Color::Placeholder)
+                                        .size(TextSize::Default)
                                 }),
                         ),
                 )
                 .child(
                     div()
                         .w_full()
-                        .pt(px(spacing::MD))
+                        .pt(Spacing::Large.pixels())
                         .flex()
                         .flex_col()
-                        .gap(px(spacing::XS))
+                        .gap(Spacing::XSmall.pixels())
                         .child(
                             Label::new("TIPS")
-                                .size(LabelSize::XSmall)
+                                .size(TextSize::XSmall)
                                 .color(Color::Disabled),
                         )
                         .child(
                             Label::new("• Commands run in your default terminal emulator")
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         )
                         .child(
                             Label::new("• Interactive commands and output are fully supported")
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         )
                         .child(
                             Label::new("• Example: $htop, $vim ~/.config, $cargo build")
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         ),
                 )
@@ -214,7 +217,7 @@ impl LauncherView for ShellView {
         } else {
             vec![("Run", "Enter"), ("Close", "Esc")]
         };
-        render_footer_hints(actions, cx)
+        footer_hints(actions, cx)
     }
 }
 

@@ -25,6 +25,18 @@ impl BarPosition {
     pub fn is_vertical(self) -> bool {
         matches!(self, Self::Left | Self::Right)
     }
+
+    /// The same edge, as the UI layer names it. Config keeps its own enum
+    /// because it carries the serde spelling.
+    pub fn edge(self) -> ui::patterns::BarEdge {
+        use ui::patterns::BarEdge;
+        match self {
+            Self::Left => BarEdge::Left,
+            Self::Right => BarEdge::Right,
+            Self::Top => BarEdge::Top,
+            Self::Bottom => BarEdge::Bottom,
+        }
+    }
 }
 
 /// Status bar configuration.

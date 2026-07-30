@@ -11,3 +11,16 @@ path = "src/ui.rs"
 gpui.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+tracing.workspace = true
+smallvec = "1"
+strum = { version = "0.27", features = ["derive"] }
+unicode-segmentation = "1"
+lyon = "1.0"
+
+[dev-dependencies]
+toml = "1.1"
+strum = { version = "0.27", features = ["derive"] }
+# Icon resolution is tested through the AssetSource the app registers,
+# not against the filesystem.
+assets.workspace = true

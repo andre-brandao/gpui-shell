@@ -4,11 +4,11 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, layer_shell::*, point,
-    prelude::*, px,
+    AnyWindowHandle, App, Bounds, Pixels, Point, Render, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, prelude::*, px,
 };
 use std::sync::Mutex;
+use ui::ActiveTheme;
 
 use crate::config::BarPosition;
 
@@ -34,10 +34,10 @@ impl Default for PanelConfig {
     }
 }
 
-/// Resolve panel anchor/margin from a click event.
+/// Resolve panel anchor/margin from a click position, in window coordinates.
 pub fn panel_placement_from_event(
     bar_position: BarPosition,
-    event: &MouseDownEvent,
+    position: Point<Pixels>,
     window: &Window,
     cx: &App,
     panel_size: Size<Pixels>,
@@ -50,8 +50,8 @@ pub fn panel_placement_from_event(
             (bounds, bounds)
         });
     let click = point(
-        window.bounds().origin.x + event.position.x,
-        window.bounds().origin.y + event.position.y,
+        window.bounds().origin.x + position.x,
+        window.bounds().origin.y + position.y,
     );
     panel_placement_from_click(
         bar_position,
@@ -267,7 +267,10 @@ pub fn toggle_panel_on_display<V: Render + 'static>(
         ..Default::default()
     };
 
-    if let Ok(handle) = cx.open_window(window_options, move |_, cx| cx.new(build)) {
+    if let Ok(handle) = cx.open_window(window_options, move |window, cx| {
+        window.set_rem_size(cx.theme().font_size);
+        cx.new(build)
+    }) {
         *guard = Some((panel_id.to_string(), handle.into()));
         true
     } else {

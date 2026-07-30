@@ -19,10 +19,11 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, layer_shell::*,
     prelude::*, px,
 };
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::patterns::OsdIndicator;
+use ui::{ActiveTheme, IconName};
 
 use crate::config::Config;
-use crate::control_center::icons;
+use crate::icons;
 use crate::state::AppState;
 
 const OSD_LONG: f32 = 280.0;
@@ -80,164 +81,43 @@ impl OsdView {
         Self { kind, position }
     }
 
-    fn icon_and_level(&self) -> (&'static str, u8, bool) {
+    fn icon_and_level(&self) -> (ui::IconName, u8, bool) {
         match self.kind {
             OsdKind::Volume { level, muted } => (icons::volume_icon(level, muted), level, muted),
-            OsdKind::Brightness { level } => (icons::brightness_icon(level), level, false),
+            OsdKind::Brightness { level } => (IconName::Sun, level, false),
         }
-    }
-
-    fn render_horizontal(&self, cx: &Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (icon, level, muted) = self.icon_and_level();
-
-        let fill_color = if muted {
-            theme.status.error
-        } else if level > 100 {
-            theme.status.warning
-        } else {
-            theme.accent.primary
-        };
-
-        let bar_fill_pct = (level as f32 / 100.0).min(1.0);
-
-        let icon_color = if muted {
-            theme.status.error
-        } else {
-            theme.text.primary
-        };
-
-        div()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .w(px(OSD_LONG - 16.0))
-                    .h(px(OSD_SHORT - 16.0))
-                    .px(px(spacing::MD))
-                    .bg(theme.bg.primary)
-                    .border_1()
-                    .border_color(theme.border.default)
-                    .rounded(px(radius::LG))
-                    .flex()
-                    .items_center()
-                    .gap(px(spacing::MD))
-                    .child(
-                        div()
-                            .text_size(px(icon_size::XL))
-                            .text_color(icon_color)
-                            .child(icon),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .h(px(6.0))
-                            .bg(theme.bg.tertiary)
-                            .rounded(px(3.0))
-                            .overflow_hidden()
-                            .child(
-                                div()
-                                    .h_full()
-                                    .w(gpui::relative(bar_fill_pct))
-                                    .bg(fill_color)
-                                    .rounded(px(3.0)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .w(px(36.0))
-                            .text_size(px(12.0))
-                            .text_color(theme.text.secondary)
-                            .text_right()
-                            .child(format!("{}%", level)),
-                    ),
-            )
-    }
-
-    fn render_vertical(&self, cx: &Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (icon, level, muted) = self.icon_and_level();
-
-        let fill_color = if muted {
-            theme.status.error
-        } else if level > 100 {
-            theme.status.warning
-        } else {
-            theme.accent.primary
-        };
-
-        let bar_fill_pct = (level as f32 / 100.0).min(1.0);
-
-        let icon_color = if muted {
-            theme.status.error
-        } else {
-            theme.text.primary
-        };
-
-        div()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .w(px(OSD_SHORT - 16.0))
-                    .h(px(OSD_LONG - 16.0))
-                    .py(px(spacing::MD))
-                    .bg(theme.bg.primary)
-                    .border_1()
-                    .border_color(theme.border.default)
-                    .rounded(px(radius::LG))
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(spacing::MD))
-                    // Percentage at top
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(theme.text.secondary)
-                            .child(format!("{}%", level)),
-                    )
-                    // Vertical progress bar (grows upward from bottom)
-                    .child(
-                        div()
-                            .flex_1()
-                            .w(px(6.0))
-                            .bg(theme.bg.tertiary)
-                            .rounded(px(3.0))
-                            .overflow_hidden()
-                            .flex()
-                            .flex_col()
-                            .justify_end()
-                            .child(
-                                div()
-                                    .w_full()
-                                    .h(gpui::relative(bar_fill_pct))
-                                    .bg(fill_color)
-                                    .rounded(px(3.0)),
-                            ),
-                    )
-                    // Icon at bottom
-                    .child(
-                        div()
-                            .text_size(px(icon_size::XL))
-                            .text_color(icon_color)
-                            .child(icon),
-                    ),
-            )
     }
 }
 
 impl Render for OsdView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.position.is_vertical() {
-            self.render_vertical(cx).into_any_element()
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_rem_size(cx.theme().font_size);
+
+        let theme = cx.theme();
+        let (icon, level, muted) = self.icon_and_level();
+
+        // What the colour says is ours to decide; the pill just paints it.
+        let fill = if muted {
+            theme.colors.status.error
+        } else if level > 100 {
+            theme.colors.status.warning
         } else {
-            self.render_horizontal(cx).into_any_element()
-        }
+            theme.colors.accent
+        };
+        let icon_color = if muted {
+            theme.colors.status.error
+        } else {
+            theme.colors.text
+        };
+
+        // 8px inset all round is what the window's long/short extent leaves
+        // the pill.
+        div().size_full().p(px(8.0)).child(
+            OsdIndicator::new(icon, level)
+                .vertical(self.position.is_vertical())
+                .fill(fill)
+                .icon_color(icon_color),
+        )
     }
 }
 

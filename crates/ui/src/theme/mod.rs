@@ -1,162 +1,143 @@
-//! Theme module providing consistent styling across the application.
-//!
-//! This module defines the theme system and styling constants to ensure
-//! a cohesive visual appearance throughout the bar, launcher, and panels.
-//!
-//! # Usage
-//!
-//! Access theme colors through the `ActiveTheme` trait:
-//!
-//! ```ignore
-//! use ui::ActiveTheme;
-//!
-//! fn render(&mut self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-//!     let theme = cx.theme();
-//!     div()
-//!         .bg(theme.bg.primary)
-//!         .text_color(theme.text.primary)
-//!         .border_color(theme.border.default)
-//! }
-//! ```
+//! The theme system.
 
-use gpui::{App, Global, Hsla, Pixels, px, rgba};
+use gpui::{App, Global, Pixels, SharedString, px};
+use serde::{Deserialize, Serialize};
 
 mod base16;
-mod colorize;
+mod color_string;
+mod colors;
+#[macro_use]
+mod refineable;
+mod refinement;
 mod schemes;
+mod tokens;
 
-pub use base16::Base16Colors;
-pub use colorize::Colorize;
+pub use base16::Base16Palette;
+pub use colors::{Color, StatusColors, ThemeColors};
+pub use refinement::{StatusColorsRefinement, ThemeColorsRefinement};
 pub use schemes::{ThemeScheme, builtin_schemes};
+pub use tokens::{IconSize, Radius, Spacing, TextSize};
 
-// =============================================================================
-// Theme Struct and Trait
-// =============================================================================
-
-/// Font size configuration.
+/// Whether a theme is a light or a dark variant.
 ///
-/// All sizes are calculated from a base size for consistent scaling.
-#[derive(Clone, Debug)]
-pub struct FontSizes {
-    /// Base font size - all other sizes calculated from this
-    pub base: Pixels,
-    /// Extra small font size (~10px if base=13)
-    pub xs: Pixels,
-    /// Small font size (~11px if base=13)
-    pub sm: Pixels,
-    /// Medium font size (~14px if base=13)
-    pub md: Pixels,
-    /// Large font size (~16px if base=13)
-    pub lg: Pixels,
-    /// Extra large font size (~18px if base=13)
-    pub xl: Pixels,
+/// Derived from the palette's background lightness - components branch on
+/// it for the handful of decisions that genuinely differ (shadow strength,
+/// overlay direction).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Appearance {
+    Light,
+    Dark,
 }
 
-impl FontSizes {
-    /// Create font sizes from a base size.
-    pub fn new(base: f32) -> Self {
-        Self {
-            base: px(base),
-            xs: px(base * 0.77), // ~10px if base=13
-            sm: px(base * 0.85), // ~11px if base=13
-            md: px(base * 1.08), // ~14px if base=13
-            lg: px(base * 1.23), // ~16px if base=13
-            xl: px(base * 1.38), // ~18px if base=13
-        }
-    }
-
-    /// Get the base font size value in pixels.
-    pub fn base_value(&self) -> f32 {
-        self.base.into()
+impl Appearance {
+    pub fn is_dark(self) -> bool {
+        matches!(self, Self::Dark)
     }
 }
 
-impl Default for FontSizes {
-    fn default() -> Self {
-        Self::new(13.0) // Current BASE size
-    }
-}
-
-/// The global theme configuration.
+/// The active theme, stored as a gpui [`Global`].
 ///
-/// This struct holds all theme values and is stored as a GPUI global.
-/// Access it via the `ActiveTheme` trait on `App`.
+/// Holds the resolved [`ThemeColors`] plus the palette and overrides they
+/// were derived from, so the theme can be written back without losing the
+/// distinction between the scheme and the pinned tokens.
 #[derive(Debug, Clone)]
 pub struct Theme {
-    /// Background colors
-    pub bg: BgColors,
-    /// Text/foreground colors
-    pub text: TextColors,
-    /// Border colors
-    pub border: BorderColors,
-    /// Accent/brand colors
-    pub accent: AccentColors,
-    /// Status indicator colors
-    pub status: StatusColors,
-    /// Interactive element colors
-    pub interactive: InteractiveColors,
-
-    /// General border radius
-    pub radius: Pixels,
-    /// Large border radius (cards, panels)
-    pub radius_lg: Pixels,
-    /// Fully transparent color
-    pub transparent: Hsla,
-    /// Font sizes
-    pub font_sizes: FontSizes,
+    /// Display name of the underlying scheme.
+    pub name: SharedString,
+    /// Light or dark, derived from the palette.
+    pub appearance: Appearance,
+    /// Resolved semantic tokens: palette expansion with `overrides` applied.
+    pub colors: ThemeColors,
+    /// The palette `colors` was derived from.
+    pub palette: Base16Palette,
+    /// User overrides layered on top of the palette expansion.
+    pub overrides: ThemeColorsRefinement,
+    /// Base font size.
+    pub font_size: Pixels,
 }
 
 impl Global for Theme {}
 
-impl Default for Theme {
-    fn default() -> Self {
+impl Theme {
+    /// Default base font size, matching what the shell shipped before sizes
+    /// became configurable tokens.
+    pub const DEFAULT_FONT_SIZE: Pixels = px(13.0);
+
+    /// Build a theme from a palette, with no overrides.
+    pub fn from_palette(name: impl Into<SharedString>, palette: Base16Palette) -> Self {
         Self {
-            bg: BgColors::default(),
-            text: TextColors::default(),
-            border: BorderColors::default(),
-            accent: AccentColors::default(),
-            status: StatusColors::default(),
-            interactive: InteractiveColors::default(),
-            radius: px(6.0),
-            radius_lg: px(8.0),
-            transparent: Hsla::transparent_black(),
-            font_sizes: FontSizes::default(),
+            name: name.into(),
+            appearance: palette.appearance(),
+            colors: palette.into_colors(),
+            palette,
+            overrides: ThemeColorsRefinement::default(),
+            font_size: Self::DEFAULT_FONT_SIZE,
         }
     }
-}
 
-impl Theme {
-    /// Initialize the global theme.
-    ///
-    /// Call this once at application startup.
+    /// The resolved semantic tokens.
+    #[inline(always)]
+    pub fn colors(&self) -> &ThemeColors {
+        &self.colors
+    }
+
+    /// Whether this theme is light or dark.
+    #[inline(always)]
+    pub fn appearance(&self) -> Appearance {
+        self.appearance
+    }
+
+    /// Swap the palette, keeping the current overrides and font size.
+    pub fn set_palette(&mut self, name: impl Into<SharedString>, palette: Base16Palette) {
+        self.name = name.into();
+        self.appearance = palette.appearance();
+        self.palette = palette;
+        self.resolve();
+    }
+
+    /// Replace the user overrides, keeping the current palette.
+    pub fn set_overrides(&mut self, overrides: ThemeColorsRefinement) {
+        self.overrides = overrides;
+        self.resolve();
+    }
+
+    /// Recompute [`colors`](Self::colors) from the palette and overrides.
+    fn resolve(&mut self) {
+        self.colors = self.palette.into_colors();
+        self.overrides.refine(&mut self.colors);
+    }
+
+    /// Initialize the global theme. Call once at startup.
     pub fn init(cx: &mut App) {
         cx.set_global(Theme::default());
     }
 
-    /// Get a reference to the global theme.
+    /// Borrow the global theme.
     #[inline(always)]
     pub fn global(cx: &App) -> &Theme {
         cx.global::<Theme>()
     }
 
-    /// Get a mutable reference to the global theme.
+    /// Mutably borrow the global theme.
     #[inline(always)]
     pub fn global_mut(cx: &mut App) -> &mut Theme {
         cx.global_mut::<Theme>()
     }
 
-    /// Replace the global theme with a new one.
-    ///
-    /// Call this to swap themes at runtime. The theme service will use this
-    /// when loading Base16 schemes or switching themes.
+    /// Replace the global theme.
     pub fn set(theme: Theme, cx: &mut App) {
         *cx.global_mut::<Theme>() = theme;
     }
 }
 
-/// Trait for accessing the active theme.
-///
-/// This is implemented on `App` to provide convenient access to theme values.
+impl Default for Theme {
+    fn default() -> Self {
+        Self::from_palette("Default Dark", Base16Palette::default())
+    }
+}
+
+/// Convenient access to the active theme.
 pub trait ActiveTheme {
     fn theme(&self) -> &Theme;
 }
@@ -168,203 +149,120 @@ impl ActiveTheme for App {
     }
 }
 
-// =============================================================================
-// Color Groups
-// =============================================================================
-
-/// Background colors.
-#[derive(Debug, Clone, Copy)]
-pub struct BgColors {
-    /// Primary background (darkest) - main containers
-    pub primary: Hsla,
-    /// Secondary background - cards/sections
-    pub secondary: Hsla,
-    /// Tertiary background - inputs, hover states
-    pub tertiary: Hsla,
-    /// Elevated background - dropdowns, tooltips
-    pub elevated: Hsla,
+/// On-disk representation of a theme (`theme.toml`).
+///
+/// Stores the palette and the overrides, never the resolved tokens: those
+/// would go stale the moment the derivation changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct StoredTheme {
+    pub name: String,
+    pub font_size: f32,
+    pub base16: Base16Palette,
+    #[serde(skip_serializing_if = "ThemeColorsRefinement::is_empty")]
+    pub colors: ThemeColorsRefinement,
 }
 
-impl Default for BgColors {
+impl Default for StoredTheme {
     fn default() -> Self {
+        Self::from_theme(&Theme::default())
+    }
+}
+
+impl StoredTheme {
+    pub fn from_theme(theme: &Theme) -> Self {
         Self {
-            primary: rgba(0x1e1e1eff).into(),
-            secondary: rgba(0x252526ff).into(),
-            tertiary: rgba(0x2d2d2dff).into(),
-            elevated: rgba(0x333333ff).into(),
-        }
-    }
-}
-
-/// Text/foreground colors.
-#[derive(Debug, Clone, Copy)]
-pub struct TextColors {
-    /// Primary text (brightest)
-    pub primary: Hsla,
-    /// Secondary text (slightly muted)
-    pub secondary: Hsla,
-    /// Muted text (labels, hints)
-    pub muted: Hsla,
-    /// Disabled text
-    pub disabled: Hsla,
-    /// Placeholder text
-    pub placeholder: Hsla,
-}
-
-impl Default for TextColors {
-    fn default() -> Self {
-        Self {
-            primary: rgba(0xffffffee).into(),
-            secondary: rgba(0xccccccff).into(),
-            muted: rgba(0x888888ff).into(),
-            disabled: rgba(0x6e6e6eff).into(),
-            placeholder: rgba(0x6e6e6eff).into(),
-        }
-    }
-}
-
-/// Border colors.
-#[derive(Debug, Clone, Copy)]
-pub struct BorderColors {
-    /// Default border color
-    pub default: Hsla,
-    /// Subtle border (less visible)
-    pub subtle: Hsla,
-    /// Focused/active border
-    pub focused: Hsla,
-}
-
-impl Default for BorderColors {
-    fn default() -> Self {
-        Self {
-            default: rgba(0x3c3c3cff).into(),
-            subtle: rgba(0x2d2d2dff).into(),
-            focused: rgba(0x007accff).into(),
-        }
-    }
-}
-
-/// Accent/brand colors.
-#[derive(Debug, Clone, Copy)]
-pub struct AccentColors {
-    /// Primary accent (Zed blue)
-    pub primary: Hsla,
-    /// Selection background
-    pub selection: Hsla,
-    /// Hover accent
-    pub hover: Hsla,
-}
-
-impl Default for AccentColors {
-    fn default() -> Self {
-        Self {
-            primary: rgba(0x007accff).into(),
-            selection: rgba(0x094771ff).into(),
-            hover: rgba(0x1177bbff).into(),
-        }
-    }
-}
-
-/// Status indicator colors.
-#[derive(Debug, Clone, Copy)]
-pub struct StatusColors {
-    /// Success/good state
-    pub success: Hsla,
-    /// Warning state
-    pub warning: Hsla,
-    /// Error/critical state
-    pub error: Hsla,
-    /// Info state
-    pub info: Hsla,
-}
-
-impl Default for StatusColors {
-    fn default() -> Self {
-        Self {
-            success: rgba(0x4ade80ff).into(),
-            warning: rgba(0xfbbf24ff).into(),
-            error: rgba(0xf87171ff).into(),
-            info: rgba(0x60a5faff).into(),
-        }
-    }
-}
-
-impl StatusColors {
-    /// Get color based on percentage value (for progress bars, usage indicators).
-    pub fn from_percentage(&self, value: u32) -> Hsla {
-        if value >= 90 {
-            self.error
-        } else if value >= 70 {
-            self.warning
-        } else {
-            self.success
+            name: theme.name.to_string(),
+            font_size: theme.font_size.into(),
+            base16: theme.palette,
+            colors: theme.overrides,
         }
     }
 
-    /// Get color based on temperature.
-    pub fn from_temperature(&self, temp: i32) -> Hsla {
-        if temp >= 85 {
-            self.error
-        } else if temp >= 70 {
-            self.warning
-        } else {
-            self.success
-        }
+    pub fn into_theme(self) -> Theme {
+        let mut theme = Theme::from_palette(self.name, self.base16);
+        theme.font_size = px(self.font_size);
+        theme.set_overrides(self.colors);
+        theme
     }
 }
 
-/// Interactive element colors (buttons, toggles).
-#[derive(Debug, Clone, Copy)]
-pub struct InteractiveColors {
-    /// Default state background
-    pub default: Hsla,
-    /// Hover state background
-    pub hover: Hsla,
-    /// Active/pressed state
-    pub active: Hsla,
-    /// Toggle on state
-    pub toggle_on: Hsla,
-    /// Toggle on hover
-    pub toggle_on_hover: Hsla,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl Default for InteractiveColors {
-    fn default() -> Self {
-        Self {
-            default: rgba(0x3b3b3bff).into(),
-            hover: rgba(0x454545ff).into(),
-            active: rgba(0x505050ff).into(),
-            toggle_on: rgba(0x007accff).into(),
-            toggle_on_hover: rgba(0x1177bbff).into(),
-        }
+    #[test]
+    fn overrides_win_over_the_palette_derivation() {
+        let mut theme = Theme::default();
+        let derived_accent = theme.colors().accent;
+
+        let overrides = ThemeColorsRefinement {
+            accent: Some(gpui::hsla(0.0, 1.0, 0.5, 1.0)),
+            ..Default::default()
+        };
+        theme.set_overrides(overrides);
+
+        assert_ne!(theme.colors().accent, derived_accent);
+        // Untouched tokens still come from the palette.
+        assert_eq!(theme.colors().background, theme.palette.base00);
     }
-}
 
-// =============================================================================
-// Design Constants
-// =============================================================================
+    /// The point of keeping palette and overrides separate: changing scheme
+    /// must not silently discard what the user pinned.
+    #[test]
+    fn overrides_survive_a_palette_swap() {
+        let mut theme = Theme::default();
+        let pinned = gpui::hsla(0.0, 1.0, 0.5, 1.0);
+        theme.set_overrides(ThemeColorsRefinement {
+            accent: Some(pinned),
+            ..Default::default()
+        });
 
-/// Spacing constants (in pixels)
-pub mod spacing {
-    pub const XS: f32 = 4.0;
-    pub const SM: f32 = 8.0;
-    pub const MD: f32 = 12.0;
-    pub const LG: f32 = 16.0;
-    pub const XL: f32 = 24.0;
-}
+        let mut light = Base16Palette::default();
+        std::mem::swap(&mut light.base00, &mut light.base07);
+        theme.set_palette("Swapped", light);
 
-/// Border radius constants (in pixels)
-pub mod radius {
-    pub const SM: f32 = 4.0;
-    pub const MD: f32 = 6.0;
-    pub const LG: f32 = 8.0;
-    pub const XL: f32 = 12.0;
-}
+        assert_eq!(theme.colors().accent, pinned);
+        assert_eq!(theme.appearance, Appearance::Light);
+        assert_eq!(theme.colors().background, light.base00);
+    }
 
-/// Icon sizes (in pixels)
-pub mod icon_size {
-    pub const SM: f32 = 12.0;
-    pub const MD: f32 = 14.0;
-    pub const LG: f32 = 16.0;
-    pub const XL: f32 = 18.0;
+    #[test]
+    fn stored_theme_round_trips_through_toml() {
+        let mut theme = Theme {
+            font_size: px(15.0),
+            ..Default::default()
+        };
+        theme.set_overrides(ThemeColorsRefinement {
+            text_accent: Some(gpui::hsla(0.5, 1.0, 0.5, 1.0)),
+            ..Default::default()
+        });
+
+        let encoded = toml::to_string_pretty(&StoredTheme::from_theme(&theme)).unwrap();
+        let decoded: StoredTheme = toml::from_str(&encoded).unwrap();
+        let restored = decoded.into_theme();
+
+        assert_eq!(restored.name, theme.name);
+        assert_eq!(restored.font_size, theme.font_size);
+        assert_eq!(restored.palette, theme.palette);
+        assert_eq!(restored.colors, theme.colors);
+    }
+
+    /// A theme with no overrides should not litter the file with 50 nulls.
+    #[test]
+    fn a_plain_theme_serializes_without_a_colors_table() {
+        let encoded = toml::to_string_pretty(&StoredTheme::from_theme(&Theme::default())).unwrap();
+        assert!(!encoded.contains("[colors]"), "{encoded}");
+        assert!(encoded.contains("base00"), "{encoded}");
+    }
+
+    #[test]
+    fn font_size_is_independent_of_the_palette() {
+        let mut theme = Theme {
+            font_size: px(18.0),
+            ..Default::default()
+        };
+        theme.set_palette("Other", Base16Palette::default());
+        assert_eq!(theme.font_size, px(18.0));
+    }
 }

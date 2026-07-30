@@ -1,26 +1,23 @@
 //! MPRIS panel with a list of players and transport controls.
 
-use gpui::{App, Context, FontWeight, MouseButton, Window, div, img, prelude::*, px};
+use gpui::{App, Context, FontWeight, Window, div, img, prelude::*, px};
 use services::{MprisCommand, MprisData, MprisSubscriber, PlaybackStatus, PlayerCommand};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::patterns::PanelSurface;
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonSize, ButtonStyle, Clickable, Color, Icon, IconButton,
+    IconName, IconSize, Label, LabelCommon, Radius, Spacing, TextSize, h_flex, v_flex,
+};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
-mod icons {
-    pub const HEADER: &str = "󰕾";
-    pub const PLAY: &str = "󰐊";
-    pub const PAUSE: &str = "󰏤";
-    pub const PREV: &str = "󰒮";
-    pub const NEXT: &str = "󰒭";
-    pub const PLAYER: &str = "󰎈";
-    pub const DURATION: &str = "󰥔";
-}
-
 /// Panel content for controlling media players exposed via MPRIS.
 pub struct MprisPanel {
     subscriber: MprisSubscriber,
     data: MprisData,
 }
+
+/// Side of the square album-art slot.
+const COVER_SIZE: f32 = 34.0;
 
 impl MprisPanel {
     pub fn new(subscriber: MprisSubscriber, cx: &mut Context<Self>) -> Self {
@@ -110,32 +107,30 @@ impl MprisPanel {
 
     fn render_control_button(
         id: impl Into<gpui::ElementId>,
-        label: &'static str,
-        cx: &App,
+        icon: IconName,
         on_click: impl Fn(&mut App) + 'static,
     ) -> impl IntoElement {
-        let theme = cx.theme();
-        let interactive_default = theme.interactive.default;
-        let interactive_hover = theme.interactive.hover;
-        let text_primary = theme.text.primary;
+        IconButton::new(id.into(), icon)
+            .style(ButtonStyle::Subtle)
+            .size(ButtonSize::Large)
+            .icon_size(IconSize::XSmall)
+            .on_click(move |_, _, cx| on_click(cx))
+    }
 
-        div()
-            .id(id.into())
-            .w(px(28.))
-            .h(px(24.))
-            .rounded(px(radius::SM))
-            .cursor_pointer()
-            .flex()
-            .items_center()
+    /// The album-art slot when there is no art to show, or the user turned
+    /// covers off.
+    fn render_cover_placeholder(cx: &App) -> impl IntoElement {
+        h_flex()
+            .size(px(COVER_SIZE))
             .justify_center()
-            .bg(interactive_default)
-            .hover(move |el| el.bg(interactive_hover))
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| on_click(cx))
+            .rounded(Radius::Small.pixels())
+            .bg(cx.theme().colors.elevated_surface_background)
+            .border_1()
+            .border_color(cx.theme().colors.border_variant)
             .child(
-                div()
-                    .text_size(px(icon_size::SM))
-                    .text_color(text_primary)
-                    .child(label),
+                Icon::new(IconName::Music)
+                    .size(IconSize::XSmall)
+                    .color(Color::Default),
             )
     }
 
@@ -149,24 +144,25 @@ impl MprisPanel {
         let title = Self::title_for(&player);
         let subtitle = Self::subtitle_for(&player);
         let play_icon = if is_playing {
-            icons::PAUSE
+            IconName::Pause
         } else {
-            icons::PLAY
+            IconName::Play
         };
         let service_name = player.service.clone();
         let subscriber = self.subscriber.clone();
         let show_cover = cx.config().bar.modules.mpris.show_cover;
 
         let status_color = match player.state {
-            PlaybackStatus::Playing => theme.status.success,
-            PlaybackStatus::Paused => theme.status.warning,
-            PlaybackStatus::Stopped => theme.text.muted,
+            PlaybackStatus::Playing => theme.colors.status.success,
+            PlaybackStatus::Paused => theme.colors.status.warning,
+            PlaybackStatus::Stopped => theme.colors.text_muted,
         };
 
         let volume = player
             .volume
             .map(|v| format!("{:.0}%", v.clamp(0.0, 100.0)))
             .unwrap_or_else(|| "--".to_string());
+        let volume_value = player.volume.unwrap_or(0.0);
         let duration = Self::format_duration(player.duration_us);
 
         let can_control = player.can_control;
@@ -175,6 +171,21 @@ impl MprisPanel {
             .next()
             .unwrap_or("player")
             .to_string();
+
+        let cover = show_cover
+            .then(|| player.art_url.clone())
+            .flatten()
+            .map(|source| {
+                div()
+                    .size(px(COVER_SIZE))
+                    .rounded(Radius::Small.pixels())
+                    .overflow_hidden()
+                    .border_1()
+                    .border_color(theme.colors.border_variant)
+                    .child(img(source).size_full())
+                    .into_any_element()
+            })
+            .unwrap_or_else(|| Self::render_cover_placeholder(cx).into_any_element());
 
         let prev_service = service_name.clone();
         let pp_service = service_name.clone();
@@ -188,152 +199,69 @@ impl MprisPanel {
         let dec_sub = subscriber.clone();
         let inc_sub = subscriber;
 
-        div()
+        v_flex()
             .w_full()
-            .p(px(spacing::SM))
-            .bg(theme.bg.secondary)
-            .rounded(px(radius::MD))
-            .border_1()
-            .border_color(theme.border.subtle)
-            .flex()
-            .flex_col()
-            .gap(px(spacing::SM))
+            .p(Spacing::Medium.pixels())
+            .panel_card(cx)
+            .gap(Spacing::Medium.pixels())
             .child(
-                div()
+                h_flex()
                     .w_full()
-                    .flex()
-                    .items_center()
                     .justify_between()
-                    .gap(px(spacing::SM))
+                    .gap(Spacing::Medium.pixels())
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(spacing::SM))
-                            .child(if show_cover {
-                                player
-                                    .art_url
-                                    .clone()
-                                    .map(|source| {
-                                        div()
-                                            .size(px(34.0))
-                                            .rounded(px(radius::SM))
-                                            .overflow_hidden()
-                                            .border_1()
-                                            .border_color(theme.border.subtle)
-                                            .child(img(source).size_full())
-                                            .into_any_element()
-                                    })
-                                    .unwrap_or_else(|| {
-                                        div()
-                                            .size(px(34.0))
-                                            .rounded(px(radius::SM))
-                                            .bg(theme.bg.tertiary)
-                                            .border_1()
-                                            .border_color(theme.border.subtle)
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .child(
-                                                div()
-                                                    .text_size(px(icon_size::SM))
-                                                    .text_color(theme.text.primary)
-                                                    .child(icons::PLAYER),
-                                            )
-                                            .into_any_element()
-                                    })
-                            } else {
-                                div()
-                                    .size(px(34.0))
-                                    .rounded(px(radius::SM))
-                                    .bg(theme.bg.tertiary)
-                                    .border_1()
-                                    .border_color(theme.border.subtle)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(
-                                        div()
-                                            .text_size(px(icon_size::SM))
-                                            .text_color(theme.text.primary)
-                                            .child(icons::PLAYER),
-                                    )
-                                    .into_any_element()
-                            })
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .overflow_hidden()
-                                    .child(
-                                        div()
-                                            .text_size(theme.font_sizes.sm)
-                                            .text_color(theme.text.primary)
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .overflow_hidden()
-                                            .text_ellipsis()
-                                            .child(title),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(theme.font_sizes.xs)
-                                            .text_color(theme.text.secondary)
-                                            .overflow_hidden()
-                                            .text_ellipsis()
-                                            .child(subtitle),
-                                    ),
-                            ),
+                        h_flex().gap(Spacing::Medium.pixels()).child(cover).child(
+                            v_flex()
+                                .overflow_hidden()
+                                .child(
+                                    Label::new(title)
+                                        .size(TextSize::Small)
+                                        .weight(FontWeight::MEDIUM)
+                                        .truncate(),
+                                )
+                                .child(Label::new(subtitle).size(TextSize::XSmall).truncate()),
+                        ),
                     )
                     .child(
-                        div()
-                            .text_size(theme.font_sizes.xs)
-                            .text_color(status_color)
-                            .child(format!("{}  {}", Self::status_text(player.state), volume)),
+                        Label::new(format!("{}  {}", Self::status_text(player.state), volume))
+                            .size(TextSize::XSmall)
+                            .color(Color::Custom(status_color)),
                     ),
             )
             .when(player.duration_us.is_some(), |el| {
                 el.child(
-                    div()
+                    h_flex()
                         .w_full()
-                        .flex()
-                        .items_center()
-                        .gap(px(spacing::XS))
+                        .gap(Spacing::XSmall.pixels())
                         .child(
-                            div()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.muted)
-                                .child(icons::DURATION),
+                            Icon::new(IconName::Clock)
+                                .size(IconSize::XSmall)
+                                .color(Color::Muted),
                         )
                         .child(
-                            div()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.muted)
-                                .child(duration),
+                            Label::new(duration)
+                                .size(TextSize::XSmall)
+                                .color(Color::Muted),
                         ),
                 )
             })
             .child(
-                div()
+                h_flex()
                     .w_full()
-                    .flex()
-                    .items_center()
                     .justify_between()
-                    .gap(px(spacing::XS))
+                    .gap(Spacing::XSmall.pixels())
                     .child(
-                        div()
-                            .text_size(theme.font_sizes.xs)
-                            .text_color(theme.text.muted)
-                            .child(service_short),
+                        Label::new(service_short)
+                            .size(TextSize::XSmall)
+                            .color(Color::Muted),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .gap(px(spacing::XS))
+                        h_flex()
+                            .gap(Spacing::XSmall.pixels())
                             .when(can_control, |el| {
                                 el.child(Self::render_control_button(
                                     format!("mpris-prev-{}", service_name),
-                                    icons::PREV,
-                                    cx,
+                                    IconName::SkipBack,
                                     move |cx| {
                                         Self::run_command(
                                             cx,
@@ -346,7 +274,6 @@ impl MprisPanel {
                                 .child(Self::render_control_button(
                                     format!("mpris-play-{}", pp_service),
                                     play_icon,
-                                    cx,
                                     move |cx| {
                                         Self::run_command(
                                             cx,
@@ -359,8 +286,7 @@ impl MprisPanel {
                                 .child(
                                     Self::render_control_button(
                                         format!("mpris-next-{}", next_service),
-                                        icons::NEXT,
-                                        cx,
+                                        IconName::SkipForward,
                                         move |cx| {
                                             Self::run_command(
                                                 cx,
@@ -375,30 +301,26 @@ impl MprisPanel {
                             .when(can_control && player.volume.is_some(), |el| {
                                 el.child(Self::render_control_button(
                                     format!("mpris-dec-{}", dec_service),
-                                    "−",
-                                    cx,
+                                    IconName::Dash,
                                     move |cx| {
-                                        let value = player.volume.unwrap_or(0.0) - 5.0;
                                         Self::run_command(
                                             cx,
                                             dec_sub.clone(),
                                             dec_service.clone(),
-                                            PlayerCommand::Volume(value),
+                                            PlayerCommand::Volume(volume_value - 5.0),
                                         );
                                     },
                                 ))
                                 .child(
                                     Self::render_control_button(
                                         format!("mpris-inc-{}", inc_service),
-                                        "+",
-                                        cx,
+                                        IconName::Plus,
                                         move |cx| {
-                                            let value = player.volume.unwrap_or(0.0) + 5.0;
                                             Self::run_command(
                                                 cx,
                                                 inc_sub.clone(),
                                                 inc_service.clone(),
-                                                PlayerCommand::Volume(value),
+                                                PlayerCommand::Volume(volume_value + 5.0),
                                             );
                                         },
                                     ),
@@ -411,7 +333,6 @@ impl MprisPanel {
 
 impl Render for MprisPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
         let players = self.sorted_players();
         let is_empty = players.is_empty();
 
@@ -419,58 +340,43 @@ impl Render for MprisPanel {
             .id("mpris-panel")
             .w_full()
             .h_full()
-            .p(px(spacing::LG))
-            .bg(theme.bg.primary)
-            .border_1()
-            .border_color(theme.border.default)
-            .rounded(px(radius::LG))
+            .p(Spacing::XLarge.pixels())
+            .panel_surface(cx)
             .overflow_hidden()
             .child(
-                div()
+                v_flex()
                     .w_full()
                     .h_full()
-                    .flex()
-                    .flex_col()
-                    .gap(px(spacing::MD))
+                    .gap(Spacing::Large.pixels())
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(spacing::SM))
+                        h_flex()
+                            .gap(Spacing::Medium.pixels())
                             .child(
-                                div()
-                                    .text_size(px(icon_size::XL))
-                                    .text_color(theme.text.primary)
-                                    .child(icons::HEADER),
+                                Icon::new(IconName::Volume)
+                                    .size(IconSize::Large)
+                                    .color(Color::Default),
                             )
                             .child(
-                                div()
-                                    .text_size(theme.font_sizes.lg)
-                                    .text_color(theme.text.primary)
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("Media Players"),
+                                Label::new("Media Players")
+                                    .size(TextSize::Large)
+                                    .weight(FontWeight::BOLD),
                             ),
                     )
                     .when(is_empty, |el| {
                         el.child(
-                            div()
-                                .flex_1()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_size(theme.font_sizes.sm)
-                                .text_color(theme.text.muted)
-                                .child("No MPRIS players detected"),
+                            h_flex().flex_1().justify_center().child(
+                                Label::new("No MPRIS players detected")
+                                    .size(TextSize::Small)
+                                    .color(Color::Muted),
+                            ),
                         )
                     })
                     .when(!is_empty, |el| {
                         el.child(
-                            div()
+                            v_flex()
                                 .flex_1()
                                 .overflow_hidden()
-                                .flex()
-                                .flex_col()
-                                .gap(px(spacing::SM))
+                                .gap(Spacing::Medium.pixels())
                                 .children(players.into_iter().map(|player| {
                                     self.render_player_card(player, cx).into_any_element()
                                 })),

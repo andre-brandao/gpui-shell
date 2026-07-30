@@ -3,7 +3,10 @@
 pub mod config;
 
 use gpui::{AnyElement, App, div, img, prelude::*, px};
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
+use ui::{
+    ActiveTheme, Clickable, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem,
+    ListItemSpacing, TextSize, Toggleable,
+};
 
 use self::config::AppsConfig;
 use crate::launcher::view::{LauncherView, ViewContext};
@@ -12,13 +15,22 @@ use crate::state::AppState;
 /// Applications view - searches and launches desktop applications.
 pub struct AppsView {
     prefix: String,
+    /// Indices into `ApplicationsService::all()`, refreshed once per frame
+    /// by `update_matches`.
+    matches: Vec<usize>,
 }
 
 impl AppsView {
     pub fn new(config: &AppsConfig) -> Self {
         Self {
             prefix: config.prefix.clone(),
+            matches: Vec::new(),
         }
+    }
+
+    fn app<'a>(&self, index: usize, cx: &'a App) -> Option<&'a services::Application> {
+        let ix = *self.matches.get(index)?;
+        AppState::applications(cx).all().get(ix)
     }
 }
 
@@ -31,8 +43,8 @@ impl LauncherView for AppsView {
         "Applications"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰀻"
+    fn icon(&self) -> IconName {
+        IconName::Layers
     }
 
     fn description(&self) -> &'static str {
@@ -43,21 +55,22 @@ impl LauncherView for AppsView {
         true
     }
 
-    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
-        let query_lower = vx.query.to_lowercase();
-        AppState::applications(cx).search(&query_lower).len()
+    fn update_matches(&mut self, vx: &ViewContext, cx: &App) {
+        self.matches = AppState::applications(cx).search_indices(vx.query);
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let query_lower = vx.query.to_lowercase();
-        let apps = AppState::applications(cx).search(&query_lower);
-        let Some(app) = apps.get(index) else {
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(app) = self.app(index, cx) else {
             return div().into_any_element();
         };
 
         let theme = cx.theme();
         let exec = app.exec.clone();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
         let fallback_icon = self.icon();
         ListItem::new(format!("app-{}", app.name))
             .spacing(ListItemSpacing::Sparse)
@@ -76,8 +89,7 @@ impl LauncherView for AppsView {
                     })
                     .when(app.icon_path.is_none(), move |el| {
                         el.bg(interactive_default)
-                            .text_size(px(14.))
-                            .child(fallback_icon)
+                            .child(Icon::new(fallback_icon).size(IconSize::Small))
                     }),
             )
             .on_click(move |_, _, _cx| {
@@ -88,11 +100,11 @@ impl LauncherView for AppsView {
                     .flex()
                     .flex_col()
                     .gap(px(1.))
-                    .child(Label::new(app.name.clone()).size(LabelSize::Default))
+                    .child(Label::new(app.name.clone()).size(TextSize::Default))
                     .when_some(app.description.as_ref(), |el, desc| {
                         el.child(
                             Label::new(desc.clone())
-                                .size(LabelSize::Small)
+                                .size(TextSize::Small)
                                 .color(Color::Muted),
                         )
                     }),
@@ -100,11 +112,8 @@ impl LauncherView for AppsView {
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let query_lower = vx.query.to_lowercase();
-        let apps = AppState::applications(cx).search(&query_lower);
-
-        if let Some(app) = apps.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(app) = self.app(index, cx) {
             launch_app(&app.exec);
             true
         } else {

@@ -1,11 +1,11 @@
 //! Picker panel for pinning apps that aren't currently running.
 
 use gpui::{Context, FocusHandle, Focusable, MouseButton, Render, Window, div, prelude::*, px};
-use ui::{ActiveTheme, InputBuffer, radius, render_input_line, spacing};
+use ui::{ActiveTheme, InputBuffer, Radius, Spacing, render_input_line};
 
 use super::item::desktop_file_id;
 use super::toggle_pin;
-use crate::config::ActiveConfig;
+use crate::config::State;
 use crate::keybinds::{
     Backspace, Cancel, CursorLeft, CursorRight, DeleteWordBack, SelectAll, SelectLeft, SelectRight,
     SelectWordLeft, SelectWordRight, WordLeft, WordRight,
@@ -15,8 +15,9 @@ use crate::state::AppState;
 pub(super) const DOCK_APP_PICKER_HEIGHT: f32 = 280.0;
 const INPUT_LINE_HEIGHT: f32 = 14.0;
 const RESULT_ROW_HEIGHT: f32 = 32.0;
-const MAX_RESULTS: usize = ((DOCK_APP_PICKER_HEIGHT - 2.0 * spacing::SM - INPUT_LINE_HEIGHT)
-    / (RESULT_ROW_HEIGHT + spacing::XS)) as usize;
+const MAX_RESULTS: usize =
+    ((DOCK_APP_PICKER_HEIGHT - 2.0 * Spacing::Medium.value() - INPUT_LINE_HEIGHT)
+        / (RESULT_ROW_HEIGHT + Spacing::XSmall.value())) as usize;
 
 pub(super) struct DockAppPicker {
     input: InputBuffer,
@@ -34,7 +35,7 @@ impl DockAppPicker {
     }
 
     fn matching_unpinned_apps(&self, cx: &gpui::App) -> Vec<services::Application> {
-        let pinned = &cx.config().dock.pinned;
+        let pinned = State::pinned(cx);
         AppState::applications(cx)
             .search(self.input.text())
             .into_iter()
@@ -66,13 +67,13 @@ impl Render for DockAppPicker {
             let label = app.name.clone();
             div()
                 .id(gpui::SharedString::from(id.clone()))
-                .px(px(spacing::MD))
-                .py(px(spacing::SM))
+                .px(Spacing::Large.pixels())
+                .py(Spacing::Medium.pixels())
                 .min_h(px(RESULT_ROW_HEIGHT))
-                .rounded(px(radius::SM))
+                .rounded(Radius::Small.pixels())
                 .cursor_pointer()
-                .text_color(theme.text.primary)
-                .hover(move |style| style.bg(theme.interactive.hover))
+                .text_color(theme.colors.text)
+                .hover(move |style| style.bg(theme.colors.element_hover))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |_this, _event, window, cx| {
@@ -159,13 +160,13 @@ impl Render for DockAppPicker {
             )
             .flex()
             .flex_col()
-            .gap(px(spacing::XS))
-            .p(px(spacing::SM))
-            .rounded(px(radius::MD))
-            .bg(theme.bg.primary)
-            .text_color(theme.text.primary)
+            .gap(Spacing::XSmall.pixels())
+            .p(Spacing::Medium.pixels())
+            .rounded(Radius::Medium.pixels())
+            .bg(theme.colors.background)
+            .text_color(theme.colors.text)
             .border_1()
-            .border_color(theme.border.subtle)
+            .border_color(theme.colors.border_variant)
             .child(render_input_line(&self.input, "Search apps to pin...", cx))
             .children(entries)
     }
@@ -174,12 +175,12 @@ impl Render for DockAppPicker {
 #[cfg(test)]
 mod tests {
     use super::{DOCK_APP_PICKER_HEIGHT, INPUT_LINE_HEIGHT, MAX_RESULTS, RESULT_ROW_HEIGHT};
-    use ui::spacing;
+    use ui::Spacing;
 
     fn picker_content_height(result_count: usize) -> f32 {
-        2.0 * spacing::SM
+        2.0 * Spacing::Medium.value()
             + INPUT_LINE_HEIGHT
-            + result_count as f32 * (RESULT_ROW_HEIGHT + spacing::XS)
+            + result_count as f32 * (RESULT_ROW_HEIGHT + Spacing::XSmall.value())
     }
 
     #[test]

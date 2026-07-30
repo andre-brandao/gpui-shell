@@ -1,22 +1,24 @@
-//! Shared sizing and spacing helpers for bar widgets.
+//! Content helpers for bar widgets: sizes, gaps, and the colour decisions
+//! the bar config drives.
 //!
-//! Font sizes should be accessed from `theme.font_sizes` (xs/sm for vertical, sm/md for horizontal).
+//! The chip a widget sits in, and the bar surface under it, are
+//! [`ui::patterns::BarChip`] and [`ui::patterns::BarSurface`] - this module
+//! only decides what to hand them.
+//!
+//! Font sizes come from `TextSize` (XSmall/Small for vertical, Small/Medium for horizontal).
 
-use gpui::{AnyElement, Hsla, IntoElement, div, prelude::*, px};
-use ui::{Theme, icon_size, radius, spacing};
+use gpui::{AnyElement, Hsla, IntoElement, SharedString, prelude::*, px};
+use ui::{
+    Color, Divider, Icon, IconName, IconSize, Label, LabelCommon, Spacing, TextSize, Theme, h_flex,
+    v_flex,
+};
 
 use crate::bar::config::BarConfig;
 
 /// Common gap used inside compact bar widgets.
-pub const CHIP_GAP: f32 = spacing::XS;
+pub const CHIP_GAP: f32 = Spacing::XSmall.value();
 /// Tighter gap used inside grouped widgets like workspaces and tray.
-pub const GROUP_GAP: f32 = spacing::XS;
-/// Common vertical padding used inside compact bar widgets.
-pub const CHIP_PADDING_Y: f32 = 3.0;
-/// Shared outer breathing room around each widget shell.
-pub const CHIP_OUTER_MARGIN: f32 = 2.0;
-/// Section gap between widgets once per-widget outer breathing room is applied.
-pub const BAR_SECTION_GAP: f32 = 0.0;
+pub const GROUP_GAP: f32 = Spacing::XSmall.value();
 /// Standard tray icon button size.
 pub const TRAY_ITEM_SIZE: f32 = 24.0;
 /// Workspace pill height.
@@ -35,68 +37,30 @@ pub const SECTION_DIVIDER_HEIGHT: f32 = 14.0;
 pub const VERTICAL_TEXT_LINE_WIDTH: f32 = 20.0;
 
 #[inline(always)]
-fn shell_radius(is_vertical: bool) -> f32 {
-    if is_vertical { radius::SM } else { radius::LG }
-}
-
-#[inline(always)]
-fn shell_padding_y(is_vertical: bool) -> f32 {
-    if is_vertical {
-        CHIP_PADDING_Y
-    } else {
-        CHIP_PADDING_Y + 1.0
-    }
-}
-
-#[inline(always)]
-fn shell_height(is_vertical: bool) -> Option<f32> {
-    if is_vertical { None } else { Some(24.0) }
-}
-
-/// Horizontal padding for compact bar widgets.
-#[inline(always)]
-pub fn chip_padding_x(is_vertical: bool) -> f32 {
-    if is_vertical {
-        spacing::XS
-    } else {
-        spacing::SM
-    }
-}
-
-#[inline(always)]
 pub fn group_gap(is_vertical: bool) -> f32 {
     if is_vertical { GROUP_GAP } else { 3.0 }
 }
 
-#[inline(always)]
-fn group_padding_x(is_vertical: bool) -> f32 {
-    if is_vertical { 2.0 } else { spacing::SM - 1.0 }
-}
-
-#[inline(always)]
-fn widget_outer_margin_x(is_vertical: bool) -> f32 {
-    if is_vertical { CHIP_OUTER_MARGIN } else { 2.0 }
-}
-
 /// Icon size tuned for bar density.
 #[inline(always)]
-pub fn icon(is_vertical: bool) -> f32 {
+pub fn icon(is_vertical: bool) -> IconSize {
     if is_vertical {
-        icon_size::MD
+        IconSize::Small
     } else {
-        icon_size::LG
+        IconSize::Medium
     }
 }
 
-/// Get the appropriate label font size from theme based on bar orientation.
+/// The label size for the given bar orientation.
 ///
-/// Use `label_size(theme, is_vertical)` instead of the old `style::label()`.
+/// Returns a [`TextSize`] rather than absolute pixels so the label still
+/// scales with the user's configured base font size.
 #[inline(always)]
-pub fn label_size(theme: &ui::Theme, is_vertical: bool) -> gpui::Pixels {
+pub fn label_size(is_vertical: bool) -> TextSize {
     if is_vertical {
-        theme.font_sizes.xs
+        TextSize::XSmall
     } else {
-        theme.font_sizes.sm
+        TextSize::Small
     }
 }
 
@@ -113,18 +77,9 @@ pub fn compact_percent(value: u32, is_vertical: bool) -> String {
 #[inline(always)]
 pub fn widget_background(theme: &Theme, bar: &BarConfig) -> Hsla {
     if bar.widget_background {
-        theme.bg.secondary
+        theme.colors.surface_background
     } else {
-        theme.transparent
-    }
-}
-
-#[inline(always)]
-pub fn group_background(theme: &Theme, bar: &BarConfig) -> Hsla {
-    if bar.widget_background {
-        theme.bg.secondary
-    } else {
-        theme.transparent
+        theme.colors.border_transparent
     }
 }
 
@@ -132,162 +87,81 @@ pub fn group_background(theme: &Theme, bar: &BarConfig) -> Hsla {
 pub fn widget_border(theme: &Theme, bar: &BarConfig, is_vertical: bool) -> Hsla {
     if bar.widget_border {
         if is_vertical {
-            theme.border.subtle.opacity(0.9)
+            theme.colors.border_variant.opacity(0.9)
         } else {
-            theme.border.default
+            theme.colors.border
         }
     } else {
-        theme.transparent
+        theme.colors.border_transparent
     }
 }
 
-/// Apply the compact shared shell used by single bar widgets.
-pub fn bar_widget_shell(
-    theme: &Theme,
-    bar: &BarConfig,
-    is_vertical: bool,
-    is_interactive: bool,
-    content: impl IntoElement,
-) -> AnyElement {
-    let hover_bg = if bar.widget_background {
-        theme.bg.tertiary
+/// Resting fill of an interactive widget under the pointer.
+#[inline(always)]
+pub fn widget_hover_background(theme: &Theme, bar: &BarConfig) -> Hsla {
+    if bar.widget_background {
+        theme.colors.elevated_surface_background
     } else {
-        theme.interactive.hover
-    };
-
-    div()
-        .when(is_vertical, |el| {
-            el.w_full().flex().flex_col().items_center()
-        })
-        .when(!is_vertical, |el| el.flex().items_center())
-        .justify_center()
-        .px(px(chip_padding_x(is_vertical)))
-        .py(px(shell_padding_y(is_vertical)))
-        .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
-        .rounded(px(shell_radius(is_vertical)))
-        .bg(widget_background(theme, bar))
-        .when(bar.widget_border, |el| {
-            el.border_1()
-                .border_color(widget_border(theme, bar, is_vertical))
-        })
-        .when(is_interactive, |el| {
-            el.cursor_pointer().hover(move |style| style.bg(hover_bg))
-        })
-        .child(content)
-        .into_any_element()
-}
-
-/// Apply the shared outer spacing used by all visible bar widgets.
-pub fn bar_widget_slot(is_vertical: bool, content: impl IntoElement) -> AnyElement {
-    if is_vertical {
-        div()
-            .w_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .py(px(CHIP_OUTER_MARGIN))
-            .child(content)
-            .into_any_element()
-    } else {
-        div()
-            .mx(px(widget_outer_margin_x(is_vertical)))
-            .my(px(CHIP_OUTER_MARGIN))
-            .child(content)
-            .into_any_element()
+        theme.colors.element_hover
     }
 }
 
-/// Apply the grouped shell used by composite bar widgets.
-pub fn bar_group_shell(
-    theme: &Theme,
-    bar: &BarConfig,
-    is_vertical: bool,
-    is_interactive: bool,
-    content: impl IntoElement,
-) -> AnyElement {
-    let hover_bg = if bar.widget_background {
-        theme.bg.tertiary
-    } else {
-        theme.interactive.hover
-    };
-
-    div()
-        .when(is_vertical, |el| {
-            el.w_full().flex().flex_col().items_center()
-        })
-        .when(!is_vertical, |el| el.flex().items_center())
-        .justify_center()
-        .px(px(group_padding_x(is_vertical)))
-        .py(px(shell_padding_y(is_vertical)))
-        .when_some(shell_height(is_vertical), |el, height| el.h(px(height)))
-        .rounded(px(shell_radius(is_vertical)))
-        .bg(group_background(theme, bar))
-        .when(bar.widget_border, |el| {
-            el.border_1()
-                .border_color(widget_border(theme, bar, is_vertical))
-        })
-        .when(is_interactive, |el| {
-            el.cursor_pointer().hover(move |style| style.bg(hover_bg))
-        })
-        .child(content)
-        .into_any_element()
+/// The label a bar widget puts next to its icon, in the size and color the
+/// orientation and state ask for.
+pub fn bar_label(text: impl Into<SharedString>, is_vertical: bool, color: Hsla) -> Label {
+    Label::new(text)
+        .size(label_size(is_vertical))
+        .color(Color::Custom(color))
 }
 
 /// Render a compact icon/value pair for status widgets.
 pub fn bar_stat(
-    theme: &Theme,
     is_vertical: bool,
-    icon_text: &'static str,
-    value_text: impl IntoElement,
+    icon_name: IconName,
+    value_text: impl Into<SharedString>,
     color: Hsla,
 ) -> AnyElement {
-    div()
-        .flex()
-        .when(is_vertical, |el| el.flex_col())
-        .items_center()
+    let label = bar_label(value_text, is_vertical, color);
+
+    stack(is_vertical)
         .justify_center()
         .gap(px(CHIP_GAP))
         .child(
-            div()
-                .flex_shrink_0()
-                .text_size(px(icon(is_vertical)))
-                .text_color(color)
-                .child(icon_text),
+            Icon::new(icon_name)
+                .size(icon(is_vertical))
+                .color(Color::Custom(color)),
         )
         .child(if is_vertical {
-            vertical_text_line(
-                div()
-                    .flex_shrink(1.)
-                    .text_size(label_size(theme, is_vertical))
-                    .text_color(color)
-                    .child(value_text),
-            )
+            vertical_text_line(label)
         } else {
-            div()
-                .flex_shrink(1.)
-                .text_size(label_size(theme, is_vertical))
-                .text_color(color)
-                .child(value_text)
-                .into_any_element()
+            label.into_any_element()
         })
         .into_any_element()
 }
 
-/// Center a vertical text row to a fixed axis so stacked labels do not drift visually.
-pub fn vertical_text_line(content: impl IntoElement) -> AnyElement {
-    div()
-        .w(px(VERTICAL_TEXT_LINE_WIDTH))
-        .flex()
-        .justify_center()
-        .child(content)
-        .into_any_element()
+/// The flex container a widget lays its content out in: a column on a
+/// vertical bar, a row on a horizontal one, centered either way.
+pub fn stack(is_vertical: bool) -> gpui::Div {
+    if is_vertical {
+        v_flex().items_center()
+    } else {
+        h_flex()
+    }
 }
 
-/// Render the subtle divider used inside dense horizontal widgets.
-pub fn section_divider(color: Hsla) -> AnyElement {
-    div()
-        .w(px(1.0))
-        .h(px(SECTION_DIVIDER_HEIGHT))
-        .bg(color)
+/// The subtle divider used inside dense horizontal widgets. Takes its colour
+/// from the widget border, which the bar config can switch off entirely.
+pub fn section_divider(color: Hsla) -> Divider {
+    Divider::vertical()
+        .color(color)
+        .length(px(SECTION_DIVIDER_HEIGHT))
+}
+
+/// Center a vertical text row to a fixed axis so stacked labels do not drift visually.
+pub fn vertical_text_line(content: impl IntoElement) -> AnyElement {
+    h_flex()
+        .w(px(VERTICAL_TEXT_LINE_WIDTH))
+        .justify_center()
+        .child(content)
         .into_any_element()
 }

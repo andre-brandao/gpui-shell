@@ -12,8 +12,9 @@
 //!   return a single element for their entire body. When this returns `Some`,
 //!   the launcher skips the item loop.
 
-use gpui::{AnyElement, App, div, prelude::*, px};
-use ui::{ActiveTheme, radius, spacing};
+use gpui::{AnyElement, App};
+use ui::IconName;
+use ui::patterns::footer_hints;
 
 /// Input event passed to views for handling.
 #[derive(Clone, Debug)]
@@ -74,8 +75,8 @@ pub trait LauncherView: Send + Sync {
     /// Display name for the view.
     fn name(&self) -> &'static str;
 
-    /// Icon for the view (Nerd font).
-    fn icon(&self) -> &'static str;
+    /// Icon for the view.
+    fn icon(&self) -> IconName;
 
     /// Description shown in help.
     fn description(&self) -> &'static str;
@@ -90,11 +91,28 @@ pub trait LauncherView: Send + Sync {
         true
     }
 
+    /// Recompute the view's match list against the current query.
+    ///
+    /// The launcher calls this exactly once per frame, and again whenever
+    /// it needs a fresh count outside of rendering. Everything after it -
+    /// [`Self::match_count`], [`Self::render_item`], [`Self::on_select`] -
+    /// must read the stored result rather than filtering again: those are
+    /// called once *per row*, so filtering inside them is quadratic in the
+    /// number of matches.
+    ///
+    /// Content views that have no list leave this as a no-op.
+    fn update_matches(&mut self, _vx: &ViewContext, _cx: &App) {}
+
     /// How many selectable items the view currently has.
+    ///
+    /// Reads the result of the last [`Self::update_matches`].
     fn match_count(&self, vx: &ViewContext, cx: &App) -> usize;
 
     /// Render a single list item at `index`. `selected` is true if the
     /// launcher's selection cursor is on this item.
+    ///
+    /// Called only for the rows gpui actually needs, and reads the result
+    /// of the last [`Self::update_matches`].
     fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement;
 
     /// Optional header rendered above the item list.
@@ -126,47 +144,12 @@ pub trait LauncherView: Send + Sync {
     }
 
     /// Render content for the footer action bar.
-    fn render_footer_bar(&self, vx: &ViewContext, cx: &App) -> AnyElement {
-        render_footer_hints(default_footer_actions(vx), cx)
+    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
+        footer_hints(vec![("Open", "Enter"), ("Close", "Esc")], cx)
     }
 }
 
 /// Returns true if the query starts with a view prefix.
 pub fn is_prefix(query: &str, prefix: &str) -> bool {
     query.starts_with(prefix)
-}
-
-/// Render the default footer action hints.
-pub fn render_footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let text_muted = theme.text.muted;
-    let interactive_default = theme.interactive.default;
-
-    div()
-        .flex()
-        .items_center()
-        .gap(px(spacing::LG))
-        .text_size(theme.font_sizes.sm)
-        .text_color(text_muted)
-        .children(actions.into_iter().map(|(action, key)| {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(spacing::SM - 2.0))
-                .child(action)
-                .child(
-                    div()
-                        .px(px(spacing::SM - 2.0))
-                        .py(px(2.))
-                        .rounded(px(radius::SM - 1.0))
-                        .bg(interactive_default)
-                        .text_size(theme.font_sizes.xs)
-                        .child(key),
-                )
-        }))
-        .into_any_element()
-}
-
-fn default_footer_actions(_vx: &ViewContext) -> Vec<(&'static str, &'static str)> {
-    vec![("Open", "Enter"), ("Close", "Esc")]
 }

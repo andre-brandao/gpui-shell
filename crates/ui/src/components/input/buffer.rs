@@ -10,8 +10,6 @@ pub struct InputBuffer {
     /// Cursor position as a byte index into `text`.
     cursor: usize,
     /// Selection anchor as a byte index into `text`.
-    ///
-    /// When present, the selection range is `min(anchor, cursor)..max(anchor, cursor)`.
     anchor: Option<usize>,
 }
 

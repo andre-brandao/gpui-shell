@@ -5,13 +5,17 @@ pub use config::TrayConfig;
 
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use gpui::{
-    AnyElement, App, Context, ElementId, MouseButton, Render, RenderImage, SharedString, Size,
-    Window, div, img, prelude::*, px,
+    AnyElement, App, ClickEvent, Context, ElementId, Pixels, Point, Render, RenderImage,
+    SharedString, Size, Window, div, img, prelude::*, px,
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
 use std::sync::Arc;
-use ui::{ActiveTheme, radius, spacing};
+use ui::patterns::PanelSurface;
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Disableable, Divider,
+    Icon, IconName, IconSize, Label, LabelCommon, List, ListItem, Spacing, TextSize,
+};
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::{ActiveConfig, Config};
@@ -41,13 +45,7 @@ impl Tray {
 
     /// Handle left-clicking on a tray item.
     /// Opens menu panel if the item has a menu, otherwise calls Activate.
-    fn on_item_click(
-        &self,
-        item: &TrayItem,
-        event: &gpui::MouseDownEvent,
-        window: &Window,
-        cx: &mut App,
-    ) {
+    fn on_item_click(&self, item: &TrayItem, at: Point<Pixels>, window: &Window, cx: &mut App) {
         if let Some(menu) = item.menu.clone() {
             let panel_id = format!("systray-{}", item.name);
             let subscriber = self.subscriber.clone();
@@ -55,7 +53,7 @@ impl Tray {
             let config = Config::global(cx);
             let panel_size = Size::new(px(250.0), px(400.0));
             let (anchor, margin) =
-                panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+                panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
 
             let config = PanelConfig {
                 width: 250.0,
@@ -95,11 +93,9 @@ impl Tray {
         item: TrayItem,
         icon_size: f32,
         item_size: f32,
-        theme: &ui::Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let item_name_right = item.name.clone();
-        let item_name_middle = item.name.clone();
+        let aux_item_name = item.name.clone();
 
         let icon_element: AnyElement = if let Some((w, h, data)) = item.icon_pixmap() {
             let mut bgra = data.to_vec();
@@ -111,70 +107,47 @@ impl Tray {
                 let render_img = Arc::new(RenderImage::new(vec![frame]));
                 img(render_img).size(px(icon_size)).into_any_element()
             } else {
-                let icon_char = get_icon_char("", item.id.as_deref());
-                div()
-                    .text_size(px(icon_size))
-                    .text_color(theme.text.secondary)
-                    .child(icon_char)
-                    .into_any_element()
+                render_icon_name(get_icon_name("", item.id.as_deref()), icon_size)
             }
         } else {
-            let icon_char = match &item.icon {
-                Some(TrayIcon::Name(name)) => get_icon_char(name, item.id.as_deref()),
-                None => get_icon_char("", item.id.as_deref()),
+            let name = match &item.icon {
+                Some(TrayIcon::Name(name)) => get_icon_name(name, item.id.as_deref()),
+                None => get_icon_name("", item.id.as_deref()),
                 Some(TrayIcon::Pixmap { .. }) => unreachable!(),
             };
-            div()
-                .text_size(px(icon_size))
-                .text_color(theme.text.secondary)
-                .child(icon_char)
-                .into_any_element()
+            render_icon_name(name, icon_size)
         };
 
-        div()
-            .id(ElementId::Name(SharedString::from(format!(
-                "tray-item-{}",
-                item.name
-            ))))
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(item_size))
-            .rounded(px(radius::SM))
-            .cursor_pointer()
-            .bg(theme.transparent)
-            .hover(move |s| s.bg(theme.bg.tertiary))
-            .active(move |s| s.bg(theme.interactive.active))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event, window, cx| {
-                    this.on_item_click(&item, event, window, cx);
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, _event, _window, cx| {
-                    this.dispatch_command(
-                        TrayCommand::ContextMenu {
-                            item_name: item_name_right.clone(),
-                        },
-                        cx,
-                    );
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Middle,
-                cx.listener(move |this, _event, _window, cx| {
-                    this.dispatch_command(
-                        TrayCommand::SecondaryActivate {
-                            item_name: item_name_middle.clone(),
-                        },
-                        cx,
-                    );
-                }),
-            )
-            .child(icon_element)
-            .into_any_element()
+        // `item_size` is the hit target; the icon is drawn at `icon_size`, so
+        // the difference becomes the button's own padding.
+        let padding_y = px(((item_size - icon_size) / 2.0).max(0.0));
+
+        ButtonLike::new(ElementId::Name(SharedString::from(format!(
+            "tray-item-{}",
+            item.name
+        ))))
+        .style(ButtonStyle::Ghost)
+        .width(px(item_size))
+        .padding(px(0.0), padding_y)
+        .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+            this.on_item_click(&item, event.position(), window, cx);
+        }))
+        .on_aux_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
+            let command = if event.is_middle_click() {
+                TrayCommand::SecondaryActivate {
+                    item_name: aux_item_name.clone(),
+                }
+            } else if event.is_right_click() {
+                TrayCommand::ContextMenu {
+                    item_name: aux_item_name.clone(),
+                }
+            } else {
+                return;
+            };
+            this.dispatch_command(command, cx);
+        }))
+        .child(icon_element)
+        .into_any_element()
     }
 
     fn render_tray_strip(
@@ -182,21 +155,17 @@ impl Tray {
         items: Vec<TrayItem>,
         icon_size: f32,
         item_size: f32,
-        theme: &ui::Theme,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        div()
+        style::stack(is_vertical)
             .id("systray")
-            .flex()
-            .when(is_vertical, |this| this.flex_col())
-            .items_center()
             .justify_center()
             .gap(px(style::group_gap(is_vertical)))
             .children(
                 items
                     .into_iter()
-                    .map(|item| self.render_tray_item(item, icon_size, item_size, theme, cx)),
+                    .map(|item| self.render_tray_item(item, icon_size, item_size, cx)),
             )
             .into_any_element()
     }
@@ -212,8 +181,7 @@ impl BarWidget for Tray {
         let config = &cx.config().bar.modules.tray;
         let icon_size = config.icon_size;
         let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
-        let theme = cx.theme().clone();
-        self.render_tray_strip(items, icon_size, item_size, &theme, true, cx)
+        self.render_tray_strip(items, icon_size, item_size, true, cx)
     }
 
     fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -221,8 +189,7 @@ impl BarWidget for Tray {
         let config = &cx.config().bar.modules.tray;
         let icon_size = config.icon_size;
         let item_size = icon_size.max(style::TRAY_ITEM_SIZE);
-        let theme = cx.theme().clone();
-        self.render_tray_strip(items, icon_size, item_size, &theme, false, cx)
+        self.render_tray_strip(items, icon_size, item_size, false, cx)
     }
 }
 
@@ -319,16 +286,7 @@ impl TrayMenuPanel {
         depth: usize,
         cx: &mut Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        let theme = cx.theme();
         let mut elements = Vec::new();
-
-        // Pre-compute colors for closures
-        let border_subtle = theme.border.subtle;
-        let interactive_hover = theme.interactive.hover;
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-        let text_disabled = theme.text.disabled;
-        let accent_primary = theme.accent.primary;
 
         for layout in items {
             let MenuLayout(id, props, children) = layout;
@@ -348,7 +306,7 @@ impl TrayMenuPanel {
             if props.type_.as_deref() == Some("separator")
                 || (label.is_empty() && children.is_empty())
             {
-                elements.push(render_menu_separator(border_subtle).into_any_element());
+                elements.push(render_menu_separator().into_any_element());
                 continue;
             }
 
@@ -356,7 +314,6 @@ impl TrayMenuPanel {
             let is_enabled = props.enabled.unwrap_or(true);
             let has_submenu = !children.is_empty();
             let is_expanded = has_submenu && self.is_submenu_expanded(menu_id);
-            let indent = depth as f32 * spacing::MD;
 
             elements.push(
                 render_menu_item(
@@ -366,12 +323,7 @@ impl TrayMenuPanel {
                     is_enabled,
                     has_submenu,
                     is_expanded,
-                    indent,
-                    interactive_hover,
-                    text_primary,
-                    text_muted,
-                    text_disabled,
-                    accent_primary,
+                    depth,
                     cx,
                 )
                 .into_any_element(),
@@ -389,12 +341,12 @@ impl TrayMenuPanel {
 }
 
 /// Render a separator line
-fn render_menu_separator(border_color: gpui::Hsla) -> impl IntoElement {
+fn render_menu_separator() -> impl IntoElement {
     div()
         .w_full()
-        .px(px(spacing::SM))
-        .py(px(spacing::XS))
-        .child(div().h(px(1.)).w_full().bg(border_color))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::XSmall.pixels())
+        .child(Divider::horizontal())
 }
 
 /// Render a single menu item
@@ -406,105 +358,65 @@ fn render_menu_item(
     is_enabled: bool,
     has_submenu: bool,
     is_expanded: bool,
-    indent: f32,
-    interactive_hover: gpui::Hsla,
-    text_primary: gpui::Hsla,
-    text_muted: gpui::Hsla,
-    text_disabled: gpui::Hsla,
-    accent_primary: gpui::Hsla,
+    depth: usize,
     cx: &mut Context<TrayMenuPanel>,
 ) -> impl IntoElement {
-    let theme = cx.theme();
-
     // Checkbox/radio indicator
-    let toggle_indicator = props.toggle_type.as_ref().map(|toggle_type| {
+    let toggle_indicator = props.toggle_type.as_ref().and_then(|toggle_type| {
         let is_checked = props.toggle_state == Some(1);
-        match toggle_type.as_str() {
-            "checkmark" => {
-                if is_checked {
-                    ("󰄬", true)
-                } else {
-                    ("󰄱", false)
-                }
-            }
-            "radio" => {
-                if is_checked {
-                    ("󰄴", true)
-                } else {
-                    ("󰄱", false)
-                }
-            }
-            _ => ("", false),
-        }
+        let icon = match (toggle_type.as_str(), is_checked) {
+            ("checkmark", true) => IconName::Check,
+            ("radio", true) => IconName::CheckCircle,
+            ("checkmark" | "radio", false) => IconName::Square,
+            _ => return None,
+        };
+        Some((icon, is_checked))
     });
 
-    let label_owned = label.to_string();
-    let text_color = if !is_enabled {
-        text_disabled
-    } else {
-        text_primary
-    };
-
-    div()
-        .id(ElementId::Name(SharedString::from(format!(
-            "menu-item-{}",
-            menu_id
-        ))))
-        .flex()
-        .items_center()
-        .gap(px(spacing::SM))
-        .w_full()
-        .pl(px(spacing::SM + indent))
-        .pr(px(spacing::SM))
-        .py(px(spacing::XS + 2.0))
-        .rounded(px(radius::SM))
-        .mx(px(spacing::XS))
-        .when(is_enabled, |el| {
-            el.cursor_pointer().hover(move |s| s.bg(interactive_hover))
-        })
-        .when(!is_enabled, |el| el.cursor_default())
-        .when(is_enabled && !has_submenu, |el| {
-            el.on_click(cx.listener(move |this, _, window, cx| {
-                this.activate_menu_item(menu_id, window, cx);
-            }))
-        })
-        .when(has_submenu, |el| {
-            el.on_click(cx.listener(move |this, _, _window, cx| {
-                this.toggle_submenu(menu_id, cx);
-            }))
-        })
-        // Toggle indicator (checkbox/radio)
-        .when_some(toggle_indicator, |el, (icon, is_checked)| {
-            el.child(
-                div()
-                    .text_size(theme.font_sizes.sm)
-                    .text_color(if is_checked {
-                        accent_primary
-                    } else {
-                        text_muted
-                    })
-                    .child(icon),
-            )
-        })
-        // Label
-        .child(
-            div()
-                .flex_1()
-                .text_size(theme.font_sizes.sm)
-                .text_color(text_color)
-                .overflow_hidden()
-                .text_ellipsis()
-                .child(label_owned),
+    ListItem::new(ElementId::Name(SharedString::from(format!(
+        "menu-item-{}",
+        menu_id
+    ))))
+    // A submenu row stays clickable even when the item itself is disabled -
+    // collapsing it is the panel's own affordance, not the app's action.
+    .disabled(!is_enabled && !has_submenu)
+    .indent_level(depth)
+    .indent_step_size(Spacing::Large.pixels())
+    .on_click(cx.listener(move |this, _, window, cx| {
+        if has_submenu {
+            this.toggle_submenu(menu_id, cx);
+        } else {
+            this.activate_menu_item(menu_id, window, cx);
+        }
+    }))
+    .when_some(toggle_indicator, |el, (icon, is_checked)| {
+        el.start_slot(Icon::new(icon).size(IconSize::Small).color(if is_checked {
+            Color::Accent
+        } else {
+            Color::Muted
+        }))
+    })
+    .child(
+        Label::new(label.to_string())
+            .size(TextSize::Small)
+            .color(if is_enabled {
+                Color::Default
+            } else {
+                Color::Disabled
+            })
+            .truncate(),
+    )
+    .when(has_submenu, |el| {
+        el.end_slot(
+            Icon::new(if is_expanded {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
+            })
+            .size(IconSize::XSmall)
+            .color(Color::Muted),
         )
-        // Submenu indicator with rotation animation
-        .when(has_submenu, |el| {
-            el.child(
-                div()
-                    .text_size(theme.font_sizes.xs)
-                    .text_color(text_muted)
-                    .child(if is_expanded { "󰅀" } else { "󰅂" }),
-            )
-        })
+    })
 }
 
 impl Render for TrayMenuPanel {
@@ -515,19 +427,20 @@ impl Render for TrayMenuPanel {
         div()
             .id("systray-menu-panel")
             .size_full()
-            .bg(theme.bg.primary)
-            .border_1()
-            .border_color(theme.border.default)
-            .rounded(px(radius::LG))
-            .text_color(theme.text.primary)
+            .panel_surface(cx)
+            .text_color(theme.colors.text)
             .overflow_hidden()
             .child(
                 div()
                     .id("systray-menu-scroll")
                     .size_full()
-                    .py(px(spacing::XS))
+                    .py(Spacing::XSmall.pixels())
                     .overflow_y_scroll()
-                    .child(div().flex().flex_col().gap(px(1.)).children(menu_items)),
+                    .child(
+                        List::new()
+                            .empty_message("This item has no menu")
+                            .children(menu_items),
+                    ),
             )
     }
 }
@@ -536,42 +449,60 @@ impl Render for TrayMenuPanel {
 // Icon Mapping
 // ============================================================================
 
-/// Map a single identifier to a nerd font icon.
-fn lookup_icon(key: &str) -> Option<&'static str> {
+/// Render a tray item that gave us no pixmap, using the closest icon from
+/// the embedded set.
+fn render_icon_name(name: IconName, icon_size: f32) -> AnyElement {
+    // Sized in device pixels rather than rems: these icons sit inline with
+    // raster pixmaps drawn at `px(icon_size)`, so a rem-scaled fallback
+    // would be the odd one out at any font scale but 1.0.
+    Icon::new(name)
+        .size(IconSize::Exact(icon_size))
+        .color(Color::Default)
+        .into_any_element()
+}
+
+/// Map a single identifier to an icon.
+///
+/// Apps we ship a brand mark for get it. The rest still map onto what they
+/// *do* - a screenshot tool is a camera, a volume applet is a speaker - which
+/// is also where an app whose mark we don't have lands (Vesktop borrows
+/// Discord's, KDE Connect borrows KDE's).
+fn lookup_icon(key: &str) -> Option<IconName> {
     match key {
-        "discord" | "vesktop" => Some("󰙯"),
-        "spotify" => Some("󰓇"),
-        "steam" => Some("󰓓"),
-        "firefox" => Some("󰈹"),
-        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => Some(""),
-        "telegram" | "telegram-desktop" => Some(""),
-        "slack" => Some("󰒱"),
-        "thunderbird" => Some("󰴃"),
-        "1password" => Some("󰢁"),
-        "bitwarden" => Some("󰞀"),
-        "dropbox" => Some("󰇣"),
-        "nextcloud" => Some("󰀸"),
-        "syncthing" | "syncthingtray" => Some("󰓦"),
-        "nm-applet" | "network-manager" | "network-manager-applet" => Some("󰖩"),
-        "blueman" | "blueman-applet" | "blueman-tray" => Some("󰂯"),
-        "pasystray" | "pavucontrol" => Some("󰕾"),
-        "udiskie" => Some("󰋊"),
-        "flameshot" => Some("󰹑"),
-        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some("󰄜"),
-        "tailscale" | "tailscale-systray" => Some("󰖂"),
+        "discord" | "vesktop" => Some(IconName::Discord),
+        "slack" => Some(IconName::Slack),
+        "telegram" | "telegram-desktop" => Some(IconName::Telegram),
+        "spotify" => Some(IconName::Spotify),
+        "firefox" => Some(IconName::Firefox),
+        // Chromium's mark is Chrome's shape in a single colour, and the alpha
+        // mask gpui renders keeps only the shape - so one file serves both.
+        "chrome" | "google-chrome" | "chromium" | "chromium-browser" => Some(IconName::Chrome),
+        "thunderbird" => Some(IconName::Thunderbird),
+        "1password" => Some(IconName::OnePassword),
+        "bitwarden" => Some(IconName::Bitwarden),
+        "dropbox" => Some(IconName::Dropbox),
+        "nextcloud" => Some(IconName::Nextcloud),
+        "syncthing" | "syncthingtray" => Some(IconName::Syncthing),
+        "nm-applet" | "network-manager" | "network-manager-applet" => Some(IconName::Wifi),
+        "blueman" | "blueman-applet" | "blueman-tray" => Some(IconName::Bluetooth),
+        "pasystray" | "pavucontrol" => Some(IconName::Volume),
+        "udiskie" => Some(IconName::HardDrive),
+        "flameshot" => Some(IconName::Camera),
+        "kdeconnect" | "kdeconnectd" | "kde connect indicator" => Some(IconName::Kde),
+        "tailscale" | "tailscale-systray" => Some(IconName::Tailscale),
         "remmina" | "org.remmina.remmina" | "org.remmina.remmina-status" | "remmina-icon" => {
-            Some("󰢹")
+            Some(IconName::ScreenShare)
         }
-        "network" | "network-wireless" => Some("󰖩"),
-        "bluetooth" | "bluetooth-active" => Some("󰂯"),
-        "audio" | "audio-volume-high" => Some("󰕾"),
-        "battery" | "battery-full" => Some("󰁹"),
+        "network" | "network-wireless" => Some(IconName::Wifi),
+        "bluetooth" | "bluetooth-active" => Some(IconName::Bluetooth),
+        "audio" | "audio-volume-high" => Some(IconName::Volume),
+        "battery" | "battery-full" => Some(IconName::BatteryFull),
         _ => None,
     }
 }
 
-/// Map common icon names or app IDs to nerd font characters.
-fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
+/// Map common icon names or app IDs to an icon.
+fn get_icon_name(name: &str, app_id: Option<&str>) -> IconName {
     if let Some(icon) = lookup_icon(&name.to_lowercase()) {
         return icon;
     }
@@ -581,7 +512,7 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
         // Handle generic systray_XXXX pattern (often used by Go apps like Tailscale)
         if id_lower.starts_with("systray_") {
-            return "󰖂";
+            return IconName::Network;
         }
 
         if let Some(icon) = lookup_icon(&id_lower) {
@@ -601,35 +532,54 @@ fn get_icon_char(name: &str, app_id: Option<&str>) -> &'static str {
 
     // Fallback icon - log for easier icon mapping
     tracing::debug!("No icon mapping for name='{}' app_id={:?}", name, app_id);
-    "󰀻"
+    IconName::Circle
 }
 
-fn infer_icon_from_hint(hint: &str) -> Option<&'static str> {
-    if hint.contains("chrome") || hint.contains("chromium") || hint.contains("telegram") {
-        Some("")
-    } else if hint.contains("discord") || hint.contains("vesktop") {
-        Some("󰙯")
-    } else if hint.contains("spotify") {
-        Some("󰓇")
-    } else if hint.contains("steam") {
-        Some("󰓓")
-    } else if hint.contains("network") || hint.contains("wifi") || hint.contains("nm-") {
-        Some("󰖩")
-    } else if hint.contains("bluetooth") || hint.contains("blue") {
-        Some("󰂯")
-    } else if hint.contains("audio") || hint.contains("volume") || hint.contains("pulse") {
-        Some("󰕾")
-    } else if hint.contains("battery") || hint.contains("power") {
-        Some("󰁹")
-    } else if hint.contains("kdeconnect") || hint.contains("kde connect") {
-        Some("󰄜")
-    } else if hint.contains("vpn") {
-        Some("󰕥")
-    } else if hint.contains("cloud") || hint.contains("dropbox") || hint.contains("sync") {
-        Some("󰇣")
-    } else if hint.contains("remote") || hint.contains("remmina") {
-        Some("󰢹")
-    } else {
-        None
-    }
+/// Substring to icon, in match order.
+///
+/// Brand marks come first on purpose: "nextcloud" also contains "cloud" and
+/// "syncthing" also contains "sync", and where we ship the mark it beats the
+/// generic bucket. The generic entries below stay as the catch-all for the
+/// applets we have no logo for.
+const ICON_HINTS: &[(&str, IconName)] = &[
+    ("firefox", IconName::Firefox),
+    // "chromium" does not contain "chrome", so both spellings are needed.
+    ("chrome", IconName::Chrome),
+    ("chromium", IconName::Chrome),
+    ("telegram", IconName::Telegram),
+    ("discord", IconName::Discord),
+    ("vesktop", IconName::Discord),
+    ("slack", IconName::Slack),
+    ("spotify", IconName::Spotify),
+    ("thunderbird", IconName::Thunderbird),
+    ("1password", IconName::OnePassword),
+    ("bitwarden", IconName::Bitwarden),
+    ("dropbox", IconName::Dropbox),
+    ("nextcloud", IconName::Nextcloud),
+    ("syncthing", IconName::Syncthing),
+    ("tailscale", IconName::Tailscale),
+    ("kdeconnect", IconName::Kde),
+    ("kde connect", IconName::Kde),
+    ("network", IconName::Wifi),
+    ("wifi", IconName::Wifi),
+    ("nm-", IconName::Wifi),
+    ("bluetooth", IconName::Bluetooth),
+    ("blue", IconName::Bluetooth),
+    ("audio", IconName::Volume),
+    ("volume", IconName::Volume),
+    ("pulse", IconName::Volume),
+    ("battery", IconName::BatteryFull),
+    ("power", IconName::BatteryFull),
+    ("vpn", IconName::Network),
+    ("cloud", IconName::Cloud),
+    ("sync", IconName::Cloud),
+    ("remote", IconName::ScreenShare),
+    ("remmina", IconName::ScreenShare),
+];
+
+fn infer_icon_from_hint(hint: &str) -> Option<IconName> {
+    ICON_HINTS
+        .iter()
+        .find(|(needle, _)| hint.contains(needle))
+        .map(|&(_, icon)| icon)
 }

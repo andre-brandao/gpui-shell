@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{Context, MouseButton, div, img, px};
 use services::{Notification, NotificationCommand, NotificationSubscriber};
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing, TextSize};
 
 use super::dispatch_notification_command;
 
@@ -34,12 +34,12 @@ pub(super) fn notification_card_body<V>(
         .w_full()
         .flex()
         .items_start()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .child(
             div()
                 .w(px(3.0))
                 .flex_shrink_0()
-                .rounded(px(radius::SM))
+                .rounded(Radius::Small.pixels())
                 .bg(urgency_color)
                 .h_full(),
         )
@@ -51,7 +51,7 @@ pub(super) fn notification_card_body<V>(
                     .w(px(64.0))
                     .h(px(64.0))
                     .flex_shrink_0()
-                    .rounded(px(radius::MD))
+                    .rounded(Radius::Medium.pixels())
                     .overflow_hidden()
                     .relative()
                     .child(
@@ -65,10 +65,10 @@ pub(super) fn notification_card_body<V>(
                             .bottom(px(4.0))
                             .right(px(4.0))
                             .size(px(24.0))
-                            .rounded(px(radius::MD))
-                            .bg(theme.bg.primary)
+                            .rounded(Radius::Medium.pixels())
+                            .bg(theme.colors.background)
                             .border_1()
-                            .border_color(theme.border.default)
+                            .border_color(theme.colors.border)
                             .shadow_md()
                             .flex()
                             .items_center()
@@ -85,7 +85,7 @@ pub(super) fn notification_card_body<V>(
                     .w(px(64.0))
                     .h(px(64.0))
                     .flex_shrink_0()
-                    .rounded(px(radius::MD))
+                    .rounded(Radius::Medium.pixels())
                     .overflow_hidden()
                     .child(
                         img(img_src.clone())
@@ -97,10 +97,10 @@ pub(super) fn notification_card_body<V>(
                 _ => div()
                     .size(px(64.0))
                     .flex_shrink_0()
-                    .rounded(px(radius::MD))
-                    .bg(theme.bg.secondary)
+                    .rounded(Radius::Medium.pixels())
+                    .bg(theme.colors.surface_background)
                     .border_1()
-                    .border_color(theme.border.subtle)
+                    .border_color(theme.colors.border_variant)
                     .flex()
                     .items_center()
                     .justify_center()
@@ -114,8 +114,8 @@ pub(super) fn notification_card_body<V>(
                             })
                             .unwrap_or_else(|| {
                                 div()
-                                    .text_size(theme.font_sizes.md)
-                                    .text_color(theme.text.secondary)
+                                    .text_size(TextSize::Medium.rems())
+                                    .text_color(theme.colors.text)
                                     .child(icon_fallback(&app_name, &app_icon_name))
                                     .into_any_element()
                             }),
@@ -130,17 +130,17 @@ pub(super) fn notification_card_body<V>(
                 .flex_col()
                 .gap(px(4.0))
                 .overflow_hidden()
-                .when(show_image, |el| el.pr(px(spacing::XL)))
+                .when(show_image, |el| el.pr(Spacing::XXXLarge.pixels()))
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(spacing::SM))
+                        .gap(Spacing::Medium.pixels())
                         .child(
                             div()
                                 .flex_1()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.secondary)
+                                .text_size(TextSize::XSmall.rems())
+                                .text_color(theme.colors.text)
                                 .overflow_hidden()
                                 .text_ellipsis()
                                 .whitespace_nowrap()
@@ -148,24 +148,24 @@ pub(super) fn notification_card_body<V>(
                         )
                         .child(
                             div()
-                                .text_size(theme.font_sizes.xs)
-                                .text_color(theme.text.muted)
+                                .text_size(TextSize::XSmall.rems())
+                                .text_color(theme.colors.text)
                                 .flex_shrink_0()
                                 .child(timestamp),
                         ),
                 )
                 .child(
                     div()
-                        .text_size(theme.font_sizes.sm)
-                        .text_color(theme.text.primary)
+                        .text_size(TextSize::Small.rems())
+                        .text_color(theme.colors.text)
                         .line_height(px(18.0))
                         .child(summary),
                 )
                 .when(!body.is_empty(), |el| {
                     el.child(
                         div()
-                            .text_size(theme.font_sizes.xs)
-                            .text_color(theme.text.muted)
+                            .text_size(TextSize::XSmall.rems())
+                            .text_color(theme.colors.text_muted)
                             .line_height(px(16.0))
                             .child(body),
                     )
@@ -176,23 +176,23 @@ pub(super) fn notification_card_body<V>(
                             .mt(px(4.0))
                             .flex()
                             .flex_wrap()
-                            .gap(px(spacing::XS))
+                            .gap(Spacing::XSmall.pixels())
                             .children(actions.into_iter().map(|(key, label)| {
                                 let sub = subscriber.clone();
                                 let notification_id = notification.id;
                                 div()
-                                    .px(px(spacing::SM))
+                                    .px(Spacing::Medium.pixels())
                                     .py(px(2.0))
-                                    .rounded(px(radius::SM))
-                                    .bg(theme.bg.tertiary)
+                                    .rounded(Radius::Small.pixels())
+                                    .bg(theme.colors.elevated_surface_background)
                                     .border_1()
-                                    .border_color(theme.border.subtle)
-                                    .text_size(theme.font_sizes.xs)
-                                    .text_color(theme.text.secondary)
+                                    .border_color(theme.colors.border_variant)
+                                    .text_size(TextSize::XSmall.rems())
+                                    .text_color(theme.colors.text)
                                     .cursor_pointer()
                                     .hover(move |el| {
-                                        el.bg(theme.interactive.hover)
-                                            .text_color(theme.text.primary)
+                                        el.bg(theme.colors.element_hover)
+                                            .text_color(theme.colors.text)
                                     })
                                     .on_mouse_down(MouseButton::Left, move |_, _, _| {
                                         dispatch_notification_command(
@@ -235,8 +235,8 @@ fn format_notification_time(timestamp_ms: i64) -> String {
 fn urgency_color<V>(urgency: u8, cx: &Context<V>) -> gpui::Hsla {
     let theme = cx.theme();
     match urgency {
-        2 => theme.status.error,
-        0 => theme.text.muted,
-        _ => theme.accent.primary,
+        2 => theme.colors.status.error,
+        0 => theme.colors.text_muted,
+        _ => theme.colors.accent,
     }
 }

@@ -1,254 +1,206 @@
+//! Switch - a two-state toggle (on / off) with optional inline label.
+
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::theme::{ActiveTheme, Color, Spacing};
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, InteractiveElement, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, SharedString, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    Animation, AnimationExt as _, App, ElementId, IntoElement, Pixels, RenderOnce, SharedString,
+    Window, div, prelude::*, px,
 };
 
-use crate::{ActiveTheme, h_flex};
+use crate::components::label::{Label, LabelCommon};
+use crate::components::stack::h_flex;
+use crate::theme::TextSize;
+use crate::traits::{Disableable, ToggleHandler, ToggleState, Toggleable};
 
-/// Which side the label appears on
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum LabelSide {
-    Left,
-    #[default]
-    Right,
-}
+/// How long the knob takes to slide between positions.
+const SLIDE_DURATION: Duration = Duration::from_millis(150);
 
-/// Size variants for the switch
+/// Size variants for the switch.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SwitchSize {
+    /// 28x16 track with a 12px knob.
     Small,
+    /// 36x20 track with a 16px knob.
     #[default]
     Medium,
 }
 
 impl SwitchSize {
-    fn dimensions(&self) -> (Pixels, Pixels, Pixels) {
+    /// `(track width, track height, knob size)`.
+    const fn dimensions(self) -> (Pixels, Pixels, Pixels) {
         match self {
-            SwitchSize::Small => (px(28.), px(16.), px(12.)),
-            SwitchSize::Medium => (px(36.), px(20.), px(16.)),
+            Self::Small => (px(28.0), px(16.0), px(12.0)),
+            Self::Medium => (px(36.0), px(20.0), px(16.0)),
         }
     }
 }
 
-type ClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
-
-/// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]
+#[must_use = "Switch does nothing unless rendered"]
 pub struct Switch {
     id: ElementId,
-    checked: bool,
+    state: ToggleState,
+    size: SwitchSize,
     disabled: bool,
     label: Option<SharedString>,
-    label_side: LabelSide,
-    on_click: Option<ClickHandler>,
-    size: SwitchSize,
-    tooltip: Option<SharedString>,
+    on_click: Option<ToggleHandler>,
 }
 
 impl Switch {
-    /// Create a new Switch element.
-    pub fn new(id: impl Into<ElementId>) -> Self {
+    pub fn new(id: impl Into<ElementId>, state: impl Into<ToggleState>) -> Self {
         Self {
             id: id.into(),
-            checked: false,
+            state: state.into(),
+            size: SwitchSize::default(),
             disabled: false,
             label: None,
             on_click: None,
-            label_side: LabelSide::Right,
-            size: SwitchSize::Medium,
-            tooltip: None,
         }
     }
 
-    /// Set the checked state of the switch.
-    pub fn checked(mut self, checked: bool) -> Self {
-        self.checked = checked;
-        self
-    }
-
-    /// Set the disabled state of the switch.
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self
-    }
-
-    /// Set the label of the switch.
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
-
-    /// Set which side the label appears on.
-    pub fn label_side(mut self, side: LabelSide) -> Self {
-        self.label_side = side;
-        self
-    }
-
-    /// Set the size of the switch.
     pub fn size(mut self, size: SwitchSize) -> Self {
         self.size = size;
         self
     }
 
-    /// Add a click handler for the switch.
-    pub fn on_click<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&bool, &mut Window, &mut App) + 'static,
-    {
-        self.on_click = Some(Rc::new(handler));
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
         self
     }
 
-    /// Set tooltip for the switch.
-    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.tooltip = Some(tooltip.into());
+    /// Register a click handler.
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ToggleState, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl Disableable for Switch {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Toggleable for Switch {
+    fn toggle_state(mut self, state: impl Into<ToggleState>) -> Self {
+        self.state = state.into();
         self
     }
 }
 
 impl RenderOnce for Switch {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        // Extract theme colors before mutable borrow of cx
-        let (toggle_on, bg_primary, bg_tertiary, bg_elevated, text_disabled, text_primary) = {
-            let theme = cx.theme();
-            (
-                theme.interactive.toggle_on,
-                theme.bg.primary,
-                theme.bg.tertiary,
-                theme.bg.elevated,
-                theme.text.disabled,
-                theme.text.primary,
-            )
-        };
+        let is_on = self.state.selected();
 
-        let checked = self.checked;
-        let on_click = self.on_click.clone();
-        let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
+        // Remembers the state the knob was last painted at, so a render that
+        // flips it can animate instead of teleporting.
+        let previous = window.use_keyed_state((self.id.clone(), "switch-state"), cx, |_, _| is_on);
+        let colors = *cx.theme().colors();
 
-        let (bg_color, toggle_bg) = match checked {
-            true => (toggle_on, bg_primary),
-            false => (bg_tertiary, bg_elevated),
-        };
-
-        let (bg_color, toggle_bg) = if self.disabled {
-            (
-                if checked {
-                    gpui::Hsla { a: 0.5, ..bg_color }
-                } else {
-                    bg_color
-                },
-                gpui::Hsla {
-                    a: 0.35,
-                    ..toggle_bg
-                },
-            )
+        let track_bg = if self.disabled {
+            colors.element_disabled
+        } else if is_on {
+            colors.accent
         } else {
-            (bg_color, toggle_bg)
+            colors.element_background
+        };
+
+        let track_border = if is_on { colors.accent } else { colors.border };
+
+        let thumb_bg = if self.disabled {
+            colors.text_disabled
+        } else if is_on {
+            colors.background
+        } else {
+            colors.text_muted
         };
 
         let label_color = if self.disabled {
-            text_disabled
+            Color::Disabled
         } else {
-            text_primary
+            Color::Default
         };
 
-        let (bg_width, bg_height, bar_width) = self.size.dimensions();
-        let inset = px(2.);
-        let radius = bg_height;
+        let (track_width, track_height, thumb_size) = self.size.dimensions();
+        let inset = px(2.0);
+        let travel = track_width - thumb_size - inset * 2.0;
 
-        div().child(
-            h_flex()
-                .id(self.id.clone())
-                .gap(px(8.))
-                .items_center()
-                .when(self.label_side == LabelSide::Left, |this| {
-                    this.flex_row_reverse()
-                })
-                .child(
-                    // Switch Bar
-                    div()
-                        .id("switch-bar")
-                        .w(bg_width)
-                        .h(bg_height)
-                        .rounded(radius)
-                        .flex()
-                        .items_center()
-                        .border(inset)
-                        .border_color(gpui::transparent_black())
-                        .bg(bg_color)
-                        .when(!self.disabled, |this| this.cursor_pointer())
-                        .child(
-                            // Switch Toggle (the sliding knob)
-                            div()
-                                .rounded(radius)
-                                .bg(toggle_bg)
-                                .shadow_md()
-                                .size(bar_width)
-                                .map(|this| {
-                                    let prev_checked = toggle_state.read(cx);
-                                    if !self.disabled && *prev_checked != checked {
-                                        let duration = Duration::from_secs_f64(0.15);
-                                        cx.spawn({
-                                            let toggle_state = toggle_state.clone();
-                                            async move |cx| {
-                                                cx.background_executor().timer(duration).await;
-                                                toggle_state.update(cx, |this, _| *this = checked);
-                                            }
-                                        })
-                                        .detach();
+        let knob = div()
+            .absolute()
+            .size(thumb_size)
+            .rounded_full()
+            .bg(thumb_bg)
+            .shadow_md();
 
-                                        this.with_animation(
-                                            ElementId::NamedInteger("move".into(), checked as u64),
-                                            Animation::new(duration),
-                                            move |this, delta| {
-                                                let max_x = bg_width - bar_width - inset * 2;
-                                                let x = if checked {
-                                                    max_x * delta
-                                                } else {
-                                                    max_x - max_x * delta
-                                                };
-                                                this.left(x)
-                                            },
-                                        )
-                                        .into_any_element()
-                                    } else {
-                                        let max_x = bg_width - bar_width - inset * 2;
-                                        let x = if checked { max_x } else { px(0.) };
-                                        this.left(x).into_any_element()
-                                    }
-                                }),
-                        ),
-                )
-                .when_some(self.label.clone(), |this, label| {
-                    this.child(
-                        div()
-                            .line_height(bg_height)
-                            .text_color(label_color)
-                            .map(|this| match self.size {
-                                SwitchSize::Small => this.text_sm(),
-                                SwitchSize::Medium => this.text_base(),
-                            })
-                            .child(label),
-                    )
-                })
-                .when_some(
-                    on_click
-                        .as_ref()
-                        .map(|c| c.clone())
-                        .filter(|_| !self.disabled),
-                    |this, on_click| {
-                        let toggle_state = toggle_state.clone();
-                        this.on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                            cx.stop_propagation();
-                            toggle_state.update(cx, |this, _| *this = checked);
-                            on_click(&!checked, window, cx);
-                        })
-                    },
-                ),
-        )
+        let was_on = *previous.read(cx);
+        let animating = !self.disabled && was_on != is_on;
+
+        if animating {
+            // Record the new position once the slide has played out, so the
+            // next render treats it as settled rather than replaying.
+            let previous = previous.clone();
+            cx.spawn(async move |cx| {
+                cx.background_executor().timer(SLIDE_DURATION).await;
+                previous.update(cx, |state, _| *state = is_on);
+            })
+            .detach();
+        }
+
+        let knob = if animating {
+            knob.with_animation(
+                ElementId::NamedInteger("switch-slide".into(), is_on as u64),
+                Animation::new(SLIDE_DURATION),
+                move |this, delta| {
+                    let x = if is_on {
+                        travel * delta
+                    } else {
+                        travel * (1.0 - delta)
+                    };
+                    this.left(x)
+                },
+            )
+            .into_any_element()
+        } else {
+            knob.left(if is_on { travel } else { px(0.0) })
+                .into_any_element()
+        };
+
+        let switch = div()
+            .id((self.id.clone(), "switch-track"))
+            .w(track_width)
+            .h(track_height)
+            .rounded_full()
+            .bg(track_bg)
+            .border(inset)
+            .border_color(track_border)
+            .relative()
+            .flex()
+            .items_center()
+            .child(knob);
+
+        h_flex()
+            .id(self.id)
+            .gap(Spacing::Small.pixels())
+            .when(!self.disabled, |this| this.cursor_pointer())
+            .child(switch)
+            .when_some(self.label, |this, label| {
+                this.child(Label::new(label).size(TextSize::Small).color(label_color))
+            })
+            .when_some(
+                (!self.disabled).then_some(self.on_click).flatten(),
+                |this, handler| {
+                    let next = self.state.inverse();
+                    this.on_click(move |_event, window, cx| {
+                        previous.update(cx, |state, _| *state = is_on);
+                        handler(&next, window, cx)
+                    })
+                },
+            )
     }
 }

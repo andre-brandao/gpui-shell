@@ -1,15 +1,15 @@
 //! Volume and brightness slider components for the Control Center.
 
-use gpui::{App, Entity, MouseButton, div, prelude::*, px};
+use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BrightnessCommand};
-use ui::{ActiveTheme, Slider, icon_size, radius, spacing};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Slider, Spacing, TextSize};
 
 use crate::state::AppState;
 
-use super::icons;
+use crate::icons;
 
 /// Render the volume slider row
-pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl IntoElement {
+pub fn render_volume_slider(cx: &App) -> impl IntoElement {
     let audio = AppState::audio(cx).get();
     let volume = audio.sink_volume;
     let muted = audio.sink_muted;
@@ -17,13 +17,14 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
     let icon = icons::volume_icon(volume, muted);
 
     let services_toggle = AppState::audio(cx).clone();
+    let services_slider = AppState::audio(cx).clone();
     let services_dec = AppState::audio(cx).clone();
     let services_inc = AppState::audio(cx).clone();
 
     div()
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
         // Icon (click to toggle mute)
         .child(render_slider_icon(
@@ -36,7 +37,17 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
             },
         ))
         // Slider
-        .child(div().flex_1().child(volume_slider.clone()))
+        .child(
+            div().flex_1().child(
+                Slider::new("volume-slider", volume as f32)
+                    .min(0.0)
+                    .max(100.0)
+                    .step(1.0)
+                    .on_change(move |value, _window, _cx| {
+                        services_slider.dispatch(AudioCommand::SetSinkVolume(value as u8));
+                    }),
+            ),
+        )
         // Percent
         .child(render_percentage_label(volume, cx))
         // +/- buttons
@@ -53,7 +64,7 @@ pub fn render_volume_slider(volume_slider: &Entity<Slider>, cx: &App) -> impl In
 }
 
 /// Render the brightness slider row (returns empty if no brightness control available)
-pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) -> impl IntoElement {
+pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let brightness = AppState::brightness(cx).get();
 
@@ -63,19 +74,19 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
 
     let percent = brightness.percentage();
 
-    let icon = icons::brightness_icon(percent);
+    let icon = IconName::Sun;
 
+    let services_slider = AppState::brightness(cx).clone();
     let services_dec = AppState::brightness(cx).clone();
     let services_inc = AppState::brightness(cx).clone();
 
     // Pre-compute colors
-    let interactive_default = theme.interactive.default;
-    let text_primary = theme.text.primary;
+    let interactive_default = theme.colors.element_background;
 
     div()
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
         // Icon
         .child(
@@ -83,20 +94,33 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
                 .id("brightness-icon")
                 .w(px(28.))
                 .h(px(28.))
-                .rounded(px(radius::SM))
+                .rounded(Radius::Small.pixels())
                 .flex()
                 .items_center()
                 .justify_center()
                 .bg(interactive_default)
-                .child(
-                    div()
-                        .text_size(px(icon_size::SM))
-                        .text_color(text_primary)
-                        .child(icon),
-                ),
+                .child(Icon::new(icon).size(IconSize::XSmall).color(Color::Default)),
         )
         // Slider
-        .child(div().flex_1().child(brightness_slider.clone()))
+        .child(
+            div().flex_1().child(
+                Slider::new("brightness-slider", percent as f32)
+                    .min(0.0)
+                    .max(100.0)
+                    .step(1.0)
+                    .on_change(move |value, _window, cx| {
+                        // Brightness writes go through logind, so the dispatch
+                        // is async - unlike the audio one.
+                        let services = services_slider.clone();
+                        cx.spawn(async move |_| {
+                            let _ = services
+                                .dispatch(BrightnessCommand::SetPercent(value as u8))
+                                .await;
+                        })
+                        .detach();
+                    }),
+            ),
+        )
         // Percent
         .child(render_percentage_label(percent, cx))
         // +/- buttons
@@ -124,7 +148,7 @@ pub fn render_brightness_slider(brightness_slider: &Entity<Slider>, cx: &App) ->
 /// Render a clickable slider icon
 fn render_slider_icon(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     is_muted: bool,
     cx: &App,
     on_click: impl Fn(&mut App) + 'static,
@@ -132,10 +156,10 @@ fn render_slider_icon(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let status_error = theme.status.error;
-    let text_primary = theme.text.primary;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let status_error = theme.colors.status.error;
+    let text_primary = theme.colors.text;
 
     let icon_color = if is_muted { status_error } else { text_primary };
 
@@ -143,7 +167,7 @@ fn render_slider_icon(
         .id(id)
         .w(px(28.))
         .h(px(28.))
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         .flex()
         .items_center()
         .justify_center()
@@ -154,10 +178,9 @@ fn render_slider_icon(
             on_click(cx);
         })
         .child(
-            div()
-                .text_size(px(icon_size::SM))
-                .text_color(icon_color)
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(icon_color)),
         )
 }
 
@@ -167,8 +190,8 @@ fn render_percentage_label(percent: u8, cx: &App) -> impl IntoElement {
 
     div()
         .w(px(32.))
-        .text_size(theme.font_sizes.xs)
-        .text_color(theme.text.muted)
+        .text_size(TextSize::XSmall.rems())
+        .text_color(theme.colors.text_muted)
         .text_right()
         .child(format!("{}%", percent))
 }
@@ -207,15 +230,15 @@ fn render_adjustment_button(
     let theme = cx.theme();
 
     // Pre-compute colors for closures
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let text_muted = theme.text.muted;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let text_muted = theme.colors.text_muted;
 
     div()
         .id(id.into())
         .w(px(20.))
         .h(px(20.))
-        .rounded(px(radius::SM))
+        .rounded(Radius::Small.pixels())
         .flex()
         .items_center()
         .justify_center()
@@ -227,7 +250,7 @@ fn render_adjustment_button(
         })
         .child(
             div()
-                .text_size(theme.font_sizes.xs)
+                .text_size(TextSize::XSmall.rems())
                 .text_color(text_muted)
                 .child(label),
         )

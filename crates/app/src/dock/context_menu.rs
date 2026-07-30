@@ -3,7 +3,7 @@
 use gpui::{
     Context, FocusHandle, Focusable, MouseButton, Render, Subscription, Window, div, prelude::*, px,
 };
-use ui::{ActiveTheme, radius, spacing};
+use ui::{ActiveTheme, Radius, Spacing};
 
 use super::{
     DOCK_CONTEXT_MENU_BORDER_WIDTH, DOCK_CONTEXT_MENU_GAP, DOCK_CONTEXT_MENU_ROW_HEIGHT,
@@ -52,13 +52,13 @@ impl DockContextMenu {
         let theme = cx.theme().clone();
         div()
             .id(gpui::SharedString::from(label.clone()))
-            .px(px(spacing::MD))
-            .py(px(spacing::SM))
+            .px(Spacing::Large.pixels())
+            .py(Spacing::Medium.pixels())
             .min_h(px(DOCK_CONTEXT_MENU_ROW_HEIGHT))
-            .rounded(px(radius::SM))
+            .rounded(Radius::Small.pixels())
             .cursor_pointer()
-            .text_color(theme.text.primary)
-            .hover(move |style| style.bg(theme.interactive.hover))
+            .text_color(theme.colors.text)
+            .hover(move |style| style.bg(theme.colors.element_hover))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _event, window, cx| on_click(this, window, cx)),
@@ -140,10 +140,10 @@ impl Render for DockContextMenu {
             .flex_col()
             .gap(px(DOCK_CONTEXT_MENU_GAP))
             .p(px(DOCK_CONTEXT_MENU_VERTICAL_PADDING))
-            .rounded(px(radius::MD))
-            .bg(theme.bg.primary)
+            .rounded(Radius::Medium.pixels())
+            .bg(theme.colors.background)
             .border(px(DOCK_CONTEXT_MENU_BORDER_WIDTH))
-            .border_color(theme.border.subtle)
+            .border_color(theme.colors.border_variant)
             .children(children)
     }
 }
