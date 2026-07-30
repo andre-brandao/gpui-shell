@@ -1,20 +1,4 @@
 //! Sheet - a panel overlay that slides in from a window edge.
-//!
-//! Follows the same pattern as [`Modal`](super::modal): the parent owns the
-//! open state and conditionally inserts a [`sheet_overlay`] in the element
-//! tree. The overlay draws a full-window backdrop (click or Escape to
-//! dismiss) and positions the sheet content along one edge.
-//!
-//! ```ignore
-//! .when(self.sheet_open, |this| {
-//!     this.child(sheet_overlay(
-//!         self.sheet_focus.clone(),
-//!         Sheet::new().title("Details").side(SheetSide::Right)
-//!             .child(Label::new("Panel content")),
-//!         cx.listener(|this, _, _, cx| { this.sheet_open = false; cx.notify(); }),
-//!     ))
-//! })
-//! ```
 
 use crate::theme::{ActiveTheme, Spacing};
 use gpui::{
@@ -136,7 +120,7 @@ pub fn sheet_overlay(
     let side = sheet.side;
     overlay_shell(
         OverlayConfig {
-            id: "engram-sheet-backdrop",
+            id: "sheet-backdrop",
             focus_handle,
             priority: OVERLAY_PRIORITY_MODAL,
             backdrop: Some(hsla(0.0, 0.0, 0.0, 0.35)),

@@ -1,20 +1,10 @@
 //! Slider - a draggable range input for selecting a numeric value.
 //!
-//! The parent owns the committed value and receives changes via a handler,
-//! but the slider keeps one piece of element-local state: the value being
-//! dragged right now. Two reasons, both learned the hard way:
-//!
-//! * **The thumb must not wait on the owner.** Handlers usually push the
-//!   value through something slow - a subprocess, a D-Bus round-trip - and
-//!   the new value only comes back once that lands. Rendering the thumb
-//!   straight from the prop makes it stutter behind the cursor. The local
-//!   value renders optimistically and yields to the prop the moment the
-//!   drag ends.
-//! * **The drag must survive leaving the track.** `on_mouse_move` only
-//!   fires while the hitbox is hovered, so a drag driven by it dies as soon
-//!   as the pointer slips off the element - which is exactly what users do
-//!   when they slam a volume slider to 0 or 100. Going through gpui's drag
-//!   system (`on_drag` / `on_drag_move`) captures the pointer until mouse-up.
+//! The parent owns the committed value; the slider keeps the in-drag value
+//! element-local so the thumb renders optimistically instead of lagging a
+//! slow handler (subprocess, D-Bus round-trip). Dragging goes through gpui's
+//! drag system rather than `on_mouse_move`, which stops firing once the
+//! pointer leaves the hitbox.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -32,8 +22,8 @@ use crate::theme::TextSize;
 use crate::traits::Disableable;
 use crate::traits::handlers::F32Handler;
 
-/// Drag payload identifying which slider is being dragged, so a drag
-/// started on one slider can't drive another one on the same screen.
+/// Drag payload identifying which slider is being dragged, so a drag started
+/// on one slider can't drive another one on the same screen.
 #[derive(Clone, Render)]
 pub struct SliderDrag(EntityId);
 
@@ -170,10 +160,9 @@ impl RenderOnce for Slider {
 
         let paint_bounds = track_bounds.clone();
 
-        // The interaction area is intentionally taller than the visual
-        // track so the user can drag vertically without losing the cursor
-        // - same approach as HTML <input type="range">. The visible 6px
-        // track is centered inside via flex + items_center.
+        // The interaction area is intentionally taller than the visual track
+        // so the user can drag vertically without losing the cursor - same
+        // approach as HTML <input type="range">.
         let track = div()
             .id(self.id.clone())
             .w_full()
@@ -276,9 +265,9 @@ impl RenderOnce for Slider {
                             }
                             let val = value_at(event.event.position.x, move_bounds.get());
                             // A drag delivers many more moves than distinct
-                            // stepped values, and handlers are often expensive
-                            // (a subprocess, a D-Bus round-trip). Only fire when
-                            // the value actually changes.
+                            // stepped values, and handlers are often
+                            // expensive (a subprocess, a D-Bus round-trip), so
+                            // only fire when the value actually changes.
                             let changed = move_state.update(cx, |state, cx| {
                                 if state.0 == Some(val) {
                                     return false;
@@ -323,9 +312,6 @@ impl RenderOnce for Slider {
 }
 
 /// Map a pointer X position to a slider value, given the track's bounds.
-///
-/// The fraction is clamped, so dragging past either end of the track pins
-/// the value to `min` / `max` instead of running away.
 fn value_from_position(
     pos_x: Pixels,
     bounds: Bounds<Pixels>,
@@ -339,9 +325,6 @@ fn value_from_position(
 }
 
 /// Map a 0..=1 track fraction to a clamped, step-snapped slider value.
-///
-/// `frac` is pre-clamped by the caller; this fn handles step rounding and a
-/// final min/max clamp so rounding can never push the value past the range.
 fn value_from_fraction(frac: f32, min: f32, max: f32, step: Option<f32>) -> f32 {
     let range = max - min;
     let mut val = min + frac * range;

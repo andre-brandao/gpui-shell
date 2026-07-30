@@ -4,22 +4,9 @@
 //! a `*Refinement` with every field wrapped in [`Option`], plus `refine()`,
 //! `from_full()`, and `is_empty()` methods.
 //!
-//! This is what lets a user's `theme.toml` override a single token on top
-//! of a whole palette:
-//!
-//! ```toml
-//! [base16]
-//! base00 = "#1e1e2e"
-//! # ...
-//!
-//! [colors]           # everything omitted here falls through to the
-//! accent = "#f38ba8" # palette-derived value
-//! ```
-//!
-//! Base structs stay hand-written so their doc comments and field grouping
-//! survive. The macro only generates the refinement companion and its
-//! glue - keeping a single source of truth for field names is the caller's
-//! responsibility.
+//! This is what lets a `theme.toml` override a single token on top of a whole
+//! palette. Base structs stay hand-written; the macro only generates the
+//! refinement companion and its glue.
 
 /// Generic `skip_serializing_if` helper for any refinement struct.
 ///
@@ -64,8 +51,8 @@ macro_rules! refineable {
         }
 
         impl $rname {
-            /// Copy every `Some(..)` field of `self` onto `base`, leaving
-            /// the rest of `base` untouched. Nested refinements recurse.
+            /// Copy every `Some(..)` field of `self` onto `base`, leaving the
+            /// rest of `base` untouched.
             pub fn refine(self, base: &mut $base) {
                 $(
                     if let Some(v) = self.$field {
@@ -77,8 +64,7 @@ macro_rules! refineable {
                 )*)?
             }
 
-            /// Wrap every field of `base` in `Some`. Used to dump a fully
-            /// resolved theme - nothing is skipped on serialize.
+            /// Wrap every field of `base` in `Some`.
             #[allow(dead_code)]
             pub fn from_full(base: &$base) -> Self {
                 Self {
@@ -87,8 +73,7 @@ macro_rules! refineable {
                 }
             }
 
-            /// True when no field is overridden. Lets parent refinements
-            /// skip empty sub-objects on serialize.
+            /// True when no field is overridden.
             #[allow(dead_code)]
             pub fn is_empty(&self) -> bool {
                 *self == Self::default()

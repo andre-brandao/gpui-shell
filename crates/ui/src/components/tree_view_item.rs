@@ -1,8 +1,4 @@
 //! TreeViewItem - a hierarchical list row with expand/collapse support.
-//!
-//! Root items display a [`Disclosure`] toggle and a label. Non-root items
-//! show an indentation line followed by their label. Selection and expansion
-//! state are owned by the parent - the item is a stateless `RenderOnce`.
 
 use std::rc::Rc;
 

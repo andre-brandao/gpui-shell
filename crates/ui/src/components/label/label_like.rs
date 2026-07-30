@@ -1,16 +1,4 @@
-//! [`LabelLike`] - the shared chrome behind every engram label.
-//!
-//! Mirrors zed's `ui::LabelLike`, scoped down to engram's needs. Notably
-//! absent: `buffer_font` and `inline_code` (engram has no editor surface),
-//! and the `truncate_start` helper (engram-side label callers don't need
-//! end-anchored truncation yet - easy to add later).
-//!
-//! Like [`crate::components::button::ButtonLike`], `LabelLike` is exposed
-//! on its own so callers building a freeform "engram-tinted block of text"
-//! (say, a multi-line description or a custom inline group) can compose
-//! the same modifiers ([`LabelCommon`]) used by the prebuilt
-//! [`Label`](super::label::Label) and [`Headline`](super::headline::Headline)
-//! without re-implementing the size/weight/strikethrough/etc machinery.
+//! [`LabelLike`] - the shared chrome behind every label.
 
 use crate::theme::{ActiveTheme, Color, TextSize};
 use gpui::{
@@ -20,11 +8,6 @@ use gpui::{
 use smallvec::SmallVec;
 
 /// Sets the line height behavior of a label.
-///
-/// `TextLabel` (the default) uses GPUI's natural line height, which leaves
-/// breathing room above descenders - appropriate for paragraph-style copy.
-/// `UiLabel` clamps to a tight `1.0` for compact UI rows where vertical
-/// rhythm matters more than legibility of multi-line wrapped text.
 #[derive(Debug, Default, PartialEq, Eq, Copy, Clone)]
 pub enum LineHeightStyle {
     /// Natural line height for the resolved [`TextSize`].
@@ -36,10 +19,7 @@ pub enum LineHeightStyle {
 
 /// Common builder methods every label-like component implements.
 ///
-/// Like the rest of engram's behavioural traits in [`crate::traits`], this
-/// trait exists for **naming uniformity and rustdoc surface**, not as a
-/// generic bound. Every label-like type spells `size`, `color`, `italic`,
-/// `truncate`, etc the same way - that consistency is the whole point.
+/// Naming uniformity across label types, not a generic bound.
 pub trait LabelCommon {
     /// Set the size of the label.
     fn size(self, size: TextSize) -> Self;
@@ -62,8 +42,7 @@ pub trait LabelCommon {
     /// Render an underline beneath the label.
     fn underline(self) -> Self;
 
-    /// Multiply the resolved color's alpha by `alpha`. Useful for fading a
-    /// semantic color (e.g. "muted but still 50% transparent on top").
+    /// Multiply the resolved color's alpha by `alpha`.
     fn alpha(self, alpha: f32) -> Self;
 
     /// Truncate overflowing text with a trailing ellipsis (`...`).
@@ -75,9 +54,7 @@ pub trait LabelCommon {
 
 /// A flexible base from which the prebuilt label types
 /// ([`Label`](super::label::Label), [`Headline`](super::headline::Headline))
-/// are composed. Use it directly only when the prebuilt labels can't
-/// express what you need - every escape hatch is a place engram's
-/// typography can drift.
+/// are composed.
 #[derive(IntoElement)]
 #[must_use = "LabelLike does nothing unless rendered"]
 pub struct LabelLike {
@@ -124,9 +101,6 @@ impl LabelLike {
 
 impl LabelLike {
     /// Set an arbitrary size in rems, overriding the [`TextSize`] token.
-    ///
-    /// Used by [`Headline`](super::headline::Headline), whose scale runs
-    /// above the named label sizes.
     pub fn size_rems(mut self, size: Rems) -> Self {
         self.custom_size = Some(size);
         self
@@ -197,8 +171,8 @@ impl RenderOnce for LabelLike {
         let mut color = self.color.hsla(colors);
         if let Some(alpha) = self.alpha {
             // Mirrors zed's behaviour: rescale the resolved alpha so the
-            // label fades over its semantic color rather than overwriting
-            // the alpha channel outright.
+            // label fades over its semantic color rather than overwriting the
+            // alpha channel outright.
             color.fade_out(1.0 - alpha.clamp(0.0, 1.0));
         }
         let underline_color = colors.text_muted.opacity(0.4);

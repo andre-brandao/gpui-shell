@@ -9,7 +9,7 @@
 //! `figma_squircle` crate by Cameron Campbell (MIT), itself a port of
 //! MartinRGB's JavaScript reference implementation. Those in turn implement
 //! the construction described in Figma's "Desperately Seeking Squircles"
-//! post. Engram vendors the math inline so the crate ships without any
+//! post. The math is vendored inline so the crate ships without any
 //! additional dependencies.
 //!
 //! The shape is painted once per frame via an absolute-positioned
@@ -65,9 +65,8 @@ impl Squircle {
             fill: SquircleFill::default(),
             bordered: false,
             corner_radius: None,
-            // 1.0 is the iOS / full superellipse look - corner curvature
-            // blends all the way into the straight edge. 0.0 collapses to a
-            // plain arc (standard rounded rectangle).
+            // 1.0 is the iOS / full superellipse look - curvature blends all
+            // the way into the straight edge; 0.0 is a plain rounded rect.
             corner_smoothing: 1.0,
             children: Vec::new(),
         }
@@ -101,16 +100,13 @@ impl Squircle {
         self
     }
 
-    /// Explicit corner radius. Defaults to ~39% of the shorter side, which
-    /// reads as an iOS app-icon silhouette.
+    /// Explicit corner radius.
     pub fn corner_radius(mut self, radius: Pixels) -> Self {
         self.corner_radius = Some(radius);
         self
     }
 
-    /// Corner smoothing factor, clamped to `0.0..=1.0`. 0.0 behaves like a
-    /// plain rounded rectangle; 0.6 matches Figma's look; 1.0 (default) is
-    /// the smoothest continuous superellipse.
+    /// Corner smoothing factor, clamped to `0.0..=1.0`.
     pub fn corner_smoothing(mut self, smoothing: f32) -> Self {
         self.corner_smoothing = smoothing.clamp(0.0, 1.0);
         self
@@ -196,8 +192,7 @@ fn paint_squircle(
     }
 
     let budget = width.min(height) / 2.0;
-    // Default radius tuned for the iOS app-icon silhouette. Users override
-    // via `.corner_radius(px)`.
+    // Default radius tuned for the iOS app-icon silhouette.
     let radius = corner_radius
         .map(f32::from)
         .unwrap_or_else(|| budget * 0.78)
@@ -352,10 +347,8 @@ mod figma {
         pub arc_section_length: f32,
     }
 
-    /// Engram always asks for the `preserve_smoothing=true` flavour of the
-    /// upstream function - when the requested smoothing overflows the
-    /// available budget, the algorithm keeps the smoothing ratio and lets
-    /// the radius shrink rather than dropping smoothing back to zero.
+    /// `preserve_smoothing=true` flavour: on budget overflow the smoothing
+    /// ratio is kept and the radius shrinks.
     pub(super) fn corner_path_params(
         corner_radius: f32,
         corner_smoothing: f32,

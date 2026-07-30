@@ -1,13 +1,9 @@
 //! [`KeybindingHint`] - inline keyboard-shortcut glyph for hover cards and
 //! descriptions.
 //!
-//! A compact, italic rendering of a [`KeyBinding`] with optional prefix and
-//! suffix text. Where [`KeyBinding`] is a standalone chip strip (toolbar or
-//! menu end-slot), `KeybindingHint` is designed to sit *inside* running text
-//! - think "Press **Enter** to confirm" in a tooltip or hover card.
-//!
-//! Adapted from zed's `ui::KeybindingHint`, simplified to match engram's
-//! visual-only [`KeyBinding`] (no action / keymap lookup).
+//! A compact italic [`KeyBinding`] with optional prefix and suffix text,
+//! meant to sit inside running text ("Press Enter to confirm") rather than
+//! stand alone as a chip strip.
 
 use crate::theme::{ActiveTheme, Appearance, Color, Radius, Spacing, TextSize};
 use gpui::{

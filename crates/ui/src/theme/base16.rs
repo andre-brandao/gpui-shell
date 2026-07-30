@@ -1,38 +1,4 @@
 //! Base16 palette → [`ThemeColors`] derivation.
-//!
-//! Base16 is the shell's *input* format: 16 colors, coming from a Tinted
-//! Theming scheme, from Stylix, from matugen run against the wallpaper, or
-//! written by hand. [`ThemeColors`] is the *output*: the ~50 semantic
-//! tokens components actually read.
-//!
-//! 16 inputs cannot fill 50 slots directly, so the slots Base16 does not
-//! name are derived - almost always by laying a translucent foreground or
-//! accent over a surface. Deriving rather than hard-coding is what keeps
-//! matugen output (arbitrary hues, arbitrary contrast) usable: an
-//! `alpha(0.06)` overlay reads correctly on any palette, light or dark.
-//!
-//! # Slot mapping
-//!
-//! Following the Base16 styling guidelines:
-//!
-//! | Slot | Role | Used for |
-//! |------|------|----------|
-//! | `base00` | default background | `background` |
-//! | `base01` | lighter background | `surface_background`, resting elements |
-//! | `base02` | selection background | `elevated_surface_background`, `border`, hover |
-//! | `base03` | comments, invisibles | disabled/placeholder foreground, active elements |
-//! | `base04` | dark foreground | `text_muted`, `icon_muted` |
-//! | `base05` | default foreground | `text`, `icon` |
-//! | `base08` | red | `status.error` |
-//! | `base09` | orange | `status.warning` |
-//! | `base0B` | green | `status.success` |
-//! | `base0C` | cyan | `status.info` |
-//! | `base0D` | blue | `accent`, focus, selection |
-//!
-//! `base06`, `base07`, `base0A`, `base0E` and `base0F` are carried on the
-//! palette (theme authors and preview swatches want the full 16) but are
-//! not mapped to a token - nothing in the shell needs a second light
-//! foreground or a "deprecated" brown.
 
 use std::path::Path;
 use std::process::Command;
@@ -58,16 +24,6 @@ const STATUS_BACKGROUND_ALPHA: f32 = 0.12;
 const STATUS_BORDER_ALPHA: f32 = 0.30;
 
 /// A Base16 color palette: the 16 slots, parsed into [`Hsla`].
-///
-/// Serializes to (and from) the shape every Base16 tool already writes, so
-/// a `theme.toml` reads like any other scheme file:
-///
-/// ```toml
-/// [base16]
-/// base00 = "#181818"
-/// base01 = "#282828"
-/// # ...
-/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Base16Palette {
@@ -107,9 +63,6 @@ pub struct Base16Palette {
 
 impl Base16Palette {
     /// Parse 16 color strings (`base00` through `base0F`, in order).
-    ///
-    /// Each entry accepts any form [`color_string`] understands - `#1e1e2e`,
-    /// bare `1e1e2e`, `rgb(...)`, `hsl(...)`, or `oklch(...)`.
     pub fn from_hex(colors: &[&str; 16]) -> anyhow::Result<Self> {
         let parse = |idx: usize| -> anyhow::Result<Hsla> {
             color_string::parse(colors[idx]).map_err(|e| anyhow::anyhow!("base{idx:02x}: {e}"))
@@ -136,9 +89,6 @@ impl Base16Palette {
 
     /// Whether this palette is a light or a dark scheme, judged by the
     /// lightness of its default background.
-    ///
-    /// Base16 schemes are self-describing this way - a light scheme ships
-    /// a light `base00` - so nothing needs inverting downstream.
     pub fn appearance(&self) -> Appearance {
         if self.base00.l < 0.5 {
             Appearance::Dark
@@ -181,8 +131,8 @@ impl Base16Palette {
             elevated_surface_background: self.base02,
 
             // `border_variant` is the *subtler* of the two - it separates
-            // related content, so it sits one step closer to the surface
-            // than `border` does.
+            // related content, so it sits one step closer to the surface than
+            // `border` does.
             border: self.base02,
             border_variant: self.base01,
             border_focused: accent,
@@ -202,8 +152,8 @@ impl Base16Palette {
             icon_disabled: self.base03,
             icon_accent: accent,
 
-            // Filled controls reuse the surface ramp so they read as
-            // raised chips against the background.
+            // Filled controls reuse the surface ramp so they read as raised
+            // chips against the background.
             element_background: self.base01,
             element_hover: self.base02,
             element_active: self.base03,
@@ -271,20 +221,12 @@ impl Base16Palette {
         }
     }
 
-    /// Build a complete [`Theme`] from this palette, at the default font
-    /// size. Callers that carry a user-configured size should set
-    /// [`Theme::font_size`] afterwards.
+    /// Build a complete [`Theme`] from this palette, at the default font size.
     pub fn into_theme(self, name: impl Into<gpui::SharedString>) -> Theme {
         Theme::from_palette(name, self)
     }
 
     /// Generate a Base16 palette from a wallpaper using matugen.
-    ///
-    /// # Arguments
-    /// - `wallpaper_path`: path to the wallpaper image
-    /// - `mode`: `"dark"` or `"light"`
-    /// - `scheme_type`: e.g. `"scheme-tonal-spot"`, `"scheme-vibrant"`
-    /// - `source_color_index`: 0-4, where 0 is the most dominant color
     pub fn generate_from_wallpaper(
         wallpaper_path: impl AsRef<Path>,
         mode: &str,
@@ -394,8 +336,7 @@ mod tests {
     }
 
     /// A "variant" border must be subtler than the default one, i.e. closer
-    /// to the surface it sits on. Easy to invert by accident: `base07` is the
-    /// lightest slot, so mapping it to `border.subtle` makes it the loudest.
+    /// to the surface it sits on.
     #[test]
     fn border_variant_is_subtler_than_border() {
         let colors = Base16Palette::default().into_colors();
@@ -406,8 +347,8 @@ mod tests {
         );
     }
 
-    /// The other bug: `text` and `text_muted` both resolved to `base05`,
-    /// so "muted" text was not actually muted.
+    /// The other bug: `text` and `text_muted` both resolved to `base05`, so
+    /// "muted" text was not actually muted.
     #[test]
     fn foreground_ramp_is_strictly_descending() {
         let colors = Base16Palette::default().into_colors();

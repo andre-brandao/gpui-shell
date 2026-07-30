@@ -1,14 +1,4 @@
 //! [`Headline`] - a typographic step above [`Label`](super::label::Label).
-//!
-//! Headlines exist to draw the eye and create visual hierarchy in pages
-//! that have more than one section. They sit on top of [`LabelLike`] (so
-//! they get color/italic/strikethrough/etc for free via [`LabelCommon`])
-//! but ship with their own [`HeadlineSize`] scale because the named label
-//! sizes top out at "16px Large" - anything bigger is a headline.
-//!
-//! The size scale is the Major Second (rems x 1.125) progression zed uses,
-//! which gives a clean visual jump between adjacent steps without ever
-//! looking decorative.
 
 use crate::theme::{Color, TextSize};
 use gpui::{
@@ -18,8 +8,6 @@ use gpui::{
 use crate::components::label::label_like::{LabelCommon, LabelLike, LineHeightStyle};
 
 /// The size of a [`Headline`] element.
-///
-/// Defaults to a Major Second scale, mirroring zed's `HeadlineSize`.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Default)]
 pub enum HeadlineSize {
     /// An extra small headline - `~14px` @16px/rem.
@@ -75,11 +63,8 @@ impl Headline {
 
 impl LabelCommon for Headline {
     fn size(self, _size: TextSize) -> Self {
-        // `Headline` is parameterised by its own `HeadlineSize` scale, not
-        // by `TextSize`. Forwarding through `LabelCommon::size` would let
-        // a caller silently downsize a headline back to label proportions,
-        // which would defeat the point of using a headline. Use
-        // [`Headline::size`] (the inherent method) instead.
+        // `Headline` is parameterised by its own `HeadlineSize` scale, not by
+        // `TextSize`. Use the inherent [`Headline::size`] instead.
         self
     }
 
@@ -133,8 +118,8 @@ impl LabelCommon for Headline {
 impl RenderOnce for Headline {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         // Apply the headline-scale font size via `LabelLike::size_rems` so
-        // all the other LabelLike modifiers (weight, italic, color,
-        // truncate, etc) compose without needing a parallel render path.
+        // all the other LabelLike modifiers (weight, italic, color, truncate,
+        // etc) compose without needing a parallel render path.
         self.base.size_rems(self.size.rems()).child(self.text)
     }
 }

@@ -1,8 +1,4 @@
 //! Navigable - a keyboard-navigation wrapper for scrollable views.
-//!
-//! Wraps a child element and a list of focusable entries. When the menu
-//! `SelectNext` / `SelectPrevious` actions fire (arrow keys), focus cycles
-//! through the entries in order and optionally scrolls them into view.
 
 use gpui::{
     AnyElement, App, FocusHandle, IntoElement, RenderOnce, ScrollAnchor, ScrollHandle, Window, div,

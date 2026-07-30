@@ -26,7 +26,7 @@ impl Render for BannerStory {
                             .when(self.info_visible, |this| {
                                 this.child(
                                     Banner::new(Severity::Info, "New version available")
-                                        .description("Engram 0.2 is ready to install.")
+                                        .description("Version 0.2 is ready to install.")
                                         .action(
                                             Button::new("banner-update", "Update")
                                                 .style(ButtonStyle::Tinted(TintColor::Accent))

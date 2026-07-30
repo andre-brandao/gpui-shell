@@ -1,10 +1,5 @@
 //! Callout - a highlighted info/warning/error block for important messages
 //! that require user attention.
-//!
-//! Unlike [`Banner`](super::banner::Banner) which is an inline strip,
-//! `Callout` is a full-width block with a severity-tinted background, an
-//! optional icon, title, description, and action slot. Use it for situations
-//! where the user needs to read and likely act on the information.
 
 use crate::theme::{ActiveTheme, Color, Spacing};
 use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Window, div, prelude::*, px};

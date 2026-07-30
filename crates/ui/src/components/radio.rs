@@ -1,9 +1,4 @@
 //! Radio - a two-state circle toggle for mutually exclusive choices.
-//!
-//! Follows the same idiom as [`Checkbox`](super::checkbox) and
-//! [`Switch`](super::switch): stateless `RenderOnce`, parent owns the
-//! selected state, handler receives the *new* state after the click. The
-//! visual is a filled circle inside a bordered ring.
 
 use std::rc::Rc;
 
@@ -42,9 +37,7 @@ impl Radio {
         self
     }
 
-    /// Register a click handler. The handler receives the new [`ToggleState`],
-    /// always [`ToggleState::Selected`], since a radio can only be turned
-    /// *on* by clicking; the parent is responsible for deselecting siblings.
+    /// Register a click handler.
     pub fn on_click(
         mut self,
         handler: impl Fn(&ToggleState, &mut Window, &mut App) + 'static,

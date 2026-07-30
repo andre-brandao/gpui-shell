@@ -1,10 +1,5 @@
-//! Shared UI layer for the shell: the base16 theme system and the
-//! component set built on top of it.
-//!
-//! Components read semantic tokens ([`ThemeColors`], [`TextSize`],
-//! [`Spacing`], [`Radius`], [`IconSize`]) rather than palette slots, so a
-//! Base16 scheme, a Stylix palette, and a matugen-derived palette all drive
-//! the same widgets.
+//! Shared UI layer for the shell: the base16 theme system and the component
+//! set built on top of it.
 
 pub mod components;
 pub mod patterns;

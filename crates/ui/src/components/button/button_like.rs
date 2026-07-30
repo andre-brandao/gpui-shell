@@ -1,26 +1,4 @@
-//! [`ButtonLike`] - the shared chrome behind every engram button.
-//!
-//! `ButtonLike` is a thin wrapper around a `gpui::Div` that handles the bits
-//! that *every* button needs in lockstep - id, focus tracking, tooltip,
-//! click forwarding, hover/active palettes, rounding, optional border. Both
-//! [`Button`](super::button::Button) and
-//! [`IconButton`](super::icon_button::IconButton) compose this struct
-//! internally and forward most of their builder methods through
-//! [`ButtonCommon`].
-//!
-//! `ButtonLike` is also exported on its own so callers who need a
-//! freeform "rounded clickable surface with engram's button states" - a
-//! card-like trigger, a custom dropdown anchor - can build directly on it
-//! without re-implementing all the chrome. Use it sparingly though: every
-//! escape hatch is a place engram's visual language can drift.
-//!
-//! Mirrors zed's `ui::ButtonLike`, scoped down to the bits engram actually
-//! exercises. Notably absent: dynamic spacing, focus-visible rings, the
-//! `Component` preview registry. Add them when a real consumer needs them.
-//!
-//! Secondary clicks take gpui's own route rather than zed's: one
-//! [`ButtonLike::on_aux_click`] covering right *and* middle, instead of
-//! zed's right-only `on_right_click` built from a synthesized `ClickEvent`.
+//! [`ButtonLike`] - the shared chrome behind every button.
 
 use std::rc::Rc;
 
@@ -37,22 +15,12 @@ use crate::traits::{
 };
 
 /// Buttons that can swap their [`ButtonStyle`] when in the selected state.
-///
-/// Mirrors zed's `SelectableButton`. The trait is intentionally separate
-/// from [`Toggleable`] so a selectable-button-with-a-tinted-selected-state
-/// can be expressed without forcing every toggleable thing to grow that
-/// surface.
 pub trait SelectableButton: Toggleable {
     fn selected_style(self, style: ButtonStyle) -> Self;
 }
 
 /// The "every button speaks the same dialect" trait - id, style, size,
 /// tooltip, tab index, focus tracking.
-///
-/// Like the rest of engram's behavioural traits in [`crate::traits`], this
-/// is **not** used as a generic bound. It exists so every button-like
-/// component spells these methods the same way at the call site, and so
-/// rustdoc/IDE autocomplete surface them consistently.
 pub trait ButtonCommon: Clickable + Disableable {
     /// The button's element id.
     fn id(&self) -> &ElementId;
@@ -63,49 +31,34 @@ pub trait ButtonCommon: Clickable + Disableable {
     /// Set the size preset. Defaults to [`ButtonSize::Default`].
     fn size(self, size: ButtonSize) -> Self;
 
-    /// Attach a tooltip builder. Typically used with
-    /// [`Tooltip::text`](crate::components::Tooltip::text).
+    /// Attach a tooltip builder.
     fn tooltip(self, tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self;
 
     /// Insert this button into the keyboard tab order at `tab_index`.
     fn tab_index(self, tab_index: isize) -> Self;
 
-    /// Track focus on the given handle. The button itself does not own the
-    /// handle - it's borrowed from a parent view that wants to programmatically
-    /// focus it.
+    /// Track focus on the given handle.
     fn track_focus(self, focus_handle: &FocusHandle) -> Self;
 }
 
 /// The visual variant of a button.
-///
-/// Roughly mirrors zed's `ButtonStyle`, scoped down to the variants engram
-/// actually exercises. The previous engram-only `Primary` variant has been
-/// folded into `Tinted(TintColor::Accent)`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonStyle {
-    /// Solid filled background. The most prominent style; used for the
-    /// default/affirmative action.
+    /// Solid filled background.
     #[default]
     Filled,
     /// A semantic-coloured tint (Accent / Error / Warning / Success) - soft
-    /// background plus a coloured border. Used for primary CTAs and
-    /// destructive confirmations.
+    /// background plus a coloured border.
     Tinted(TintColor),
-    /// Bordered, transparent-until-hover background. Reads as a "secondary"
-    /// CTA next to a filled or tinted primary.
+    /// Bordered, transparent-until-hover background.
     Outlined,
-    /// Like [`ButtonStyle::Outlined`] but with a more recessive (variant)
-    /// border tone. Used when an outlined look is needed but should not
-    /// compete with surrounding chrome.
+    /// Like [`ButtonStyle::Outlined`] but with a more recessive (variant) border tone.
     OutlinedGhost,
     /// Transparent until hover. Toolbar / inline-action style.
     Subtle,
-    /// Transparent with no border, tinting only on hover/active. The style
-    /// for dense icon strips - a bar's tray, a toolbar - where a resting
-    /// background would turn the strip into a row of boxes.
+    /// Transparent with no border, tinting only on hover/active.
     Ghost,
-    /// Fully transparent in every state. Useful for buttons whose text is
-    /// the only thing that should ever draw the eye.
+    /// Fully transparent in every state.
     Transparent,
 }
 
@@ -159,8 +112,7 @@ impl ButtonStyle {
     pub(super) fn enabled(self, cx: &App) -> ButtonLikeStyles {
         let colors = cx.theme().colors();
         match self {
-            // Inverted "primary" - fg as background, bg as label. Mirrors
-            // the engram draft's `.btn.primary`.
+            // Inverted "primary" - fg as background, bg as label.
             ButtonStyle::Filled => ButtonLikeStyles {
                 background: colors.text,
                 border: transparent_black(),
@@ -195,9 +147,9 @@ impl ButtonStyle {
                 background: colors.text_muted,
                 border: transparent_black(),
             },
-            // Tinted backgrounds are alpha-blended from the status
-            // foreground color; hover bumps the alpha to give feedback
-            // without an extra darken pass.
+            // Tinted backgrounds are alpha-blended from the status foreground
+            // color; hover bumps the alpha to give feedback without an extra
+            // darken pass.
             ButtonStyle::Tinted(tint) => tint.hovered_styles(cx),
             ButtonStyle::Outlined => ButtonLikeStyles {
                 background: colors.ghost_element_hover,
@@ -283,9 +235,7 @@ impl ButtonStyle {
         }
     }
 
-    /// Whether this style ever paints a visible border. Drives the
-    /// `border_1()` call in render so non-bordered styles don't reserve a
-    /// pixel of border space.
+    /// Whether this style ever paints a visible border.
     pub(super) fn is_outlined(self) -> bool {
         matches!(
             self,
@@ -296,8 +246,8 @@ impl ButtonStyle {
         )
     }
 
-    /// Override for the label / icon color when the button's chrome demands
-    /// a non-default foreground (e.g. `Filled` is an inverted slab, so the
+    /// Override for the label / icon color when the button's chrome demands a
+    /// non-default foreground (e.g. `Filled` is an inverted slab, so the
     /// label must flip to the app background to stay legible).
     pub(super) fn label_color_override(self, cx: &App) -> Option<crate::theme::Color> {
         match self {
@@ -309,11 +259,7 @@ impl ButtonStyle {
     }
 }
 
-/// Button height presets. These also drive the inner padding for [`Button`]
-/// and [`IconButton`]. The engram scale runs tight - [`ButtonSize::Default`]
-/// matches the spec's 24px compact control height; [`ButtonSize::Large`] is
-/// what most component libraries call "default"; [`ButtonSize::Compact`] is
-/// a further-condensed toolbar / inline-action variant.
+/// Button height presets.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonSize {
     Compact,
@@ -340,7 +286,7 @@ impl ButtonLikeRounding {
     };
 }
 
-/// Shared chrome behind every engram button. See the module docs.
+/// Shared chrome behind every button. See the module docs.
 #[derive(IntoElement)]
 #[must_use = "ButtonLike does nothing unless rendered"]
 pub struct ButtonLike {
@@ -394,14 +340,7 @@ impl ButtonLike {
         self
     }
 
-    /// Handle the non-primary mouse buttons - right and middle - in one
-    /// callback. Discriminate with [`ClickEvent::is_right_click`] /
-    /// [`ClickEvent::is_middle_click`].
-    ///
-    /// Right-click deliberately does not move focus or paint the button's
-    /// active state: a secondary click opens a menu, it does not "press" the
-    /// thing it was aimed at. Propagation stops here so an ancestor's own
-    /// secondary handler doesn't fire for the same click.
+    /// Handle the non-primary mouse buttons - right and middle - in one callback.
     pub fn on_aux_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -422,12 +361,7 @@ impl ButtonLike {
         self
     }
 
-    /// Set the inner padding (horizontal, vertical) of this button. Used by
-    /// the wrapping [`Button`](super::button::Button) and
-    /// [`IconButton`](super::icon_button::IconButton) to apply their own
-    /// size-derived padding through ButtonLike's chrome - the padding has
-    /// to live on the same div that paints the background, otherwise the
-    /// background hugs the inner content with no breathing room.
+    /// Set the inner padding (horizontal, vertical) of this button.
     pub fn padding(mut self, horizontal: Pixels, vertical: Pixels) -> Self {
         self.horizontal_padding = Some(horizontal);
         self.vertical_padding = Some(vertical);

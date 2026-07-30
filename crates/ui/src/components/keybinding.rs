@@ -1,14 +1,4 @@
 //! KeyBinding - display-only chip strip for keyboard shortcuts.
-//!
-//! A pared-down take on Zed's `KeyBinding`. Zed integrates with `Action`,
-//! `FocusHandle`, and the live keymap so a binding can be looked up by
-//! action - that needs an `App` and a focus handle. Engram has no keymap
-//! infrastructure today, so this version is purely *visual*: callers hand
-//! it the labels they want rendered (e.g. `["Cmd", "S"]`) and we draw a
-//! row of small chips with a thin border.
-//!
-//! When engram grows action / keymap support we can add a parallel
-//! `KeyBinding::for_action(...)` constructor without breaking call sites.
 
 use crate::theme::{ActiveTheme, Color, Radius, Spacing};
 use gpui::{IntoElement, RenderOnce, SharedString, div, prelude::*, px};
@@ -24,8 +14,7 @@ pub struct KeyBinding {
 }
 
 impl KeyBinding {
-    /// Build a binding from any iterable of key names. The display order
-    /// is the iteration order.
+    /// Build a binding from any iterable of key names.
     pub fn new<I, S>(keys: I) -> Self
     where
         I: IntoIterator<Item = S>,

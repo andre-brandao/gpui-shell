@@ -1,8 +1,4 @@
 //! [`CopyButton`] - an icon button that copies a string to the clipboard.
-//!
-//! Shows a copy icon that transitions to a check icon for 2 seconds after
-//! the user clicks it. Uses `window.use_keyed_state` to persist the
-//! "just copied" state across re-renders without needing a parent entity.
 
 use std::time::Duration;
 

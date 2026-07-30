@@ -1,19 +1,4 @@
 //! HoverCard - a richer tooltip-like surface for preview content.
-//!
-//! Where [`Tooltip`](super::tooltip) shows a title and optional metadata
-//! line, `HoverCard` is a full [`Popover`]-backed card that accepts
-//! arbitrary children - user profiles, link previews, definition
-//! summaries, etc.
-//!
-//! Like `Tooltip`, `HoverCard` is a view (`impl Render`) so it can be
-//! handed to GPUI's `.tooltip(builder)` method on any stateful element.
-//! The [`HoverCard::build`] helper produces the closure.
-//!
-//! The body is supplied as a builder closure (`Fn(&mut Window, &mut App)
-//! -> AnyElement`) rather than a pre-built element list. The closure is
-//! invoked on every `Render::render` pass, so the card's contents survive
-//! repeated renders (e.g. when the parent view re-notifies). Pre-built
-//! children would be consumed on first render and vanish on the next.
 
 use std::rc::Rc;
 
@@ -38,9 +23,7 @@ pub struct HoverCard {
 }
 
 impl HoverCard {
-    /// Build a hover card whose body is produced by `body` on every render
-    /// pass. The closure is intentionally re-invoked rather than consumed
-    /// so the card survives repeated renders.
+    /// Build a hover card whose body is produced by `body` on every render pass.
     pub fn new(body: impl Fn(&mut Window, &mut App) -> AnyElement + 'static) -> Self {
         Self {
             title: None,
@@ -60,7 +43,6 @@ impl HoverCard {
     }
 
     /// Build a tooltip-builder closure that produces this hover card.
-    /// Pass the result directly to gpui's `.tooltip(...)` method.
     pub fn build(
         make: impl Fn() -> HoverCard + 'static,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {

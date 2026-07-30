@@ -1,34 +1,11 @@
 //! VirtualList - lazy-rendered scrollable list of uniform-height items.
 //!
-//! Thin wrapper around [`gpui::uniform_list`]. Zed's `uniform_list` is the
-//! canonical primitive for "render only the visible subset of N items of
-//! uniform height". Engram's job here is only to:
+//! Thin wrapper around [`gpui::uniform_list`], adding a builder surface,
+//! one-call scrollbar attachment through [`UniformListDecoration`], and a
+//! [`VirtualListScrollHandle`] that bundles the gpui scroll handle with the
+//! drag state and padded bounds the scrollbar needs.
 //!
-//! 1. give it a matching component-style builder surface (engram tends to
-//!    expose types, not free functions, for components);
-//! 2. provide one-call scrollbar attachment via a [`UniformListDecoration`]
-//!    implementation - same integration pattern Zed's own `Scrollbar` uses;
-//! 3. expose a [`VirtualListScrollHandle`] wrapper that bundles the gpui
-//!    scroll handle with a small shared cell for scrollbar drag state,
-//!    plus the shared padded bounds needed to convert mouse coords
-//!    back to scroll offsets.
-//!
-//! Variable-height rows are out of scope for `VirtualList` - use
-//! [`gpui::list`] directly for that case (same shape, slower layout,
-//! different scroll-handle type).
-//!
-//! ## Usage
-//!
-//! ```ignore
-//! let handle = VirtualListScrollHandle::new();
-//! VirtualList::new("rows", items.len(), move |range, _window, _cx| {
-//!     items[range].iter().map(|item| row(item)).collect()
-//! })
-//! .track_scroll(handle.clone())
-//! .scrollbar()
-//! .h_full()
-//! ```
-
+//! Variable-height rows belong in [`VariableList`](super::variable_list::VariableList).
 use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
@@ -50,9 +27,8 @@ pub struct VirtualListScrollHandle {
     inner: UniformListScrollHandle,
     /// `Some(offset_from_thumb_top)` while a scrollbar drag is in progress.
     drag_offset: Rc<Cell<Option<Pixels>>>,
-    /// Padded viewport bounds (where items are drawn), captured each frame
-    /// by the scrollbar decoration. Used by the drag-move handler to map
-    /// mouse Y back to a scroll offset.
+    /// Padded viewport bounds (where items are drawn), captured each frame by
+    /// the scrollbar decoration.
     viewport: Rc<Cell<Bounds<Pixels>>>,
     /// Content height of the last drawn frame. Zero means "unknown".
     content_height: Rc<Cell<Pixels>>,
@@ -68,8 +44,8 @@ impl VirtualListScrollHandle {
         self.inner.scroll_to_item(ix, strategy);
     }
 
-    /// Access the underlying gpui handle (e.g. for less-common methods
-    /// like `scroll_to_item_strict`).
+    /// Access the underlying gpui handle (e.g. for less-common methods like
+    /// `scroll_to_item_strict`).
     pub fn as_uniform(&self) -> &UniformListScrollHandle {
         &self.inner
     }
@@ -84,9 +60,7 @@ pub struct VirtualList {
 }
 
 impl VirtualList {
-    /// Build a new virtual list. `item_count` is the total number of rows
-    /// (not just the visible window); `render_items` receives the visible
-    /// index range and returns an element per index.
+    /// Build a new virtual list.
     pub fn new<R>(
         id: impl Into<ElementId>,
         item_count: usize,
@@ -109,8 +83,7 @@ impl VirtualList {
         self
     }
 
-    /// Overlay an engram-styled scrollbar on the right edge of the list.
-    /// The thumb is draggable and the track is click-to-jump.
+    /// Overlay a themed scrollbar on the right edge of the list.
     pub fn scrollbar(mut self) -> Self {
         if self.scroll_handle.is_none() {
             let handle = VirtualListScrollHandle::default();

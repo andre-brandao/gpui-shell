@@ -1,22 +1,11 @@
 //! Spacing, typography, and radius tokens.
-//!
-//! Every token is a fixed value except [`TextSize`], which is expressed in
-//! `rems` so the whole UI scales with the user's configured base font size
-//! (`Theme::font_size`, installed on each window via
-//! [`gpui::Window::set_rem_size`]). That keeps the shell's existing
-//! "one knob scales all text" behaviour while giving components a
-//! semantic size vocabulary instead of raw pixel lookups.
 
 use gpui::{Pixels, Rems, px, rems};
 
-/// gpui's default rem size. Used only to convert [`IconSize`] presets
-/// between their nominal pixel ladder and rems.
+/// gpui's default rem size.
 const NOMINAL_REM_PX: f32 = 16.0;
 
 /// Semantic spacing step used for gaps, padding, and margins.
-///
-/// Fixed pixels on purpose: spacing should not grow with the font size, or
-/// a bar configured for large text turns into a wall of padding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Spacing {
     /// 0px
@@ -45,9 +34,6 @@ impl Spacing {
     }
 
     /// The raw pixel count.
-    ///
-    /// `Pixels` keeps its inner `f32` private, so call sites doing
-    /// arithmetic - or defining a `const` - need the number itself.
     pub const fn value(self) -> f32 {
         match self {
             Self::None => 0.0,
@@ -63,13 +49,7 @@ impl Spacing {
     }
 }
 
-/// Semantic text size, expressed as a ratio of the configured base font
-/// size.
-///
-/// [`TextSize::Default`] is exactly one rem, so it resolves to whatever
-/// `Theme::font_size` the user set. The other ratios reproduce the shell's
-/// previous `FontSizes` scale (xs/sm/base/md/lg/xl) one-for-one, so
-/// switching to these tokens is not a visual change.
+/// Semantic text size, expressed as a ratio of the configured base font size.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextSize {
     /// 0.77 rem (~10px at a 13px base)
@@ -105,20 +85,12 @@ impl TextSize {
     }
 
     /// Resolve to absolute pixels against an explicit base font size.
-    ///
-    /// Prefer [`TextSize::rems`] - it lets gpui do the resolution against
-    /// the window's rem size. This exists for the few places that need a
-    /// concrete `Pixels` outside of a styled element.
     pub fn pixels(self, base: Pixels) -> Pixels {
         base * self.ratio()
     }
 }
 
 /// Semantic icon size.
-///
-/// Fixed pixels, matching the shell's previous `icon_size::{SM,MD,LG,XL}`
-/// constants (12/14/16/18), with a 10px indicator step below them and two
-/// larger steps for empty-state and hero icons.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum IconSize {
     /// 10px - status dots and other decorations.
@@ -140,11 +112,6 @@ pub enum IconSize {
     Custom(Rems),
     /// A caller-specified size in absolute pixels, which does *not* scale
     /// with the window's rem size.
-    ///
-    /// Only for icons that must line up with something else measured in
-    /// device pixels - a tray widget mixing SVG fallbacks with raster
-    /// pixmaps, say. Everything else wants [`Self::Custom`] or a preset, so
-    /// icons track the user's font scale the way text does.
     Exact(f32),
 }
 
@@ -160,11 +127,7 @@ impl IconSize {
         }
     }
 
-    /// Size in rems, so icons scale with the window's rem size the way
-    /// text does.
-    /// Note that [`Self::Exact`] has no rem equivalent; it reports the
-    /// nominal conversion, which is only correct at a 1.0 font scale.
-    /// [`Icon`](crate::Icon) sizes it in pixels instead.
+    /// Size in rems, so icons scale with the window's rem size the way text does.
     pub fn rems(self) -> Rems {
         match self {
             Self::Custom(r) => r,
@@ -173,8 +136,7 @@ impl IconSize {
         }
     }
 
-    /// The raw pixel count of a preset. [`Self::Custom`] has no fixed
-    /// pixel size, so it reports the nominal rem conversion.
+    /// The raw pixel count of a preset.
     pub const fn value(self) -> f32 {
         match self {
             Self::Custom(_) => NOMINAL_REM_PX,
@@ -191,9 +153,6 @@ impl IconSize {
 }
 
 /// Semantic border radius.
-///
-/// The ladder covers both the shell's previous `radius::{SM,MD,LG}`
-/// constants (4/6/8) and the smaller 2px step used by dense controls.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Radius {
     /// 0px
@@ -219,9 +178,6 @@ impl Radius {
     }
 
     /// The raw pixel count.
-    ///
-    /// `Pixels` keeps its inner `f32` private, so call sites doing
-    /// arithmetic - or defining a `const` - need the number itself.
     pub const fn value(self) -> f32 {
         match self {
             Self::None => 0.0,

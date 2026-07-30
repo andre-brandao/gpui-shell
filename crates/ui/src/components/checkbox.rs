@@ -46,9 +46,7 @@ impl CheckboxSize {
     }
 }
 
-/// A checkbox with optional inline label. Supports the full [`ToggleState`]
-/// (including `Indeterminate`), a disabled state, and a click handler that
-/// receives the **new** state after the click flipped it.
+/// A checkbox with optional inline label.
 #[derive(IntoElement)]
 #[must_use = "Checkbox does nothing unless rendered"]
 pub struct Checkbox {
@@ -82,9 +80,7 @@ impl Checkbox {
         self
     }
 
-    /// Register a click handler. The handler receives the new [`ToggleState`]
-    /// produced by flipping the current state (indeterminate flips to
-    /// selected, matching typical checkbox semantics).
+    /// Register a click handler.
     pub fn on_click(
         mut self,
         handler: impl Fn(&ToggleState, &mut Window, &mut App) + 'static,

@@ -1,14 +1,4 @@
 //! Switch - a two-state toggle (on / off) with optional inline label.
-//!
-//! Modeled on Zed's `Switch`, trimmed to the essentials: size, state,
-//! disabled, label, and click handler. Skips Zed's `SwitchColor`,
-//! `SwitchLabelPosition`, `key_binding`, and tab-index plumbing.
-//!
-//! The knob **animates** between positions rather than snapping. That is not
-//! decoration: a switch that jumps gives no feedback about which direction it
-//! moved, so a mis-click reads the same as no click at all. The previous
-//! state is kept in element-local state purely to know whether this render is
-//! a transition worth animating.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -80,8 +70,7 @@ impl Switch {
         self
     }
 
-    /// Register a click handler. The handler receives the **new** state
-    /// produced by flipping the current one.
+    /// Register a click handler.
     pub fn on_click(
         mut self,
         handler: impl Fn(&ToggleState, &mut Window, &mut App) + 'static,

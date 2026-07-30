@@ -1,12 +1,7 @@
 //! Accordion - a vertically stacked set of collapsible sections.
 //!
 //! Each [`AccordionItem`] is a header row (with a [`Disclosure`] chevron)
-//! that toggles a content body. The parent owns the expanded state - the
-//! accordion is fully stateless like every other engram component.
-//!
-//! Designed to compose with existing engram primitives: [`Disclosure`] for
-//! the toggle, [`Label`] for the header text, and semantic tokens for all
-//! styling.
+//! toggling a content body. The parent owns the expanded state.
 
 use std::rc::Rc;
 

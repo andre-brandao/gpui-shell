@@ -1,11 +1,6 @@
-//! [`SplitButton`] - a two-part button with a primary action on the left
-//! and a secondary action (e.g. dropdown trigger) on the right, visually
+//! [`SplitButton`] - a two-part button with a primary action on the left and
+//! a secondary action (e.g. dropdown trigger) on the right, visually
 //! separated by a divider.
-//!
-//! The outer `SplitButtonStyle` drives the chrome: `Filled` paints a shared
-//! element background, `Outlined` paints a shared border, `Transparent`
-//! strips both. Either side is forced to [`ButtonStyle::Transparent`] at
-//! render time so the inner buttons never double-paint the chrome.
 
 use crate::theme::ActiveTheme;
 use gpui::{
@@ -87,9 +82,9 @@ impl RenderOnce for SplitButton {
             SplitButtonStyle::Transparent => colors.border.opacity(0.3),
         };
 
-        // Both sides render with transparent chrome - the outer container
-        // is responsible for background + border so the two sides read as
-        // a single surface.
+        // Both sides render with transparent chrome - the outer container is
+        // responsible for background + border so the two sides read as a
+        // single surface.
         let left = self.left.with_style(ButtonStyle::Transparent);
         let right = self.right.with_style(ButtonStyle::Transparent);
 

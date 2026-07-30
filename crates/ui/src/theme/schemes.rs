@@ -1,16 +1,11 @@
 //! A named, selectable Base16 palette.
-//!
-//! Schemes are what the theme launcher lists: a palette plus enough
-//! metadata to render a card for it. They carry the *palette*, not a
-//! resolved [`Theme`](super::Theme), so the user's font size and any token
-//! overrides stay independent of which scheme is picked.
 
 use gpui::{Hsla, SharedString};
 
 use super::base16::Base16Palette;
 
-/// A named Base16 scheme - built in, from Stylix, or fetched from a
-/// Tinted Theming repository.
+/// A named Base16 scheme - built in, from Stylix, or fetched from a Tinted
+/// Theming repository.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThemeScheme {
     /// Display name.

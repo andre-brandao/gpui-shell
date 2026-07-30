@@ -1,35 +1,4 @@
 //! Modal - centered overlay card with a dimmed backdrop.
-//!
-//! Like [`Popover`](super::popover::Popover), the modal is *stateless*: the
-//! parent view holds an `is_open` flag and conditionally inserts a
-//! [`modal_overlay`] in its element tree. The overlay covers the full window
-//! (via `deferred()`), draws a translucent backdrop, and centers the
-//! [`Modal`] content. Clicking the backdrop **or** pressing `Escape`
-//! dispatches the caller's `on_dismiss` handler.
-//!
-//! The parent owns a [`FocusHandle`] for the modal and is responsible for
-//! focusing it when the modal opens (so `Escape` has somewhere to land):
-//!
-//! ```ignore
-//! // Construction: create a focus handle once.
-//! self.modal_focus = cx.focus_handle();
-//!
-//! // Opening: flip the flag AND focus the handle.
-//! Button::new("open", "Open").on_click(cx.listener(|this, _, window, cx| {
-//!     this.modal_open = true;
-//!     window.focus(&this.modal_focus, cx);
-//!     cx.notify();
-//! }))
-//!
-//! // Rendering: pass a clone of the handle to the overlay helper.
-//! .when(self.modal_open, |this| {
-//!     this.child(modal_overlay(
-//!         self.modal_focus.clone(),
-//!         Modal::new().title("Delete file?").child(Label::new("Forever.")),
-//!         cx.listener(|this, _, _, cx| { this.modal_open = false; cx.notify(); }),
-//!     ))
-//! })
-//! ```
 
 use crate::theme::{ActiveTheme, Radius, Spacing};
 use gpui::{
@@ -122,19 +91,8 @@ impl RenderOnce for Modal {
     }
 }
 
-/// Wrap a [`Modal`] (or any element) in a full-window backdrop layer that
-/// dismisses on **backdrop click** or **`Escape`**.
-///
-/// # Focus requirement
-///
-/// The caller passes a [`FocusHandle`] that is expected to be focused *while
-/// the overlay is visible*. This is what gives the Escape key somewhere to
-/// land - without a focused handle in the overlay's subtree, key events go
-/// elsewhere and Esc does nothing.
-///
-/// The overlay paints inside a [`deferred`] node so it floats above siblings.
-/// Clicks inside the modal card are `.occlude()`d so they don't bubble up to
-/// the backdrop and cause an accidental dismiss.
+/// Wrap a [`Modal`] (or any element) in a full-window backdrop layer that dismisses on
+/// **backdrop click** or **`Escape`**.
 pub fn modal_overlay(
     focus_handle: FocusHandle,
     content: impl IntoElement,
@@ -142,7 +100,7 @@ pub fn modal_overlay(
 ) -> impl IntoElement {
     overlay_shell(
         OverlayConfig {
-            id: "engram-modal-backdrop",
+            id: "modal-backdrop",
             focus_handle,
             priority: OVERLAY_PRIORITY_MODAL,
             backdrop: Some(backdrop()),

@@ -23,7 +23,6 @@ pub struct HighlightedLabel {
 
 impl HighlightedLabel {
     /// Construct a label with the given characters highlighted.
-    /// Characters are identified by UTF-8 byte position.
     pub fn new(label: impl Into<SharedString>, highlight_indices: Vec<usize>) -> Self {
         Self {
             base: LabelLike::new(),

@@ -1,20 +1,4 @@
 //! Overlay shell - shared scaffolding for popover/modal/sheet.
-//!
-//! The three overlay wrappers ([`anchored_popover`], [`modal_overlay`],
-//! [`sheet_overlay`]) all share the same underlying shape: a deferred,
-//! full-window backdrop div that owns a [`FocusHandle`], dismisses on
-//! backdrop click or Escape, and carries the user's content in an
-//! `.occlude()`d child so inner clicks don't bubble to the dismiss handler.
-//!
-//! The divergent bits are only: the backdrop tint, the debug id, the
-//! deferred paint priority, and the layout that positions the content
-//! within the backdrop. This module captures the shared scaffolding as
-//! [`overlay_shell`] + [`OverlayPlacement`]; the three public wrappers are
-//! thin adapters around it.
-//!
-//! [`anchored_popover`]: super::popover::anchored_popover
-//! [`modal_overlay`]: super::modal::modal_overlay
-//! [`sheet_overlay`]: super::sheet::sheet_overlay
 
 use std::rc::Rc;
 
@@ -26,8 +10,7 @@ use gpui::{
 use crate::components::sheet::SheetSide;
 use crate::traits::DismissHandler;
 
-/// Deferred-paint priority for anchored popovers. Lower than
-/// modal/sheet so those stack above an open popover if the two coexist.
+/// Deferred-paint priority for anchored popovers.
 pub(crate) const OVERLAY_PRIORITY_POPOVER: usize = 1;
 /// Deferred-paint priority for modal + sheet overlays.
 pub(crate) const OVERLAY_PRIORITY_MODAL: usize = 2;
@@ -35,7 +18,7 @@ pub(crate) const OVERLAY_PRIORITY_MODAL: usize = 2;
 /// How the overlay's content is positioned inside the full-window backdrop.
 pub(crate) enum OverlayPlacement {
     /// Float the content at `origin + offset`, with `corner` of the content
-    /// touching the anchor point. Snaps to the window if it would overflow.
+    /// touching the anchor point.
     Anchored {
         corner: Anchor,
         origin: Point<Pixels>,
@@ -44,20 +27,18 @@ pub(crate) enum OverlayPlacement {
     },
     /// Center the content in the window (modal).
     Centered,
-    /// Pin the content to a window edge (sheet). Reuses [`SheetSide`]
-    /// rather than duplicating the enum.
+    /// Pin the content to a window edge (sheet).
     Edge(SheetSide),
 }
 
-/// Configuration for [`overlay_shell`] - grouped so call sites stay
-/// readable as the shell picks up optional knobs.
+/// Configuration for [`overlay_shell`] - grouped so call sites stay readable
+/// as the shell picks up optional knobs.
 pub(crate) struct OverlayConfig {
     /// Stable element id for the backdrop div (useful for debugging).
     pub id: &'static str,
     /// Focus handle to attach so Escape reaches the overlay.
     pub focus_handle: FocusHandle,
-    /// [`deferred`] paint priority. Use [`OVERLAY_PRIORITY_POPOVER`] or
-    /// [`OVERLAY_PRIORITY_MODAL`].
+    /// [`deferred`] paint priority.
     pub priority: usize,
     /// Backdrop tint. `None` = transparent (popover-style click-catcher).
     pub backdrop: Option<Hsla>,
@@ -65,10 +46,7 @@ pub(crate) struct OverlayConfig {
     pub placement: OverlayPlacement,
 }
 
-/// Build a deferred, dismissible overlay. Shared backbone for popover,
-/// modal, and sheet wrappers.
-///
-/// `on_dismiss` is invoked on backdrop click OR Escape keypress.
+/// Build a deferred, dismissible overlay.
 pub(crate) fn overlay_shell(
     config: OverlayConfig,
     on_dismiss: impl Fn(&mut Window, &mut App) + 'static,

@@ -1,5 +1,5 @@
-/// Elements with two (or three, with [`ToggleState::Indeterminate`]) visual
-/// states - checkboxes, toggle buttons, selectable list items.
+/// Elements with two or three visual states: checkboxes, toggle buttons,
+/// selectable list items.
 pub trait Toggleable {
     fn toggle_state(self, state: impl Into<ToggleState>) -> Self;
 }
@@ -28,10 +28,8 @@ impl ToggleState {
         }
     }
 
-    /// Build a state from "any-checked" / "all-checked" flags. The typical
-    /// caller is a header checkbox summarizing a group of children: every
-    /// child checked -> [`Selected`], none checked -> [`Unselected`], any
-    /// in-between -> [`Indeterminate`].
+    /// Summarize a group of children: all checked -> selected, none ->
+    /// unselected, mixed -> indeterminate.
     pub fn from_any_and_all(any_checked: bool, all_checked: bool) -> Self {
         match (any_checked, all_checked) {
             (true, true) => Self::Selected,

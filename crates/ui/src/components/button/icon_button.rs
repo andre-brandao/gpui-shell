@@ -1,9 +1,4 @@
-//! [`IconButton`] - square icon-only button. Composes [`ButtonLike`].
-//!
-//! Same shape as [`Button`](super::button::Button) but renders only an
-//! [`Icon`] and uses smaller, square padding so the hit target stays
-//! square. The label-color logic is identical (Disabled / Selected /
-//! Default).
+//! [`IconButton`] - square icon-only button.
 
 use crate::theme::Color;
 use gpui::{
@@ -50,7 +45,8 @@ impl IconButton {
     }
 
     /// Override the icon color. When unset, the color is derived from the
-    /// button's disabled/selected state (mirrors zed's `IconButton::icon_color`).
+    /// button's disabled/selected state (mirrors zed's
+    /// `IconButton::icon_color`).
     pub fn icon_color(mut self, color: Color) -> Self {
         self.icon_color = Some(color);
         self
@@ -138,7 +134,7 @@ impl RenderOnce for IconButton {
         let icon_size = self.icon_size.unwrap_or_else(|| icon_size_for(size));
 
         // Disabled always wins; otherwise a caller-supplied `icon_color`
-        // overrides the state-derived default. This matches zed's IconButton.
+        // overrides the state-derived default.
         let icon_color = if is_disabled {
             Color::Disabled
         } else if let Some(color) = self.icon_color {
@@ -155,9 +151,7 @@ impl RenderOnce for IconButton {
     }
 }
 
-/// Square padding step. Engram keeps the icon-button hit target tighter
-/// than [`Button`]'s rectangular padding so toolbar densities still feel
-/// reasonable at `ButtonSize::Default`.
+/// Square padding step.
 fn padding_for(size: ButtonSize) -> Pixels {
     match size {
         ButtonSize::Compact => px(2.0),

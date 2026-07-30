@@ -1,7 +1,4 @@
 //! Progress indicators - [`ProgressBar`] and [`CircularProgress`].
-//!
-//! Both are stateless `RenderOnce` views: the parent passes the current value
-//! and max, and the component just renders the fill.
 
 use std::f32::consts::PI;
 
@@ -175,8 +172,8 @@ impl RenderOnce for CircularProgress {
                     window.paint_path(path, bg_color);
                 }
 
-                // Progress arc - rounded caps so the leading/trailing ends
-                // of a partial arc look like SVG `stroke-linecap="round"`.
+                // Progress arc - rounded caps so the leading/trailing ends of
+                // a partial arc look like SVG `stroke-linecap="round"`.
                 let progress = (value / max_value).clamp(0.0, 1.0);
                 if progress > 0.0 {
                     let stroke_opts = StrokeOptions::default()

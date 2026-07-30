@@ -1,18 +1,4 @@
 //! TabBar / Tab - horizontal strip of selectable tabs.
-//!
-//! Engram's tab bar is a much-trimmed take on Zed's `TabBar` + `Tab` pair.
-//! Zed's version supports drag-reorder, overflow scrolling, sticky tabs,
-//! `start_children` / `end_children` action slots, and hooks into the
-//! workspace pane system. Engram exposes:
-//!
-//! - [`Tab`]: a selectable, optionally-closable cell with a label and
-//!   leading icon.
-//! - [`TabBar`]: a horizontal container that arranges `Tab`s with a bottom
-//!   border and a small leading/trailing gutter.
-//!
-//! As with most engram components, statefulness lives with the parent: the
-//! caller decides which tab is selected and wires `on_click` / `on_close`
-//! to the appropriate state mutations.
 
 use std::rc::Rc;
 

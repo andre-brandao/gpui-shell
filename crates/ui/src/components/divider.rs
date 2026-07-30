@@ -35,17 +35,13 @@ impl Divider {
         }
     }
 
-    /// Override the line color. Needed where the divider's visibility is a
-    /// config decision (a bar widget's border can be turned off) rather than
-    /// a theme one.
+    /// Override the line color.
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
         self
     }
 
-    /// Give the line a fixed extent instead of spanning its parent. A
-    /// vertical divider inside an `items_center` row has no parent height to
-    /// span, so it needs one.
+    /// Give the line a fixed extent instead of spanning its parent.
     pub fn length(mut self, length: Pixels) -> Self {
         self.length = Some(length);
         self

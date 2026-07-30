@@ -1,10 +1,4 @@
 //! Spinner - an animated loading indicator.
-//!
-//! Uses GPUI's `Animation` + `AnimationExt` to continuously rotate an icon
-//! (default: [`IconName::LoaderCircle`]). Useful anywhere a background
-//! operation is in progress. Pair with `Color::Success` / `Color::Warning` /
-//! `Color::Error` / `Color::Info` when the spinner's tone should reflect the
-//! status of the work it represents.
 
 use std::time::Duration;
 

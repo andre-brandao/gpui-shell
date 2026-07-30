@@ -1,12 +1,8 @@
 //! Partial overrides on top of a base [`ThemeColors`].
 //!
-//! A [`ThemeColorsRefinement`] is "what a user's theme file is allowed to
-//! set": every field mirrors [`ThemeColors`] but wrapped in [`Option`].
-//! Fields the user omits stay `None` and fall through to whatever the
-//! Base16 palette derived.
-//!
-//! Adding a new theme token therefore needs changes in exactly two places:
-//! the base struct in [`colors`](super::colors) and the field list below.
+//! Every field mirrors [`ThemeColors`] wrapped in [`Option`]; omitted fields
+//! fall through to the Base16-derived value. A new token means a change in
+//! two places: the base struct in [`colors`](super::colors) and the list below.
 
 use super::colors::{StatusColors, ThemeColors};
 

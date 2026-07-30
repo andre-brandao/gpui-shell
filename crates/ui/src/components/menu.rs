@@ -1,63 +1,13 @@
 //! Menu - vertical list of clickable items, separators, and headers,
-//! packaged as the content of a [`Popover`](super::popover::Popover) and
-//! navigable from the keyboard.
+//! rendered as the body of a [`Popover`](super::popover::Popover).
 //!
-//! ## Why this is a stateful entity
+//! An entity rather than a `RenderOnce` builder: it owns the keyboard
+//! cursor, a focus handle, and emits [`gpui::DismissEvent`]. Build it inside
+//! `cx.new` and render the entity directly.
 //!
-//! Menus need persistent state - `selected_index` for the keyboard cursor,
-//! a focus handle so the dispatch tree routes Down / Up / Enter / Esc to
-//! the right element, and dismissal via [`gpui::DismissEvent`] so callers
-//! can subscribe instead of threading close-callbacks through every entry.
-//! All three demand a `Render` (entity) implementation rather than a
-//! `RenderOnce` builder.
-//!
-//! ## Building one
-//!
-//! Build the menu inside `cx.new` (so it can grab a focus handle from the
-//! current `Context`) and chain entries onto it. Then render the entity
-//! directly - `Entity<Menu>` is `IntoElement` because [`Menu`] implements
-//! [`Render`].
-//!
-//! ```ignore
-//! let menu = cx.new(|cx| {
-//!     Menu::new(cx)
-//!         .header("File")
-//!         .entry("new", "New File", |_, _, _| {})
-//!         .keybinding_entry("save", "Save", ["Ctrl", "S"], |_, _, _| {})
-//!         .separator()
-//!         .disabled_entry("dis", "Unavailable")
-//! });
-//!
-//! cx.subscribe(&menu, |this, _, _: &gpui::DismissEvent, cx| {
-//!     this.menu_open = false;
-//!     cx.notify();
-//! }).detach();
-//! ```
-//!
-//! ## Keyboard navigation
-//!
-//! While focused, the menu responds to:
-//!
-//! | Key      | Action            |
-//! |----------|-------------------|
-//! | Down     | `SelectNext`      |
-//! | Up       | `SelectPrevious`  |
-//! | Home     | `SelectFirst`     |
-//! | End      | `SelectLast`      |
-//! | Enter    | `Confirm`         |
-//! | Escape   | `Cancel`          |
-//!
-//! `Confirm` invokes the selected entry's `on_click` handler (no event
-//! payload - the handler is the [`DismissHandler`](crate::traits::DismissHandler)
-//! shape, called identically from mouse click and keyboard confirm) and
-//! emits a [`DismissEvent`]. `Cancel` only emits the dismiss. The default
-//! key bindings are installed by [`crate::init`] under the `Menu` key
-//! context.
-//!
-//! Submenus, search/filter, and the `SelectChild` / `SelectParent`
-//! navigation actions from zed's `ContextMenu` are intentionally out of
-//! scope - when a real consumer needs them, port them in.
-
+//! While focused: Down/Up move, Home/End jump, Enter confirms (runs the
+//! entry handler, then dismisses), Escape dismisses. Bindings are installed
+//! by [`crate::init`] under the `Menu` key context. No submenus, no filter.
 use std::rc::Rc;
 
 use crate::theme::{ActiveTheme, Color, Spacing};
@@ -80,12 +30,11 @@ use crate::traits::DismissHandler;
 // Actions
 // -----------------------------------------------------------------------
 //
-// Action namespace is `engram_menu` to avoid colliding with any host-app
-// `menu::*` actions (zed's own `ContextMenu` lives in the `menu` namespace,
-// so we deliberately stay out of it).
+// Namespaced `ui_menu` to stay out of the `menu::*` namespace a host app
+// (or zed's own `ContextMenu`) may already use.
 
 actions!(
-    engram_menu,
+    ui_menu,
     [
         SelectFirst,
         SelectNext,
@@ -98,8 +47,8 @@ actions!(
 
 /// One row inside a [`Menu`].
 pub enum MenuItem {
-    /// A clickable entry with a label, optional leading icon, and an
-    /// optional trailing keybinding hint.
+    /// A clickable entry with a label, optional leading icon, and an optional
+    /// trailing keybinding hint.
     Entry {
         id: ElementId,
         label: SharedString,
@@ -127,8 +76,7 @@ impl MenuItem {
     }
 }
 
-/// A vertical menu, rendered as the body of a popover. See the module
-/// docs for usage.
+/// A vertical menu, rendered as the body of a popover.
 pub struct Menu {
     focus_handle: FocusHandle,
     items: SmallVec<[MenuItem; 6]>,
@@ -152,8 +100,7 @@ impl Menu {
         cx.new(f)
     }
 
-    /// Override the popover's minimum width. The default (180px) gives
-    /// menu rows a stable, non-jittery width.
+    /// Override the popover's minimum width.
     pub fn min_width(mut self, width: Pixels) -> Self {
         self.min_width = Some(width);
         self
@@ -448,10 +395,9 @@ impl Render for Menu {
             .collect();
 
         // Outer interactive root: tracks focus, owns the key context, and
-        // hosts the action listeners. The popover then provides the visual
-        // chrome (background, border, shadow).
+        // hosts the action listeners.
         div()
-            .id("engram-menu")
+            .id("ui-menu")
             .key_context("Menu")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_first))
@@ -468,9 +414,7 @@ impl Render for Menu {
 // Keybinding registration
 // -----------------------------------------------------------------------
 
-/// Register the default keyboard navigation bindings for [`Menu`]. Called
-/// from [`crate::init`]; exposed standalone in case an app wants to
-/// initialize engram without binding our keys.
+/// Register the default keyboard navigation bindings for [`Menu`].
 pub fn bind_menu_keys(cx: &mut App) {
     use gpui::KeyBinding;
     cx.bind_keys([

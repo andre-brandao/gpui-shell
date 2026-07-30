@@ -1,18 +1,11 @@
 //! Composite shell surfaces - whole UIs rather than widgets.
 //!
-//! Everything under [`components`](crate::components) is a primitive: it
-//! assumes nothing about what it is put inside. The patterns here assume
-//! plenty. A launcher frame is a launcher, not a generic panel, and it is
-//! shaped by decisions - the query line on top, the hint bar at the bottom,
-//! the badge on the right - that only make sense for this shell.
+//! Where [`components`](crate::components) are primitives that assume nothing
+//! about their surroundings, a pattern is shaped for one shell surface.
 //!
-//! They are deliberately kept out of the crate-root glob: `use ui::*` pulls
-//! in `components`, never `patterns`. Reaching for one is always spelled
-//! out, `ui::patterns::LauncherFrame`, so a bespoke surface can never be
-//! mistaken for part of the primitive set.
-//!
-//! Patterns own presentation only. State, keybindings and behaviour stay in
-//! the app crate that drives them.
+//! Kept out of the crate-root glob: `use ui::*` pulls in `components`, never
+//! `patterns`, so a pattern is always spelled `ui::patterns::LauncherFrame`.
+//! Patterns own presentation only - state and keybindings stay in the app.
 
 pub mod bar;
 pub mod launcher;

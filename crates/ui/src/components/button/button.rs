@@ -1,10 +1,4 @@
 //! [`Button`] - text button with an optional leading icon.
-//!
-//! Composes [`ButtonLike`] for chrome and forwards every builder method
-//! through [`ButtonCommon`] / [`Clickable`] / [`Disableable`] /
-//! [`Toggleable`] / [`SelectableButton`]. The render fn just decides which
-//! label/icon to draw and applies the size-derived padding before handing
-//! the assembled child off to ButtonLike.
 
 use crate::theme::{Color, Spacing};
 use gpui::{

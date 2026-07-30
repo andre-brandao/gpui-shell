@@ -1,9 +1,4 @@
 //! Indicator - small status marker (dot, bar, or icon).
-//!
-//! Mirrors Zed's `Indicator` API: three kinds (`dot`, `bar`, `icon`) plus
-//! optional border tinting. Used to communicate status (online, error,
-//! unread) usually adjacent to a primary element such as an avatar or
-//! list row.
 
 use crate::theme::{ActiveTheme, Color};
 use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, px};

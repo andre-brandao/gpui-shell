@@ -1,8 +1,5 @@
 //! Label family: text [`Label`], typographic [`Headline`], and the shared
 //! [`LabelLike`] chrome they both compose.
-//!
-//! See `label/label_like.rs` for the architectural notes - this file is
-//! just the module wiring.
 
 mod headline;
 mod highlighted_label;

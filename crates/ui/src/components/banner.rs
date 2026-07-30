@@ -1,9 +1,5 @@
 //! Banner / Notification - surface alerts inline (`Banner`) or as a
 //! short-lived toast card (`Notification`).
-//!
-//! Both components are stateless `RenderOnce` views: the parent decides
-//! when to show / hide them. Their *severity* drives the icon, label color,
-//! and a colored leading stripe so they can be skimmed at a glance.
 
 use std::rc::Rc;
 
@@ -21,8 +17,7 @@ use crate::styles::ElevationIndex;
 use crate::theme::TextSize;
 use crate::traits::ClickHandler;
 
-/// Severity of an alert. Drives the leading icon and accent color used by
-/// both [`Banner`] and [`Notification`].
+/// Severity of an alert.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     Info,
@@ -50,9 +45,7 @@ impl Severity {
         }
     }
 
-    /// The status-tinted surface background for this severity. Drives
-    /// `Banner`'s body fill so the chrome itself signals the severity, not
-    /// just the leading icon.
+    /// The status-tinted surface background for this severity.
     fn background(self, status: &StatusColors) -> Hsla {
         match self {
             Self::Info => status.info_background,
@@ -62,8 +55,7 @@ impl Severity {
         }
     }
 
-    /// The status-tinted border for this severity. Pairs with
-    /// [`Severity::background`] so the banner outline reinforces the fill.
+    /// The status-tinted border for this severity.
     fn border(self, status: &StatusColors) -> Hsla {
         match self {
             Self::Info => status.info_border,
@@ -153,7 +145,7 @@ impl RenderOnce for Banner {
                             .when_some(self.on_dismiss, |this, dismiss| {
                                 this.child(
                                     div()
-                                        .id("engram-banner-dismiss")
+                                        .id("banner-dismiss")
                                         .cursor_pointer()
                                         .ml(Spacing::Small.pixels())
                                         .child(
@@ -178,9 +170,7 @@ impl RenderOnce for Banner {
     }
 }
 
-/// A floating, dismissible alert card. Same content model as [`Banner`]
-/// but with a heavier card style suitable for stacking in a corner of the
-/// window.
+/// A floating, dismissible alert card.
 #[derive(IntoElement)]
 #[must_use = "Notification does nothing unless rendered"]
 pub struct Notification {
@@ -256,7 +246,7 @@ impl RenderOnce for Notification {
             .when_some(self.on_dismiss, |this, dismiss| {
                 this.child(
                     div()
-                        .id("engram-notification-dismiss")
+                        .id("notification-dismiss")
                         .cursor_pointer()
                         .ml(Spacing::Small.pixels())
                         .child(

@@ -1,9 +1,4 @@
 //! DescriptionList - a key-value display for structured information.
-//!
-//! Renders label-value pairs in a vertical stack. Each item shows a muted
-//! label on the left and the value on the right, separated by a consistent
-//! label column width. Optional borders between items aid scanability in
-//! denser layouts.
 
 use crate::theme::{ActiveTheme, Color, Spacing};
 use gpui::{

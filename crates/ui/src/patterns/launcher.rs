@@ -1,25 +1,11 @@
-//! Launcher chrome: the bordered surface that holds a query line, a body,
-//! and a footer hint bar.
-//!
-//! Only the frame lives here. What fills the body - the match list, the
-//! prefix routing, the actions - stays in the app, where the state is.
+//! Launcher chrome: the bordered surface that holds a query line, a body, and
+//! a footer hint bar.
 
 use gpui::{AnyElement, App, IntoElement, RenderOnce, SharedString, Window, div, prelude::*, px};
 
 use crate::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 /// The launcher surface: query row, body, footer hint bar.
-///
-/// Sizes itself to its parent, so give it a definite height. Body children
-/// are appended with the usual [`ParentElement`] `child` / `children`.
-///
-/// ```ignore
-/// LauncherFrame::new(render_input_line(&input, "Search...", cx))
-///     .badge("Applications")
-///     .hints("@ apps · $ shell · ? help")
-///     .actions(footer_hints(vec![("Open", "Enter")], cx))
-///     .child(matches)
-/// ```
 #[derive(IntoElement)]
 #[must_use = "LauncherFrame does nothing unless rendered"]
 pub struct LauncherFrame {
@@ -64,7 +50,6 @@ impl LauncherFrame {
     }
 
     /// Right side of the footer: what the current view does with a key.
-    /// See [`footer_hints`].
     pub fn actions(mut self, actions: impl IntoElement) -> Self {
         self.actions = Some(actions.into_any_element());
         self
@@ -129,9 +114,8 @@ impl RenderOnce for LauncherFrame {
                     }),
             )
             .child(hairline())
-            // Body. Owns no scroll of its own - a list view scrolls its
-            // rows, a content view scrolls its element, and which one it is
-            // is the app's call.
+            // Body. Owns no scroll of its own - which element scrolls is the
+            // app's call.
             .child(
                 div()
                     .id("launcher-body")
@@ -163,8 +147,7 @@ impl RenderOnce for LauncherFrame {
     }
 }
 
-/// Render `(action, key)` pairs as the footer's right-hand hints -
-/// `Open ⏎  Close Esc`.
+/// Render `(action, key)` pairs as the footer's right-hand hints - `Open ⏎ Close Esc`.
 pub fn footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> AnyElement {
     let colors = cx.theme().colors();
     let muted = colors.text_muted;

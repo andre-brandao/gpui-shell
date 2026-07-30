@@ -1,8 +1,4 @@
 //! DecoratedIcon - an icon with an optional overlay decoration (badge dot).
-//!
-//! Wraps an [`Icon`] in a relative container and overlays a small colored
-//! dot in the bottom-right corner. Useful for indicating status on file
-//! icons (modified, error, etc.).
 
 use crate::theme::Radius;
 use gpui::{

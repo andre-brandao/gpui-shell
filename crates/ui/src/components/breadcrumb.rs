@@ -1,9 +1,4 @@
 //! Breadcrumb - a navigation path showing the user's location in a hierarchy.
-//!
-//! A [`Breadcrumb`] is a horizontal strip of [`BreadcrumbItem`]s separated
-//! by chevrons. Each item can be clickable (an ancestor you can navigate
-//! back to) or plain (the current location). The component is stateless -
-//! the parent decides which item is "current" and wires click handlers.
 
 use std::rc::Rc;
 
@@ -45,8 +40,7 @@ impl BreadcrumbItem {
         }
     }
 
-    /// Mark this item as the current (final) breadcrumb. Renders with
-    /// default text color instead of the muted clickable style.
+    /// Mark this item as the current (final) breadcrumb.
     pub fn current(mut self, current: bool) -> Self {
         self.current = current;
         self

@@ -1,34 +1,4 @@
 //! Minimal scrollbar indicator for [`gpui::ScrollHandle`]-driven content.
-//!
-//! GPUI itself doesn't ship a styled scrollbar - each consuming crate rolls
-//! its own on top of `ScrollHandle`'s geometry (`offset()`, `max_offset()`,
-//! `bounds()`). This implementation is intentionally minimal: a track with
-//! a proportionally-sized thumb, plus click-to-jump on the track. It
-//! **does not** support dragging the thumb - doing that well requires
-//! either a custom `Element` impl or persistent per-element drag state,
-//! and the wheel / trackpad path already covers the common case. A
-//! future version can layer drag support on top.
-//!
-//! ## Usage
-//!
-//! Wire it up as a sibling to whatever you're scrolling:
-//!
-//! ```ignore
-//! let handle = ScrollHandle::new();
-//! h_flex()
-//!     .child(
-//!         div()
-//!             .id("scroll-region")
-//!             .overflow_y_scroll()
-//!             .track_scroll(&handle)
-//!             .child(/* big content */),
-//!     )
-//!     .child(Scrollbar::vertical(handle.clone()))
-//! ```
-//!
-//! When `max_offset` is zero (content fits), the thumb is hidden but the
-//! track still takes layout space - wrap the `Scrollbar` in a `.when(...)`
-//! if you want the whole thing to collapse away.
 
 use crate::theme::{ActiveTheme, Radius};
 use gpui::{
@@ -69,16 +39,15 @@ impl Scrollbar {
         }
     }
 
-    /// Override the default track thickness (width for vertical, height
-    /// for horizontal).
+    /// Override the default track thickness (width for vertical, height for
+    /// horizontal).
     pub fn thickness(mut self, thickness: Pixels) -> Self {
         self.thickness = thickness;
         self
     }
 }
 
-/// Minimum thumb length as a fraction of the track. Keeps the thumb
-/// draggable / clickable even on very long scroll regions.
+/// Minimum thumb length as a fraction of the track.
 const MIN_THUMB_RATIO: f32 = 0.08;
 
 impl RenderOnce for Scrollbar {
@@ -107,7 +76,7 @@ impl RenderOnce for Scrollbar {
 
                 let click_handle = self.scroll_handle.clone();
                 div()
-                    .id("engram-scrollbar-v")
+                    .id("scrollbar-v")
                     .w(self.thickness)
                     .h_full()
                     .relative()
@@ -154,7 +123,7 @@ impl RenderOnce for Scrollbar {
 
                 let click_handle = self.scroll_handle.clone();
                 div()
-                    .id("engram-scrollbar-h")
+                    .id("scrollbar-h")
                     .h(self.thickness)
                     .w_full()
                     .relative()

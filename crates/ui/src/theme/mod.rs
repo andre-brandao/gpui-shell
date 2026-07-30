@@ -1,39 +1,4 @@
 //! The theme system.
-//!
-//! # Layering
-//!
-//! ```text
-//! Base16 palette (16 colors)     input: Tinted Theming scheme, Stylix,
-//!         |                             matugen(wallpaper), or hand-written
-//!         |  Base16Palette::into_colors()
-//!         v
-//! ThemeColors (~50 tokens)       what components read
-//!         |
-//!         |  ThemeColorsRefinement::refine()
-//!         v
-//! Theme                          resolved, plus the user's font size
-//! ```
-//!
-//! The two ends are deliberately separate. A palette is a *source of
-//! colors*; the token set is a *set of roles*. Keeping them apart is what
-//! lets the wallpaper regenerate the palette without discarding the user's
-//! hand-picked accent, and what lets components speak in roles
-//! (`element_hover`) instead of palette slots (`base02`).
-//!
-//! # Usage
-//!
-//! ```ignore
-//! use ui::{ActiveTheme, TextSize};
-//!
-//! fn render(&mut self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-//!     let colors = cx.theme().colors();
-//!     div()
-//!         .bg(colors.surface_background)
-//!         .text_color(colors.text)
-//!         .border_color(colors.border)
-//!         .text_size(TextSize::Small.rems())
-//! }
-//! ```
 
 use gpui::{App, Global, Pixels, SharedString, px};
 use serde::{Deserialize, Serialize};
@@ -73,10 +38,9 @@ impl Appearance {
 
 /// The active theme, stored as a gpui [`Global`].
 ///
-/// Holds both the resolved [`ThemeColors`] components read *and* the
-/// palette plus overrides they were derived from, so the theme can be
-/// written back to disk without losing the distinction between "the scheme
-/// I picked" and "the token I overrode".
+/// Holds the resolved [`ThemeColors`] plus the palette and overrides they
+/// were derived from, so the theme can be written back without losing the
+/// distinction between the scheme and the pinned tokens.
 #[derive(Debug, Clone)]
 pub struct Theme {
     /// Display name of the underlying scheme.
@@ -89,16 +53,15 @@ pub struct Theme {
     pub palette: Base16Palette,
     /// User overrides layered on top of the palette expansion.
     pub overrides: ThemeColorsRefinement,
-    /// Base font size. Installed as the window's rem size, so every
-    /// [`TextSize`] scales with it.
+    /// Base font size.
     pub font_size: Pixels,
 }
 
 impl Global for Theme {}
 
 impl Theme {
-    /// Default base font size, matching what the shell shipped before
-    /// sizes became configurable tokens.
+    /// Default base font size, matching what the shell shipped before sizes
+    /// became configurable tokens.
     pub const DEFAULT_FONT_SIZE: Pixels = px(13.0);
 
     /// Build a theme from a palette, with no overrides.
@@ -126,9 +89,6 @@ impl Theme {
     }
 
     /// Swap the palette, keeping the current overrides and font size.
-    ///
-    /// This is the "user picked a different scheme" path, and the
-    /// "wallpaper changed" path.
     pub fn set_palette(&mut self, name: impl Into<SharedString>, palette: Base16Palette) {
         self.name = name.into();
         self.appearance = palette.appearance();
@@ -191,21 +151,8 @@ impl ActiveTheme for App {
 
 /// On-disk representation of a theme (`theme.toml`).
 ///
-/// Stores the palette and the overrides, never the resolved tokens - the
-/// ~50 resolved values are an implementation detail that would go stale the
-/// moment the derivation changes.
-///
-/// ```toml
-/// name = "Catppuccin Mocha"
-/// font_size = 13.0
-///
-/// [base16]
-/// base00 = "#1e1e2e"
-/// # ... through base0f
-///
-/// [colors]              # optional; anything omitted falls through
-/// accent = "#f38ba8"
-/// ```
+/// Stores the palette and the overrides, never the resolved tokens: those
+/// would go stale the moment the derivation changes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct StoredTheme {
@@ -260,8 +207,8 @@ mod tests {
         assert_eq!(theme.colors().background, theme.palette.base00);
     }
 
-    /// The point of keeping palette and overrides separate: changing
-    /// scheme must not silently discard what the user pinned.
+    /// The point of keeping palette and overrides separate: changing scheme
+    /// must not silently discard what the user pinned.
     #[test]
     fn overrides_survive_a_palette_swap() {
         let mut theme = Theme::default();

@@ -1,4 +1,4 @@
-//! Concrete engram components.
+//! Concrete UI components.
 
 pub mod accordion;
 pub mod avatar;

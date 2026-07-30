@@ -1,18 +1,4 @@
-//! List and ListItem - the workhorse of sidebars, command palettes, and
-//! settings panes.
-//!
-//! [`List`] is a thin vertical container: stack of children plus an optional
-//! header and empty-state message. [`ListItem`] is a stateful row with an
-//! optional start slot (icon / avatar), label content, an optional end slot
-//! (accessory / chevron), click handler, and hover / selected styling.
-//!
-//! Beyond the basics, `ListItem` also supports tree-style indentation
-//! ([`ListItem::indent_level`]), three density steps via [`ListItemSpacing`],
-//! an "inset" mode that draws the indent gutter outside the item chrome,
-//! optional `outlined` borders, hover-only end slots
-//! ([`EndSlotVisibility::OnHover`]), and right-click handling. The shape
-//! mirrors zed's `ListItem` so we can drop in tree pickers and command
-//! palettes without re-litigating layout each time.
+//! List and ListItem - the workhorse of sidebars, command palettes, and settings panes.
 
 use std::rc::Rc;
 
@@ -32,14 +18,9 @@ use crate::traits::{
 };
 
 /// Vertical density of a [`ListItem`].
-///
-/// `Sparse` matches engram's pre-Phase-8 default - comfortable padding,
-/// suitable for sidebars and settings panes. `Dense` and `ExtraDense` shrink
-/// the row to fit tree views, command palettes, and other places that need
-/// to pack many items into a fixed height.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ListItemSpacing {
-    /// 4px vertical padding (engram default; matches the original look).
+    /// 4px vertical padding.
     #[default]
     Sparse,
     /// 2px vertical padding.
@@ -49,11 +30,6 @@ pub enum ListItemSpacing {
 }
 
 /// Controls when a [`ListItem`]'s end slot is shown.
-///
-/// `Always` is the default and matches the original behavior. `OnHover`
-/// hides the slot until the mouse enters the row - a common pattern for
-/// inline action affordances (delete buttons, secondary menus) that should
-/// not draw the eye on every row of a long list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum EndSlotVisibility {
     /// End slot is always painted.
@@ -63,15 +39,11 @@ pub enum EndSlotVisibility {
     OnHover,
 }
 
-/// Group name attached to the inner row so [`EndSlotVisibility::OnHover`]
-/// can target it via `group_hover`. Multiple list items in the same parent
-/// share the name on purpose - `group_hover` only walks up to the nearest
-/// ancestor with the matching group, so each row is self-contained.
-const HOVER_GROUP: &str = "engram_list_item";
+/// Group name attached to the inner row so [`EndSlotVisibility::OnHover`] can
+/// target it via `group_hover`.
+const HOVER_GROUP: &str = "ui_list_item";
 
-/// A single row inside a [`List`]. Supports start / end slots, selection
-/// state, disabled state, click handlers, tree-style indentation, and
-/// right-click / hover callbacks.
+/// A single row inside a [`List`].
 #[derive(IntoElement)]
 #[must_use = "ListItem does nothing unless rendered"]
 pub struct ListItem {
@@ -106,9 +78,7 @@ impl ListItem {
             indent_step_size: px(12.0),
             inset: false,
             outlined: false,
-            // Engram's pre-Phase-8 baseline always rounded the row, so the
-            // default stays `true`. Pass `.rounded(false)` to opt into a
-            // square hover surface.
+            // Rows are rounded by default.
             rounded: true,
             end_slot_visibility: EndSlotVisibility::default(),
             start_slot: None,
@@ -132,15 +102,13 @@ impl ListItem {
         self
     }
 
-    /// Set the row's vertical density. See [`ListItemSpacing`] for the
-    /// available steps.
+    /// Set the row's vertical density.
     pub fn spacing(mut self, spacing: ListItemSpacing) -> Self {
         self.spacing = spacing;
         self
     }
 
     /// Set the indentation depth in steps of [`ListItem::indent_step_size`].
-    /// Used by tree views to express hierarchy.
     pub fn indent_level(mut self, indent_level: usize) -> Self {
         self.indent_level = indent_level;
         self
@@ -152,10 +120,8 @@ impl ListItem {
         self
     }
 
-    /// When `true`, the indent gutter is drawn *outside* the row's
-    /// background - the hover/selected chrome shifts right with the indent
-    /// instead of spanning the full container width. This is the look used
-    /// by zed's tree views.
+    /// Draw the indent gutter outside the row background, so the hover chrome
+    /// shifts right with the indent instead of spanning the full width.
     pub fn inset(mut self, inset: bool) -> Self {
         self.inset = inset;
         self
@@ -168,28 +134,24 @@ impl ListItem {
     }
 
     /// Toggle rounded corners on the row's hover/selected chrome.
-    /// Defaults to `true` to preserve engram's pre-Phase-8 visual.
     pub fn rounded(mut self, rounded: bool) -> Self {
         self.rounded = rounded;
         self
     }
 
-    /// Hide the end slot until the row is hovered. Common pattern for
-    /// inline action buttons that should not draw attention on idle rows.
+    /// Hide the end slot until the row is hovered.
     pub fn show_end_slot_on_hover(mut self) -> Self {
         self.end_slot_visibility = EndSlotVisibility::OnHover;
         self
     }
 
-    /// Bind a callback to mouse hover-enter / hover-leave. The boolean is
-    /// `true` on enter and `false` on leave.
+    /// Bind a callback to mouse hover-enter / hover-leave.
     pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_hover = Some(Rc::new(handler));
         self
     }
 
-    /// Bind a callback to right-click events. Useful for surfacing a
-    /// context menu.
+    /// Bind a callback to right-click events.
     pub fn on_secondary_mouse_down(
         mut self,
         handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
@@ -198,8 +160,7 @@ impl ListItem {
         self
     }
 
-    /// Attach a tooltip builder. Typically used with
-    /// [`Tooltip::text`](crate::components::Tooltip::text).
+    /// Attach a tooltip builder.
     pub fn tooltip(mut self, tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
         self.tooltip = Some(Rc::new(tooltip));
         self
@@ -261,10 +222,9 @@ impl RenderOnce for ListItem {
         let end_slot_group = group_name.clone();
 
         // Inner row carries all of the interactive chrome (background,
-        // hover/active, click, tooltip, etc.). When `inset` is set, the
-        // outer wrapper supplies the indent margin so the chrome shifts
-        // right; otherwise the inner row supplies its own left margin and
-        // the chrome spans the full container width.
+        // hover/active, click, tooltip, etc.). When `inset` is set the outer
+        // wrapper supplies the indent margin so the chrome shifts right;
+        // otherwise the inner row does, and the chrome spans the full width.
         let inner = h_flex()
             .id(self.id)
             .group(group_name)

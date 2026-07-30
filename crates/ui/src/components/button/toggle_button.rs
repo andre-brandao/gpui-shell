@@ -1,9 +1,5 @@
 //! [`ToggleButtonGroup`] - a segmented control where exactly one button in
-//! the group is selected at a time. Each button shows a label and optional
-//! icon, visually joined with shared rounding on the outer edges only.
-//!
-//! Mirrors Zed's `ToggleButtonGroup`, simplified to a single-row layout
-//! with a fixed column count via const generic.
+//! the group is selected at a time.
 
 use std::rc::Rc;
 
@@ -25,8 +21,7 @@ use crate::theme::TextSize;
 use crate::traits::handlers::{ClickHandler, TooltipBuilder};
 use crate::traits::{Clickable, Toggleable};
 
-/// The position of a button within the group, determining which corners
-/// get rounding.
+/// The position of a button within the group, determining which corners get rounding.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct ToggleButtonPosition {
     leftmost: bool,
@@ -238,8 +233,7 @@ impl<T: ButtonBuilder, const N: usize> RenderOnce for ToggleButtonGroup<T, N> {
         let is_filled = self.style == ToggleButtonGroupStyle::Filled;
         let is_transparent = self.style == ToggleButtonGroupStyle::Transparent;
         // Inner buttons are transparent in every group style - the group's
-        // container paints the chrome (background, border). Selection is
-        // always an accent tint so it reads against any group backdrop.
+        // container paints the chrome (background, border).
         let inner_style = ButtonStyle::Transparent;
 
         let entries: Vec<AnyElement> = self
@@ -301,8 +295,8 @@ impl<T: ButtonBuilder, const N: usize> RenderOnce for ToggleButtonGroup<T, N> {
                     })
                     .on_click(move |event, window, cx| on_click(event, window, cx));
 
-                // Outlined shows a thin divider between cells. Filled keeps
-                // cells flush so the group reads as a single surface.
+                // Outlined shows a thin divider between cells; Filled keeps
+                // them flush so the group reads as a single surface.
                 let last_item = i == N - 1;
                 div()
                     .when(is_outlined && !last_item, |this| {

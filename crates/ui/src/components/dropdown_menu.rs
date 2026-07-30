@@ -1,21 +1,4 @@
 //! [`DropdownMenu`] - a stateful menu anchored to a trigger button.
-//!
-//! Encapsulates the boilerplate of wiring a [`Menu`] to a [`Button`] with
-//! proper anchor positioning, focus management, and click-outside dismissal.
-//! The parent just creates a `DropdownMenu` entity and renders it - no need
-//! to juggle trigger bounds, `DismissEvent` subscriptions, or `anchored_popover`
-//! manually.
-//!
-//! ```ignore
-//! let dropdown = cx.new(|cx| {
-//!     DropdownMenu::new("file-menu", "File", cx, |menu| {
-//!         menu.entry("new", "New", |_, _, _| {})
-//!             .entry("open", "Open", |_, _, _| {})
-//!             .separator()
-//!             .entry("quit", "Quit", |_, _, _| {})
-//!     })
-//! });
-//! ```
 
 use std::cell::Cell;
 use std::rc::Rc;

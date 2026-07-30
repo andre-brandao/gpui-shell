@@ -1,12 +1,4 @@
 //! [`Label`] - single-string text label built on [`LabelLike`].
-//!
-//! `Label` is the workhorse engram callers reach for whenever they need
-//! "a piece of text styled by the active theme". It's a thin wrapper that
-//! holds a [`SharedString`] and a [`LabelLike`] base, forwarding all the
-//! visual modifiers ([`LabelCommon`]) to the base. The split exists so
-//! [`Headline`](super::headline::Headline) and any future label
-//! variants can compose the same chrome without re-implementing
-//! `italic`/`weight`/`color`/etc.
 
 use crate::theme::Color;
 use gpui::{App, FontWeight, IntoElement, ParentElement, RenderOnce, SharedString, Window};
@@ -78,9 +70,9 @@ impl LabelCommon for Label {
     }
 
     fn single_line(mut self) -> Self {
-        // Match zed: when a label is forced to one line, surface any
-        // embedded newlines as a visible "return" glyph instead of
-        // silently swallowing them.
+        // Match zed: when a label is forced to one line, surface any embedded
+        // newlines as a visible "return" glyph instead of silently swallowing
+        // them.
         self.text = SharedString::from(self.text.replace('\n', "⏎"));
         self.base = self.base.single_line();
         self

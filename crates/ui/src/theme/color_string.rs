@@ -9,12 +9,9 @@
 //! * `oklch()` — `oklch(0.18 0.004 70)`, slash alpha; lightness as `0..1`
 //!   float or percentage, hue in degrees
 //!
-//! Intentionally a narrow subset of CSS Color Module 4 — no `calc()`,
-//! `none`, relative colors, or `turn` / `rad` / `grad` hue units.
-//!
-//! Serialization always emits `#rrggbbaa` via gpui's built-in [`Hsla`]
-//! serializer, so a round-trip through the theme file produces a stable
-//! canonical form.
+//! A narrow subset of CSS Color Module 4: no `calc()`, `none`, relative
+//! colors, or `turn` / `rad` / `grad` hue units. Serialization always emits
+//! `#rrggbbaa`.
 
 use gpui::{Hsla, Rgba};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -40,8 +37,8 @@ pub(crate) fn parse(input: &str) -> Result<Hsla, String> {
     if let Some(inner) = strip_fn(s, "oklch") {
         return parse_oklch(inner);
     }
-    // Bare hex without the `#` - Base16 YAML schemes in the wild write
-    // both `#1e1e2e` and `1e1e2e`.
+    // Bare hex without the `#` - Base16 YAML schemes in the wild write both
+    // `#1e1e2e` and `1e1e2e`.
     parse_hex(s)
 }
 
@@ -90,10 +87,7 @@ fn parse_hex(s: &str) -> Result<Hsla, String> {
     }))
 }
 
-/// Split `func(...)` inner into (channel parts, optional alpha). Accepts:
-///
-/// * Modern: `a b c` / `a b c / d`
-/// * Legacy: `a, b, c` / `a, b, c, d`
+/// Split `func(...)` inner into (channel parts, optional alpha).
 fn split_args(s: &str) -> (Vec<&str>, Option<&str>) {
     if let Some((main, alpha)) = s.split_once('/') {
         let parts = main.split_whitespace().collect::<Vec<_>>();
@@ -213,8 +207,7 @@ fn parse_oklch_lightness(s: &str) -> Result<f32, String> {
 }
 
 /// OKLCH → sRGB [`Hsla`] via Björn Ottosson's OKLab → linear-sRGB matrix,
-/// then the standard sRGB gamma encode. Out-of-gamut channels are clamped
-/// to the sRGB cube.
+/// then the standard sRGB gamma encode.
 #[allow(clippy::excessive_precision)]
 fn oklch_to_hsla(l: f32, c: f32, h_deg: f32, a: f32) -> Hsla {
     let h = h_deg.to_radians();
@@ -249,8 +242,7 @@ fn linear_to_srgb(x: f32) -> f32 {
     }
 }
 
-/// serde bridge for plain `Hsla` fields - the 16 Base16 slots. Same
-/// accepted input as [`opt`], but the field is mandatory.
+/// serde bridge for plain `Hsla` fields - the 16 Base16 slots.
 pub(crate) mod required {
     use super::{Deserialize, Deserializer, Hsla, Serialize, Serializer, parse};
     use serde::de::Error as _;
@@ -271,10 +263,9 @@ pub(crate) mod required {
     }
 }
 
-/// serde bridge for `Option<Hsla>` refinement fields. Deserialization
-/// accepts any of the four color forms above; serialization defers to
-/// gpui's stock [`Hsla`] impl (emits `#rrggbbaa`) so round-trips stay
-/// canonical.
+/// serde bridge for `Option<Hsla>` refinement fields. Deserialization accepts
+/// any of the four color forms above; serialization defers to gpui's stock
+/// [`Hsla`] impl (emits `#rrggbbaa`) so round-trips stay canonical.
 pub(crate) mod opt {
     use super::{Deserialize, Deserializer, Hsla, Serialize, Serializer, parse};
     use serde::de::Error as _;

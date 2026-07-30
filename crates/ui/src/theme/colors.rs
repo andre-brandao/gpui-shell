@@ -1,19 +1,8 @@
 //! Semantic color tokens used by every component.
-//!
-//! These are the *output* of the theme pipeline, not its input. The shell
-//! authors themes as a 16-colour Base16 palette (from a Tinted Theming
-//! scheme, from matugen against the wallpaper, or hand-written); that
-//! palette is expanded into the token set below by
-//! [`Base16Palette::into_colors`](crate::Base16Palette::into_colors).
-//!
-//! Components never look at Base16 slots - they read tokens.
 
 use gpui::Hsla;
 
 /// A semantic color reference that components use instead of raw [`Hsla`].
-///
-/// At render time, [`Color::hsla`] resolves against the active theme's
-/// [`ThemeColors`].
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum Color {
     /// Default text / foreground color.
@@ -106,8 +95,7 @@ pub struct StatusColors {
 }
 
 impl StatusColors {
-    /// Pick a status color from a 0-100 usage percentage. Used by the
-    /// sysinfo modules (CPU, memory, disk) for their fill colors.
+    /// Pick a status color from a 0-100 usage percentage.
     pub fn from_percentage(&self, value: u32) -> Hsla {
         if value >= 90 {
             self.error
@@ -131,9 +119,6 @@ impl StatusColors {
 }
 
 /// The semantic color palette powering every component.
-///
-/// Deliberately much smaller than Zed's `ThemeColors` (~40 tokens vs ~150) -
-/// tokens get added when a real component needs one, not before.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThemeColors {
     // Surfaces
@@ -147,8 +132,7 @@ pub struct ThemeColors {
     // Borders
     /// Default border color.
     pub border: Hsla,
-    /// Subtle border used for dividers between related content. Always
-    /// *less* contrasty than [`border`](Self::border).
+    /// Subtle border used for dividers between related content.
     pub border_variant: Hsla,
     /// Border for keyboard focus ring.
     pub border_focused: Hsla,
@@ -156,8 +140,7 @@ pub struct ThemeColors {
     pub border_selected: Hsla,
     /// Border for disabled elements.
     pub border_disabled: Hsla,
-    /// A fully transparent border. Used as a placeholder so elements that
-    /// gain a border on state change don't reflow.
+    /// A fully transparent border.
     pub border_transparent: Hsla,
 
     // Foreground text
@@ -181,9 +164,7 @@ pub struct ThemeColors {
     pub element_disabled: Hsla,
 
     // Ghost (transparent) interactive element backgrounds
-    /// Resting background for a ghost element. Almost always fully
-    /// transparent - kept as a token so the layering reads consistently
-    /// with `element_background`.
+    /// Resting background for a ghost element.
     pub ghost_element_background: Hsla,
     pub ghost_element_hover: Hsla,
     pub ghost_element_active: Hsla,

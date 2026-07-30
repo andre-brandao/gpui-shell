@@ -1,8 +1,4 @@
-//! On-screen display: the pill that flashes up on a volume or brightness
-//! change.
-//!
-//! Horizontal reads icon → bar → value; vertical reads value → bar → icon,
-//! so the value stays at the top and the bar still fills from the bottom.
+//! On-screen display: the pill that flashes up on a volume or brightness change.
 
 use gpui::{App, Hsla, IntoElement, RenderOnce, Window, div, prelude::*, px, relative};
 
@@ -11,9 +7,6 @@ use crate::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing};
 const TRACK: f32 = 6.0;
 
 /// A level readout: icon, filled track, percentage.
-///
-/// Fills its parent, so give it one. `level` may exceed 100 (overamplified
-/// volume) - the track clamps, the number does not.
 #[derive(IntoElement)]
 #[must_use = "OsdIndicator does nothing unless rendered"]
 pub struct OsdIndicator {
@@ -40,8 +33,7 @@ impl OsdIndicator {
         self
     }
 
-    /// Track colour. Defaults to the accent - the caller overrides it to say
-    /// something about the value (muted, overamplified).
+    /// Track colour.
     pub fn fill(mut self, fill: Hsla) -> Self {
         self.fill = Some(fill);
         self
@@ -80,8 +72,7 @@ impl RenderOnce for OsdIndicator {
             .map(|el| {
                 let bar = div().bg(fill).rounded(px(TRACK / 2.0));
                 if vertical {
-                    // Grows upward, so the fill has to sit at the bottom of
-                    // the track.
+                    // Grows upward, so the fill has to sit at the bottom of the track.
                     el.w(px(TRACK))
                         .flex()
                         .flex_col()
@@ -113,8 +104,7 @@ impl RenderOnce for OsdIndicator {
                     el.px(Spacing::Large.pixels())
                         .child(icon)
                         .child(track)
-                        // Fixed so the pill does not twitch between 9% and
-                        // 100%.
+                        // Fixed so the pill does not twitch between 9% and 100%.
                         .child(div().w(px(36.0)).text_right().child(value))
                 }
             })

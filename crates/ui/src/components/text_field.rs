@@ -2,52 +2,21 @@
 //!
 //! Derived from `crates/gpui/examples/input.rs` in
 //! [zed-industries/zed](https://github.com/zed-industries/zed), licensed under
-//! Apache-2.0. This file has been modified: it has been adapted to engram's
-//! theming, component shape, handler aliases, and action namespace, and the
-//! example wiring has been removed in favour of an embeddable
-//! `TextField` entity. See `LICENSE-APACHE` at the workspace root.
+//! Apache-2.0. Modified: adapted to this crate's theming, component shape,
+//! handler aliases and action namespace, and reshaped from the example
+//! wiring into an embeddable entity. See `LICENSE-APACHE` at the workspace
+//! root.
 //!
-//! The heavy lifting is done by:
+//! The [`TextField`] entity owns content, selection, marked (IME) range and
+//! focus handle; a private `TextElement` shapes and paints the line and
+//! registers the input target; an [`EntityInputHandler`] impl does the
+//! UTF-16 <-> UTF-8 conversions the platform needs. Keys are bound by
+//! [`crate::init`].
 //!
-//! - A [`TextField`] entity that owns the content, selection range, marked
-//!   (IME-composing) range, and focus handle.
-//! - A private [`TextElement`] that implements [`gpui::Element`] directly -
-//!   shaping the text line with `window.text_system().shape_line(...)`,
-//!   painting the caret and selection rects, and registering the field as
-//!   an input target via `window.handle_input(...)`.
-//! - An [`EntityInputHandler`] impl on `TextField` that handles all the
-//!   UTF-16 <-> UTF-8 conversions the platform needs for IME, and that the
-//!   OS calls into when composing text, querying bounds, or performing
-//!   replacements.
-//! - A set of [`gpui::actions!`]-style actions bound by [`crate::init`]:
-//!   left/right/home/end navigation, select variants, backspace/delete,
-//!   select-all, copy/cut/paste, and submit (Enter).
-//!
-//! Word-by-word navigation is bound to Ctrl/Alt+Left/Right (and the shift
-//! variants for selection, and the backspace/delete variants for word
-//! deletion). Undo/redo is bound to Cmd/Ctrl+Z (undo) and
-//! Cmd/Ctrl+Shift+Z / Ctrl+Y (redo), with consecutive typing and
-//! consecutive deletions grouped into a single undo step.
-//!
-//! Multi-line mode is opt-in via [`TextField::multi_line`]: in that mode
-//! Shift+Enter inserts a newline (Enter still submits), Up/Down navigate
-//! between lines with a preserved goal column, Home/End act line-aware,
-//! paste preserves newlines, and the field auto-grows in height down to
-//! [`TextField::min_lines`]. Only hard wraps (explicit `\n`) create new
-//! visual rows - soft-wrap on width overflow is not implemented.
-//! Word-double-click selection is still TODO.
-//!
-//! ## Usage
-//!
-//! ```ignore
-//! let field = cx.new(|cx| TextField::with_value(cx, "initial"));
-//! field.update(cx, |field, cx| {
-//!     field.set_placeholder("Type here...");
-//! });
-//! // Render as a child:
-//! div().child(field.clone())
-//! ```
-
+//! Multi-line mode ([`TextField::multi_line`]): Shift+Enter inserts a
+//! newline, Enter still submits, Up/Down keep a goal column, and the field
+//! auto-grows down to [`TextField::min_lines`]. Only hard `\n` breaks a row -
+//! soft wrap is not implemented. Word-double-click selection is TODO.
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::rc::Rc;
@@ -70,14 +39,11 @@ use crate::traits::StringHandler;
 // Actions
 // -----------------------------------------------------------------------
 //
-// These are declared at module scope so they're reachable both from our
-// `Render` impl (which calls `.on_action(cx.listener(...))`) and from
-// `crate::init`, which binds keys to them. The action namespace is
-// `engram_text_field` to avoid colliding with any action names a host app
-// may have already bound (e.g. Zed's own `text_input::Backspace`).
+// Module scope so both the `Render` impl and `crate::init` can reach them.
+// Namespaced `ui_text_field` to avoid colliding with a host app's bindings.
 
 actions!(
-    engram_text_field,
+    ui_text_field,
     [
         Backspace,
         Delete,
@@ -127,16 +93,15 @@ struct UndoSnapshot {
 
 const UNDO_CAP: usize = 256;
 
-/// Emitted when the user presses Enter. The payload is the field value
-/// at the moment of submission.
+/// Emitted when the user presses Enter. The payload is the field value at the
+/// moment of submission.
 pub struct TextFieldSubmitEvent(pub String);
 
 // -----------------------------------------------------------------------
 // TextField
 // -----------------------------------------------------------------------
 
-/// One logical line's shaped geometry, populated by the `TextElement` on
-/// paint. In single-line mode there is always exactly one entry.
+/// One logical line's shaped geometry, populated by the `TextElement` on paint.
 #[derive(Clone)]
 struct ShapedRow {
     /// UTF-8 byte offset of the start of this line in `content`.
@@ -147,8 +112,6 @@ struct ShapedRow {
 
 /// Single-line text field by default; call [`TextField::multi_line`] to
 /// enable newline insertion, auto-growing height, and up/down navigation.
-///
-/// See the module docs for the supported feature set.
 pub struct TextField {
     focus_handle: FocusHandle,
     content: SharedString,
@@ -156,11 +119,9 @@ pub struct TextField {
     /// UTF-8 byte offsets into `content`.
     selected_range: Range<usize>,
     selection_reversed: bool,
-    /// UTF-8 byte offsets into `content` for the currently-composing IME
-    /// range, if any.
+    /// UTF-8 byte offsets into `content` for the currently-composing IME range, if any.
     marked_range: Option<Range<usize>>,
-    /// Populated during paint by the private `TextElement`. One entry per
-    /// logical line - always one entry in single-line mode.
+    /// Populated during paint by the private `TextElement`.
     last_rows: Vec<ShapedRow>,
     last_bounds: Option<Bounds<Pixels>>,
     last_line_height: Option<Pixels>,
@@ -169,18 +130,14 @@ pub struct TextField {
     min_lines: usize,
     width: Pixels,
     /// Preserved column for up/down navigation, in pixels from line start.
-    /// Cleared by any non-up/down movement.
     goal_x: Option<Pixels>,
     on_change: Option<StringHandler>,
     on_submit: Option<StringHandler>,
     undo_stack: VecDeque<UndoSnapshot>,
     redo_stack: VecDeque<UndoSnapshot>,
-    /// Kind of the edit currently being grouped. A caret movement, mouse
-    /// click, or undo/redo clears it, starting a fresh group.
+    /// Kind of the edit currently being grouped.
     pending_edit_kind: Option<EditKind>,
-    /// Cached result of [`Self::line_ranges`]. Invalidated whenever
-    /// `content` changes. For long multi-line buffers, recomputing on
-    /// every Home/End/Up/Down keystroke was a measurable cost.
+    /// Cached result of [`Self::line_ranges`].
     line_ranges_cache: Option<Vec<Range<usize>>>,
 }
 
@@ -229,18 +186,17 @@ impl TextField {
         self
     }
 
-    /// Enable multi-line mode. Enter inserts a newline instead of
-    /// submitting; paste preserves newlines; Up/Down and line-aware
-    /// Home/End become available; the field auto-grows in height.
-    /// Use [`Self::min_lines`] to reserve vertical space when empty.
+    /// Enable multi-line mode. Enter inserts a newline instead of submitting;
+    /// paste preserves newlines; Up/Down and line-aware Home/End become
+    /// available; the field auto-grows in height. Use [`Self::min_lines`] to
+    /// reserve vertical space when empty.
     pub fn multi_line(mut self) -> Self {
         self.multi_line = true;
         self
     }
 
-    /// In multi-line mode, the minimum number of lines of height the
-    /// field reserves even when the content is shorter. Ignored in
-    /// single-line mode.
+    /// In multi-line mode, the minimum number of lines of height the field
+    /// reserves even when the content is shorter.
     pub fn min_lines(mut self, lines: usize) -> Self {
         self.min_lines = lines.max(1);
         self
@@ -261,9 +217,7 @@ impl TextField {
         &self.content
     }
 
-    /// Replace the value programmatically. Selection is clamped to the
-    /// new content length. Undo history is cleared - programmatic sets
-    /// are treated as a fresh document rather than a keystroke.
+    /// Replace the value programmatically.
     pub fn set_value(&mut self, value: impl Into<String>, cx: &mut Context<Self>) {
         let new: SharedString = value.into().into();
         let end = new.len();
@@ -297,10 +251,7 @@ impl TextField {
         self.line_ranges_cache = None;
     }
 
-    /// Called before a mutation. Pushes a snapshot of the *pre-edit*
-    /// state onto the undo stack, unless the previous edit matches the
-    /// same grouping kind - in which case consecutive typing or deletion
-    /// collapses into a single undo step.
+    /// Called before a mutation.
     fn push_undo(&mut self, kind: EditKind) {
         let groupable = matches!(
             kind,
@@ -319,7 +270,7 @@ impl TextField {
     }
 
     /// Call when the user performs a non-editing action (caret movement,
-    /// selection change, click). The next edit starts a new undo group.
+    /// selection change, click).
     fn undo_boundary(&mut self) {
         self.pending_edit_kind = None;
     }
@@ -399,11 +350,7 @@ impl TextField {
     // ---------- multi-line geometry ----------
 
     /// Byte ranges of each logical line (i.e. the span between consecutive
-    /// '\n' characters), always at least one entry. The range covers the
-    /// line text only - the terminating '\n' is not included.
-    ///
-    /// The result is cached until `content` next changes; the cache is
-    /// invalidated by every site that reassigns `self.content`.
+    /// '\n' characters), always at least one entry.
     fn line_ranges(&mut self) -> &[Range<usize>] {
         if self.line_ranges_cache.is_none() {
             let content = &self.content;
@@ -443,9 +390,8 @@ impl TextField {
         ranges[idx].clone()
     }
 
-    /// X coordinate of `offset` within its own logical line, using the
-    /// last shaped layout. Returns 0 if we haven't painted yet or the
-    /// offset falls outside the shaped rows.
+    /// X coordinate of `offset` within its own logical line, using the last
+    /// shaped layout.
     fn x_for_offset(&self, offset: usize) -> Pixels {
         let Some(row) = self
             .last_rows
@@ -457,8 +403,7 @@ impl TextField {
         row.line.x_for_index(offset - row.byte_start)
     }
 
-    /// Byte offset closest to `x` on line `line_idx`, using the last
-    /// shaped layout. Clamps to the first/last line if out of range.
+    /// Byte offset closest to `x` on line `line_idx`, using the last shaped layout.
     fn offset_for_line_x(&mut self, line_idx: usize, x: Pixels) -> usize {
         if self.last_rows.is_empty() {
             let ranges = self.line_ranges();
@@ -822,9 +767,8 @@ impl TextField {
         self.is_selecting = false;
     }
 
-    /// Core mutation: replace `range` with `new_text`, collapse selection
-    /// to the end of the inserted text, notify listeners. Does not push
-    /// undo - callers are responsible for calling [`push_undo`] first.
+    /// Core mutation: replace `range` with `new_text`, collapse selection to
+    /// the end of the inserted text, notify listeners.
     fn perform_edit(
         &mut self,
         range: Range<usize>,
@@ -1118,7 +1062,6 @@ impl Element for TextElement {
         let font = style.font();
 
         // Choose between placeholder and real content as the display payload.
-        // Placeholder is rendered as a single line regardless of mode.
         let show_placeholder = content.is_empty();
         let display_source: SharedString = if show_placeholder {
             placeholder
@@ -1132,7 +1075,7 @@ impl Element for TextElement {
         };
 
         // Split into logical lines preserving byte offsets for caret/selection
-        // math. A placeholder is treated as one opaque line.
+        // math. A placeholder counts as one opaque line whatever the mode.
         let line_specs: Vec<(usize, SharedString)> = if show_placeholder || !multi_line {
             vec![(0, display_source)]
         } else {
@@ -1234,7 +1177,8 @@ impl Element for TextElement {
                 let x0 = row.line.x_for_index(local_start);
                 let x1 = row.line.x_for_index(local_end);
                 // Extend to end-of-line when the selection continues onto a
-                // following row, so the highlight visually covers the newline.
+                // following row, so the highlight visually covers the
+                // newline.
                 let extend_eol = selected_range.end > row_end && row_idx + 1 < rows.len();
                 let right = if extend_eol { x1 + px(6.0) } else { x1 };
                 let top = bounds.top() + line_height * row_idx as f32;
@@ -1336,7 +1280,7 @@ impl Render for TextField {
         };
 
         h_flex()
-            .id("engram-text-field")
+            .id("ui-text-field")
             .key_context("TextField")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_left))
@@ -1365,10 +1309,8 @@ impl Render for TextField {
             .on_action(cx.listener(Self::on_undo))
             .on_action(cx.listener(Self::on_redo))
             .on_action(cx.listener(Self::handle_submit))
-            // The mouse-down handler both grabs focus (so subsequent
-            // key events route here) and positions the caret. Splitting
-            // those two concerns across two handlers worked but added
-            // an unnecessary closure layer; one listener does both.
+            // The mouse-down handler both grabs focus (so subsequent key
+            // events route here) and positions the caret.
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
@@ -1445,9 +1387,7 @@ pub fn text_field(cx: &mut App, initial: impl Into<String>) -> Entity<TextField>
 // Keybinding registration
 // -----------------------------------------------------------------------
 
-/// Register the default keybindings for [`TextField`]. Called by
-/// [`crate::init`], but also exposed separately in case an app wants to
-/// initialize engram without binding our keys (e.g. to remap them).
+/// Register the default keybindings for [`TextField`].
 pub fn bind_text_field_keys(cx: &mut App) {
     use gpui::KeyBinding;
     cx.bind_keys([
@@ -1459,9 +1399,9 @@ pub fn bind_text_field_keys(cx: &mut App) {
         KeyBinding::new("shift-right", SelectRight, Some("TextField")),
         KeyBinding::new("shift-up", SelectUp, Some("TextField")),
         KeyBinding::new("shift-down", SelectDown, Some("TextField")),
-        // In multi-line mode, Shift+Enter inserts a newline and Enter
-        // still submits; the Newline action is a no-op when single-line
-        // is active (see `on_newline`).
+        // In multi-line mode, Shift+Enter inserts a newline and Enter still
+        // submits; the Newline action is a no-op when single-line is active
+        // (see `on_newline`).
         KeyBinding::new("shift-enter", Newline, Some("TextField")),
         // Word-by-word navigation: alt on macOS, ctrl on Linux/Windows.
         KeyBinding::new("alt-left", WordLeft, Some("TextField")),
@@ -1481,9 +1421,7 @@ pub fn bind_text_field_keys(cx: &mut App) {
         KeyBinding::new("backspace", Backspace, Some("TextField")),
         KeyBinding::new("delete", Delete, Some("TextField")),
         KeyBinding::new("enter", Submit, Some("TextField")),
-        // Cmd bindings for macOS; ctrl for Linux/Windows. Bind both so
-        // the field just works regardless of the host platform's
-        // convention.
+        // Cmd bindings for macOS; ctrl for Linux/Windows.
         KeyBinding::new("cmd-a", SelectAll, Some("TextField")),
         KeyBinding::new("ctrl-a", SelectAll, Some("TextField")),
         KeyBinding::new("cmd-c", Copy, Some("TextField")),

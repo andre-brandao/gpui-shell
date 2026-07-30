@@ -1,14 +1,4 @@
 //! Tooltip - a small elevated card shown when hovering an interactive element.
-//!
-//! The underlying machinery is provided by `gpui`: any stateful interactive
-//! element (e.g. anything with an `id`) has a [`.tooltip(builder)`](gpui::StatefulInteractiveElement::tooltip)
-//! method that takes a closure returning an [`AnyView`]. This module supplies:
-//!
-//! - a minimal [`Tooltip`] view that lays out a title plus optional metadata
-//!   on the theme's elevated surface,
-//! - a [`Tooltip::text`] helper that produces a ready-to-pass builder closure,
-//!   so call sites can write `.tooltip(Tooltip::text("Save"))` without
-//!   wiring up a `cx.new(...)` every time.
 
 use crate::theme::{ActiveTheme, Color, Radius, Spacing};
 use gpui::{
@@ -41,8 +31,7 @@ impl Tooltip {
         self
     }
 
-    /// Build a tooltip-builder closure for a plain text title. Pass the result
-    /// directly to gpui's `.tooltip(...)` method on a stateful element.
+    /// Build a tooltip-builder closure for a plain text title.
     pub fn text(
         title: impl Into<SharedString>,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {

@@ -1,9 +1,4 @@
 //! Skeleton - an animated placeholder that signals content is loading.
-//!
-//! A `Skeleton` is a plain `RenderOnce` rectangle with a subtle pulse
-//! animation. The caller chooses the shape (via width/height/rounded)
-//! and the skeleton handles the shimmer. Compose multiple skeletons to
-//! approximate the layout of the content that will eventually appear.
 
 use std::time::Duration;
 

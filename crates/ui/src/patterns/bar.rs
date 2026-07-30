@@ -1,10 +1,4 @@
-//! Status bar chrome: the edge-anchored surface and the chip each widget
-//! sits in.
-//!
-//! Both are orientation-aware. A bar on the left is not a bar on top with
-//! `flex_col` - the radii, the padding and the label sizes all shift, which
-//! is exactly the kind of duplicated `if is_vertical` the app should not be
-//! carrying per widget.
+//! Status bar chrome: the edge-anchored surface and the chip each widget sits in.
 
 use gpui::{
     AnyElement, App, FontWeight, Hsla, IntoElement, Pixels, RenderOnce, Window, div, prelude::*, px,
@@ -36,9 +30,6 @@ enum Align {
 }
 
 /// The bar itself: a full-bleed surface with three widget sections.
-///
-/// Only the edge facing the screen gets a border, so the bar reads as an
-/// edge rather than a floating box.
 #[derive(IntoElement)]
 #[must_use = "BarSurface does nothing unless rendered"]
 pub struct BarSurface {
@@ -68,8 +59,7 @@ impl BarSurface {
         self
     }
 
-    /// Padding along the long axis. Ignored when vertical, where the bar is
-    /// only as wide as its widgets.
+    /// Padding along the long axis.
     pub fn padding(mut self, padding: Pixels) -> Self {
         self.padding = padding;
         self
@@ -159,10 +149,6 @@ fn section(vertical: bool, align: Align, widgets: Vec<AnyElement>) -> impl IntoE
 }
 
 /// The pill a bar widget lives in, plus the breathing room around it.
-///
-/// Colours are passed in rather than read from the theme: whether a widget
-/// paints a background at all is a config decision, and that config lives in
-/// the app.
 #[derive(IntoElement)]
 #[must_use = "BarChip does nothing unless rendered"]
 pub struct BarChip {

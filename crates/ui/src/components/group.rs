@@ -1,6 +1,4 @@
-//! Group - convenience constructors for flex containers with consistent
-//! spacing. Lighter weight than [`h_flex`](super::stack::h_flex) /
-//! [`v_flex`](super::stack::v_flex) which provide no gap.
+//! Group - convenience constructors for flex containers with consistent spacing.
 
 use gpui::{Div, div, prelude::*};
 

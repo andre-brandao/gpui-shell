@@ -1,16 +1,10 @@
 //! Avatar / Facepile / Chip / CountBadge - small data-display primitives.
 //!
-//! Grouped in one file because each is tiny and they share a similar shape.
-//!
-//! - [`Avatar`]: a circular profile bubble. Defaults to a monogram (initial
-//!   letter over a hash-derived hue) but can load a real image via
-//!   [`Avatar::image`].
-//! - [`Facepile`]: a horizontal stack of overlapping `Avatar`s.
-//! - [`Chip`]: a compact rounded badge for a single label, optionally
-//!   colored by status (Default / Accent / Success / Warning / Error / Info).
-//!   Supports size variants and an outline mode.
-//! - [`CountBadge`]: a numeric badge that styles small counts ("3") and
-//!   caps large ones at "99+".
+//! - [`Avatar`]: circular profile bubble, monogram by default (initial over a
+//!   hash-derived hue) or an image via [`Avatar::image`].
+//! - [`Facepile`]: horizontal stack of overlapping avatars.
+//! - [`Chip`]: compact rounded badge, optional status color and outline mode.
+//! - [`CountBadge`]: numeric badge, caps large counts at "99+".
 
 use crate::theme::{ActiveTheme, Color, Radius, Spacing};
 use gpui::{
@@ -53,12 +47,6 @@ impl AvatarSize {
 }
 
 /// A circular profile bubble.
-///
-/// Defaults to a monogram (the first character of `name` over a
-/// hash-derived hue), so it stays visually consistent across renders even
-/// without an image. Call [`Avatar::image`] to swap in a real picture; the
-/// `name` is still stored for accessibility hints and as a fallback if the
-/// image fails to load.
 #[derive(IntoElement)]
 #[must_use = "Avatar does nothing unless rendered"]
 pub struct Avatar {
@@ -90,10 +78,6 @@ impl Avatar {
     }
 
     /// Render a real image instead of a monogram.
-    ///
-    /// Accepts any [`ImageSource`] - URLs, file paths, pre-loaded
-    /// [`Arc<Image>`](gpui::Image), etc. See [`gpui::img`] for the full
-    /// list of `From` impls.
     pub fn image(mut self, source: impl Into<ImageSource>) -> Self {
         self.image = Some(source.into());
         self
@@ -126,10 +110,9 @@ impl RenderOnce for Avatar {
         } = self;
         let diameter = size.diameter();
         let bg = color_override.unwrap_or_else(|| hsla(hue_for(&name), 0.55, 0.45, 1.0));
-        // The hue-derived disk shows through any transparent regions of
-        // the image and is what's visible during load, so we always paint
-        // it. When `image` is set, the image is overlaid on top; otherwise
-        // the monogram is drawn.
+        // The hue-derived disk shows through transparent regions of the image
+        // and covers the load, so it is always painted; the image, when set,
+        // is overlaid on top of it, otherwise the monogram is.
         let has_image = image.is_some();
         let initial: SharedString = initial_of(&name).into();
         div()
@@ -155,10 +138,6 @@ impl RenderOnce for Avatar {
 // -------------------- Facepile --------------------
 
 /// A horizontal stack of overlapping [`Avatar`]s.
-///
-/// Avatars are placed with negative left margins so they overlap by ~30% of
-/// their diameter. Pass them in display order; the last avatar is drawn on
-/// top.
 #[derive(IntoElement)]
 #[must_use = "Facepile does nothing unless rendered"]
 pub struct Facepile {
@@ -221,9 +200,6 @@ pub enum ChipSize {
 }
 
 /// A small rounded label, useful for tags / pills / status markers.
-///
-/// Chips default to a fully rounded (pill) shape. Use `.outline(true)` for
-/// a transparent-background variant with a colored border.
 #[derive(IntoElement)]
 #[must_use = "Chip does nothing unless rendered"]
 pub struct Chip {
@@ -274,10 +250,9 @@ impl RenderOnce for Chip {
             ChipStyle::Info => Color::Info,
         };
 
-        // In outline mode the background is transparent and the border
-        // takes the label's resolved color. In filled mode the status
-        // flavors pull bg + border from StatusColors; Default and Accent
-        // keep the neutral element background.
+        // In outline mode the background is transparent and the border takes
+        // the label's color. Filled status flavors pull bg + border from
+        // StatusColors; Default and Accent keep the neutral element background.
         let (bg, border) = if self.outline {
             (transparent_black(), label_color.hsla(colors))
         } else {
