@@ -7,8 +7,11 @@ edition = "2024"
 name = "assets"
 path = "src/assets.rs"
 
+[dev-dependencies]
+gpui_platform.workspace = true
+
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
 
-rust-embed = "8.5.0"
+rust-embed = { version = "8.12", features = ["include-exclude"] }

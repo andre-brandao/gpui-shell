@@ -4,6 +4,11 @@ target/
 result*
 result-*
 
+# Profiling
+perf.data
+perf.data.old
+flamegraph.svg
+
 # Misc
 .direnv
 

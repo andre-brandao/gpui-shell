@@ -3,10 +3,10 @@
 //! Displays power actions when expanded.
 
 use crate::config::ActiveConfig;
-use gpui::{App, Hsla, MouseButton, div, prelude::*, px};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use gpui::{App, Hsla, MouseButton, div, prelude::*};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
-use super::{config::PowerActionsConfig, icons};
+use super::config::PowerActionsConfig;
 
 /// Render the power section (expanded view with actions)
 pub fn render_power_section(cx: &App) -> impl IntoElement {
@@ -20,25 +20,25 @@ pub fn render_power_section(cx: &App) -> impl IntoElement {
 fn render_power_actions(config: &PowerActionsConfig, cx: &App) -> impl IntoElement {
     div()
         .flex()
-        .gap(px(spacing::XS))
+        .gap(Spacing::XSmall.pixels())
         .items_center()
         .child(render_action_button(
             "power-action-sleep",
-            icons::POWER_SLEEP,
+            IconName::Moon,
             "Sleep",
             &config.sleep,
             cx,
         ))
         .child(render_action_button(
             "power-action-reboot",
-            icons::REFRESH,
+            IconName::Refresh,
             "Reboot",
             &config.reboot,
             cx,
         ))
         .child(render_action_button(
             "power-action-poweroff",
-            icons::POWER_BUTTON,
+            IconName::Power,
             "Power off",
             &config.poweroff,
             cx,
@@ -48,17 +48,17 @@ fn render_power_actions(config: &PowerActionsConfig, cx: &App) -> impl IntoEleme
 /// Render a power action button
 fn render_action_button(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     command: &str,
     cx: &App,
 ) -> impl IntoElement {
     let theme = cx.theme();
 
-    let interactive_default = theme.interactive.default;
-    let interactive_hover = theme.interactive.hover;
-    let text_primary = theme.text.primary;
-    let text_muted = theme.text.muted;
+    let interactive_default = theme.colors.element_background;
+    let interactive_hover = theme.colors.element_hover;
+    let text_primary = theme.colors.text;
+    let text_muted = theme.colors.text_muted;
 
     let command = command.trim().to_string();
     let enabled = !command.is_empty();
@@ -70,9 +70,9 @@ fn render_action_button(
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(spacing::XS))
-        .py(px(spacing::SM))
-        .rounded(px(radius::SM))
+        .gap(Spacing::XSmall.pixels())
+        .py(Spacing::Medium.pixels())
+        .rounded(Radius::Small.pixels())
         .bg(interactive_default)
         .when(enabled, move |el| {
             let command = command.clone();
@@ -83,14 +83,13 @@ fn render_action_button(
                 })
         })
         .child(
-            div()
-                .text_size(px(icon_size::SM))
-                .text_color(fg_color)
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(fg_color)),
         )
         .child(
             div()
-                .text_size(theme.font_sizes.xs)
+                .text_size(TextSize::XSmall.rems())
                 .text_color(fg_color)
                 .child(label),
         )

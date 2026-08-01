@@ -4,21 +4,30 @@ pub mod config;
 
 use gpui::{AnyElement, App, div, prelude::*, px};
 use services::CompositorCommand;
-use ui::{ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing};
+use ui::{
+    ActiveTheme, Clickable, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem,
+    ListItemSpacing, TextSize, Toggleable,
+};
 
 use self::config::WorkspacesConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use ui::patterns::footer_hints;
+
+use crate::launcher::view::{LauncherView, ViewContext};
 use crate::state::AppState;
 
 /// Workspaces view - displays and switches between workspaces.
 pub struct WorkspacesView {
     prefix: String,
+    /// Workspaces matching the current query, refreshed once per frame by
+    /// `update_matches`.
+    matches: Vec<services::compositor::Workspace>,
 }
 
 impl WorkspacesView {
     pub fn new(config: &WorkspacesConfig) -> Self {
         Self {
             prefix: config.prefix.clone(),
+            matches: Vec::new(),
         }
     }
 
@@ -58,21 +67,24 @@ impl LauncherView for WorkspacesView {
         "Workspaces"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰍉"
+    fn icon(&self) -> IconName {
+        IconName::Layout
     }
 
     fn description(&self) -> &'static str {
         "Switch between workspaces"
     }
 
-    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize {
-        self.filtered_workspaces(vx, cx).len()
+    fn update_matches(&mut self, vx: &ViewContext, cx: &App) {
+        self.matches = self.filtered_workspaces(vx, cx);
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let filtered = self.filtered_workspaces(vx, cx);
-        let Some(ws) = filtered.get(index) else {
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
+    }
+
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(ws) = self.matches.get(index) else {
             return div().into_any_element();
         };
 
@@ -85,7 +97,7 @@ impl LauncherView for WorkspacesView {
         let subtitle = format!("{} windows on {}", ws.windows, ws.monitor);
         let ws_id = ws.id;
         let compositor_clone = AppState::compositor(cx).clone();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
         let icon = self.icon();
 
         ListItem::new(format!("ws-{}", ws.id))
@@ -100,8 +112,7 @@ impl LauncherView for WorkspacesView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(14.))
-                    .child(icon),
+                    .child(Icon::new(icon).size(IconSize::Small)),
             )
             .on_click(move |_, _, _cx| {
                 let _ = compositor_clone.dispatch(CompositorCommand::FocusWorkspace(ws_id));
@@ -111,19 +122,18 @@ impl LauncherView for WorkspacesView {
                     .flex()
                     .flex_col()
                     .gap(px(1.))
-                    .child(Label::new(title).size(LabelSize::Default))
+                    .child(Label::new(title).size(TextSize::Default))
                     .child(
                         Label::new(subtitle)
-                            .size(LabelSize::Small)
+                            .size(TextSize::Small)
                             .color(Color::Muted),
                     ),
             )
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let filtered = self.filtered_workspaces(vx, cx);
-        if let Some(ws) = filtered.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(ws) = self.matches.get(index) {
             let _ = AppState::compositor(cx).dispatch(CompositorCommand::FocusWorkspace(ws.id));
             true
         } else {
@@ -132,6 +142,6 @@ impl LauncherView for WorkspacesView {
     }
 
     fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        render_footer_hints(vec![("Switch", "Enter"), ("Close", "Esc")], cx)
+        footer_hints(vec![("Switch", "Enter"), ("Close", "Esc")], cx)
     }
 }

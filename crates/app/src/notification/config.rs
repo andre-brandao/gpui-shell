@@ -1,6 +1,9 @@
 //! Notification module configuration.
 
 use serde::{Deserialize, Serialize};
+use ui::{IconName, IconSource};
+
+use crate::icons::{self, ConfigIcon};
 
 /// Notification popup screen position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -52,23 +55,52 @@ impl Default for NotificationConfig {
     }
 }
 
-/// Notification icon glyphs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Notification icons. Each is either a name from the embedded set (`bell =
+/// "bell_ring"`) or a path to your own file. Omit a field - or give
+/// something we can't resolve - to get the built-in icon.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationIcons {
-    pub bell: String,
-    pub bell_off: String,
-    pub close: String,
-    pub dnd: String,
+    #[serde(with = "icon_field")]
+    pub bell: Option<ConfigIcon>,
+    #[serde(with = "icon_field")]
+    pub bell_off: Option<ConfigIcon>,
+    #[serde(with = "icon_field")]
+    pub close: Option<ConfigIcon>,
+    #[serde(with = "icon_field")]
+    pub dnd: Option<ConfigIcon>,
 }
 
-impl Default for NotificationIcons {
-    fn default() -> Self {
-        Self {
-            bell: "󰂚".into(),
-            bell_off: "󰂛".into(),
-            close: "󰅖".into(),
-            dnd: "󰂛".into(),
+impl NotificationIcons {
+    pub fn bell(&self) -> IconSource {
+        icons::source_or(self.bell.as_ref(), IconName::Bell)
+    }
+
+    pub fn bell_off(&self) -> IconSource {
+        icons::source_or(self.bell_off.as_ref(), IconName::BellOff)
+    }
+
+    pub fn close(&self) -> IconSource {
+        icons::source_or(self.close.as_ref(), IconName::Close)
+    }
+
+    pub fn dnd(&self) -> IconSource {
+        icons::source_or(self.dnd.as_ref(), IconName::BellOff)
+    }
+}
+
+/// `serde(with = ...)` pair so each icon field is both lenient on the way in
+/// and omitted from the written config when it is unset.
+mod icon_field {
+    pub use crate::icons::deserialize_lenient as deserialize;
+
+    pub fn serialize<S: serde::Serializer>(
+        icon: &Option<crate::icons::ConfigIcon>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match icon {
+            Some(icon) => serializer.serialize_some(icon),
+            None => serializer.serialize_none(),
         }
     }
 }

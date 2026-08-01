@@ -12,7 +12,7 @@ use tokio::io::unix::AsyncFd;
 use tracing::{debug, error, info, warn};
 use zbus::proxy;
 
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Brightness data state.
 #[derive(Debug, Clone, Default)]
@@ -30,16 +30,6 @@ impl BrightnessData {
             0
         } else {
             ((self.current as f64 / self.max as f64) * 100.0).round() as u8
-        }
-    }
-
-    /// Get an icon based on brightness level.
-    pub fn icon(&self) -> &'static str {
-        match self.percentage() {
-            0..=25 => "󰃞",
-            26..=50 => "󰃟",
-            51..=75 => "󰃠",
-            _ => "󰃠",
         }
     }
 }
@@ -61,66 +51,19 @@ pub enum BrightnessCommand {
 ///
 /// This subscriber monitors backlight brightness changes using udev
 /// and provides reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BrightnessSubscriber {
     data: Mutable<BrightnessData>,
-    status: Mutable<ServiceStatus>,
-    device_path: Option<PathBuf>,
-    device_name: Option<String>,
-    conn: Option<zbus::Connection>,
+    lifecycle: Lifecycle,
+    /// Backlight device found by the last start, if any.
+    device: Mutable<Option<PathBuf>>,
 }
 
 impl BrightnessSubscriber {
-    /// Create a new brightness subscriber and start monitoring.
-    ///
-    /// Returns Ok even if no backlight device exists (graceful degradation).
-    pub async fn new() -> Result<Self> {
-        // Find backlight device
-        let device_path = find_backlight_device();
-
-        let (data, status, device_name, conn) = match &device_path {
-            Some(path) => {
-                let brightness_data = read_brightness(path)?;
-                let name = path.file_name().and_then(|n| n.to_str()).map(String::from);
-                let conn = zbus::Connection::system().await.ok();
-
-                info!(
-                    "Brightness service initialized: {} (max: {})",
-                    brightness_data.current, brightness_data.max
-                );
-
-                (
-                    Mutable::new(brightness_data),
-                    Mutable::new(ServiceStatus::Active),
-                    name,
-                    conn,
-                )
-            }
-            None => {
-                warn!("No backlight device found");
-                (
-                    Mutable::new(BrightnessData::default()),
-                    Mutable::new(ServiceStatus::Unavailable),
-                    None,
-                    None,
-                )
-            }
-        };
-
-        let subscriber = Self {
-            data: data.clone(),
-            status: status.clone(),
-            device_path: device_path.clone(),
-            device_name,
-            conn,
-        };
-
-        // Start listener if device exists
-        if let Some(path) = device_path {
-            start_listener(data, path);
-        }
-
-        Ok(subscriber)
+    /// Create a new brightness subscriber. Device discovery and monitoring
+    /// happen in [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get a signal that emits when brightness changes.
@@ -133,24 +76,21 @@ impl BrightnessSubscriber {
         self.data.get_cloned()
     }
 
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
-    }
-
     /// Check if a backlight device is available.
     pub fn is_available(&self) -> bool {
-        self.device_path.is_some()
+        self.device.lock_ref().is_some()
     }
 
     /// Execute a brightness command.
     pub async fn dispatch(&self, command: BrightnessCommand) -> Result<()> {
-        let (device_name, conn) = match (&self.device_name, &self.conn) {
-            (Some(name), Some(conn)) => (name, conn),
-            _ => {
-                warn!("No backlight device available");
-                return Ok(());
-            }
+        let device_name = self
+            .device
+            .lock_ref()
+            .as_ref()
+            .and_then(|path| path.file_name()?.to_str().map(String::from));
+        let Some(device_name) = device_name else {
+            warn!("No backlight device available");
+            return Ok(());
         };
 
         let (max, current) = {
@@ -183,9 +123,10 @@ impl BrightnessSubscriber {
             new_value, device_name
         );
 
-        let proxy = BrightnessCtrlProxy::new(conn).await?;
+        let conn = crate::bus::system().await?;
+        let proxy = BrightnessCtrlProxy::new(&conn).await?;
         proxy
-            .set_brightness("backlight", device_name, new_value)
+            .set_brightness("backlight", &device_name, new_value)
             .await?;
 
         // Immediately update internal state (optimistic update)
@@ -193,6 +134,55 @@ impl BrightnessSubscriber {
         self.data.lock_mut().current = new_value;
 
         Ok(())
+    }
+}
+
+impl ManagedService for BrightnessSubscriber {
+    fn name(&self) -> &'static str {
+        "Brightness"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        size_of::<BrightnessData>()
+            + self
+                .device
+                .lock_ref()
+                .as_ref()
+                .map_or(0, |path| path.as_os_str().len())
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+
+        let Some(device_path) = find_backlight_device() else {
+            warn!("No backlight device found");
+            self.device.set(None);
+            self.lifecycle.set_unavailable();
+            return;
+        };
+
+        match read_brightness(&device_path) {
+            Ok(data) => {
+                info!(
+                    "Brightness service initialized: {} (max: {})",
+                    data.current, data.max
+                );
+                self.data.set(data);
+            }
+            Err(e) => {
+                error!("Failed to read brightness: {}", e);
+                token.error(e.to_string());
+                return;
+            }
+        }
+
+        self.device.set(Some(device_path.clone()));
+        token.active();
+        start_listener(self.data.clone(), device_path, token);
     }
 }
 
@@ -231,7 +221,7 @@ fn read_brightness(device_path: &Path) -> Result<BrightnessData> {
 }
 
 /// Start the udev listener task for brightness changes.
-fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
+fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf, token: RunToken) {
     tokio::task::spawn_blocking(move || {
         let socket = match udev::MonitorBuilder::new()
             .and_then(|b| b.match_subsystem("backlight"))
@@ -258,7 +248,7 @@ fn start_listener(data: Mutable<BrightnessData>, device_path: PathBuf) {
         // Use tokio's block_on to run async code in blocking context
         let runtime = tokio::runtime::Handle::current();
         runtime.block_on(async {
-            loop {
+            while token.alive() {
                 // Wait asynchronously until the socket is readable
                 let mut guard = match async_socket.readable().await {
                     Ok(g) => g,

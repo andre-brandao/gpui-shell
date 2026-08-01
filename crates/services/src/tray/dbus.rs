@@ -28,7 +28,7 @@ pub struct StatusNotifierWatcher {
 impl StatusNotifierWatcher {
     /// Start the StatusNotifierWatcher D-Bus server.
     pub async fn start_server() -> anyhow::Result<Connection> {
-        let connection = zbus::connection::Connection::session().await?;
+        let connection = crate::bus::session().await?;
         let watcher = StatusNotifierWatcher::default();
         connection.object_server().at(OBJECT_PATH, watcher).await?;
         let interface = connection
@@ -264,6 +264,12 @@ pub trait StatusNotifierItem {
 
     #[zbus(property)]
     fn tooltip(&self) -> zbus::Result<(String, Vec<IconPixmap>, String, String)>;
+
+    /// Emitted when the icon changes. Apps signal this instead of, or as well
+    /// as, a PropertiesChanged on IconPixmap/IconName - the tray listener
+    /// watches both.
+    #[zbus(signal)]
+    fn new_icon(&self) -> zbus::Result<()>;
 
     /// Left-click activation.
     fn activate(&self, x: i32, y: i32) -> zbus::Result<()>;

@@ -10,12 +10,14 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{AnyElement, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Pixels, Point, Size, Window, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
 };
-use ui::ActiveTheme;
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName, IconSize,
+};
 
 mod config;
 pub use config::SettingsConfig;
@@ -28,30 +30,7 @@ use crate::control_center::{
 use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
 
-/// Nerd Font icons for status display.
-mod icons {
-    // Privacy
-    pub const MICROPHONE: &str = "󰍬";
-    pub const WEBCAM: &str = "󰄀";
-    pub const SCREENSHARE: &str = "󰍹";
-
-    // Audio
-    pub const VOLUME_HIGH: &str = "󰕾";
-    pub const VOLUME_MED: &str = "󰖀";
-    pub const VOLUME_LOW: &str = "󰕿";
-    pub const VOLUME_MUTE: &str = "󰝟";
-
-    // Network
-    pub const WIFI: &str = "󰤨";
-    pub const WIFI_OFF: &str = "󰤭";
-    pub const ETHERNET: &str = "󰈀";
-
-    // Bluetooth
-    pub const BLUETOOTH_CONNECTED: &str = "󰂱";
-
-    // Battery (using BatteryInfo::icon() from services, but keep BATTERY_NONE for no-battery case)
-    pub const BATTERY_NONE: &str = "󰂑";
-}
+use crate::icons;
 
 /// Settings widget for the bar that shows system status icons.
 pub struct Settings {
@@ -63,12 +42,12 @@ pub struct Settings {
 }
 
 struct SettingsView {
-    privacy_icons: Vec<&'static str>,
-    volume_icon: &'static str,
-    network_icon: &'static str,
-    bluetooth_icon: Option<&'static str>,
-    power_profile_icon: &'static str,
-    battery_icon: &'static str,
+    privacy_icons: Vec<IconName>,
+    volume_icon: IconName,
+    network_icon: IconName,
+    bluetooth_icon: Option<IconName>,
+    power_profile_icon: IconName,
+    battery_icon: IconName,
     battery_text: String,
     battery_color: gpui::Hsla,
 }
@@ -122,14 +101,14 @@ impl Settings {
     }
 
     /// Toggle the control center panel.
-    fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut gpui::App) {
+    fn toggle_panel(&self, at: Point<Pixels>, window: &Window, cx: &mut gpui::App) {
         let config = Config::global(cx);
         let panel_size = Size::new(
             px(CONTROL_CENTER_PANEL_WIDTH),
             px(CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED),
         );
         let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
         let config = PanelConfig {
             width: CONTROL_CENTER_PANEL_WIDTH,
             height: CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
@@ -144,18 +123,18 @@ impl Settings {
     }
 
     /// Get privacy indicator icons (only when active).
-    fn privacy_icons(&self, is_vertical: bool) -> Vec<&'static str> {
+    fn privacy_icons(&self, is_vertical: bool) -> Vec<IconName> {
         if is_vertical {
             let mut icons = Vec::new();
 
             if self.privacy.microphone_access() {
-                icons.push(icons::MICROPHONE);
+                icons.push(IconName::Mic);
             }
             if self.privacy.webcam_access() {
-                icons.push(icons::WEBCAM);
+                icons.push(IconName::Camera);
             }
             if self.privacy.screenshare_access() {
-                icons.push(icons::SCREENSHARE);
+                icons.push(IconName::ScreenShare);
             }
 
             return icons;
@@ -163,31 +142,23 @@ impl Settings {
 
         // Horizontal mode: keep privacy signal lightweight and avoid icon crowding.
         if self.privacy.screenshare_access() {
-            vec![icons::SCREENSHARE]
+            vec![IconName::ScreenShare]
         } else if self.privacy.webcam_access() {
-            vec![icons::WEBCAM]
+            vec![IconName::Camera]
         } else if self.privacy.microphone_access() {
-            vec![icons::MICROPHONE]
+            vec![IconName::Mic]
         } else {
             Vec::new()
         }
     }
 
     /// Get the volume icon based on current state.
-    fn volume_icon(&self) -> &'static str {
-        if self.audio.sink_muted {
-            icons::VOLUME_MUTE
-        } else if self.audio.sink_volume >= 66 {
-            icons::VOLUME_HIGH
-        } else if self.audio.sink_volume >= 33 {
-            icons::VOLUME_MED
-        } else {
-            icons::VOLUME_LOW
-        }
+    fn volume_icon(&self) -> IconName {
+        icons::volume_icon(self.audio.sink_volume, self.audio.sink_muted)
     }
 
     /// Get the network icon based on current state.
-    fn network_icon(&self) -> &'static str {
+    fn network_icon(&self) -> IconName {
         // Check for wired connection first
         if self
             .network
@@ -195,12 +166,12 @@ impl Settings {
             .iter()
             .any(|c| matches!(c, ActiveConnectionInfo::Wired { .. }))
         {
-            return icons::ETHERNET;
+            return IconName::Ethernet;
         }
 
         // WiFi status
         if !self.network.wifi_enabled {
-            return icons::WIFI_OFF;
+            return IconName::WifiOff;
         }
 
         // Check for active WiFi connection
@@ -210,34 +181,31 @@ impl Settings {
             .iter()
             .any(|c| matches!(c, ActiveConnectionInfo::WiFi { .. }))
         {
-            icons::WIFI
+            IconName::Wifi
         } else {
-            icons::WIFI_OFF
+            IconName::WifiOff
         }
     }
 
     /// Get bluetooth icon if any device is connected.
-    fn bluetooth_icon(&self) -> Option<&'static str> {
+    fn bluetooth_icon(&self) -> Option<IconName> {
         if self.bluetooth.state == BluetoothState::Active
             && self.bluetooth.devices.iter().any(|d| d.connected)
         {
-            Some(icons::BLUETOOTH_CONNECTED)
+            Some(IconName::BluetoothConnected)
         } else {
             None
         }
     }
 
     /// Get the power profile icon.
-    fn power_profile_icon(&self) -> &'static str {
-        self.upower.power_profile.icon()
+    fn power_profile_icon(&self) -> IconName {
+        icons::power_profile_icon(self.upower.power_profile)
     }
 
     /// Get the battery icon based on current state.
-    fn battery_icon(&self) -> &'static str {
-        match &self.upower.battery {
-            Some(battery) => battery.icon(),
-            None => icons::BATTERY_NONE,
-        }
+    fn battery_icon(&self) -> IconName {
+        icons::battery_data_icon(self.upower.battery.as_ref())
     }
 
     /// Get the battery percentage text.
@@ -258,16 +226,16 @@ impl Settings {
         match &self.upower.battery {
             Some(battery) => {
                 if battery.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if battery.is_low() {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else if battery.is_charging() {
-                    theme.status.success
+                    theme.colors.status.success
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             }
-            None => theme.text.muted,
+            None => theme.colors.text_muted,
         }
     }
 
@@ -284,28 +252,20 @@ impl Settings {
         }
     }
 
-    fn render_status_icon(icon: &'static str, size: f32, color: gpui::Hsla) -> AnyElement {
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .flex_shrink_0()
-            .text_size(px(size))
-            .text_color(color)
-            .child(icon)
+    fn render_status_icon(icon: IconName, size: IconSize, color: gpui::Hsla) -> AnyElement {
+        Icon::new(icon)
+            .size(size)
+            .color(Color::Custom(color))
             .into_any_element()
     }
 
     fn render_battery_block(
         &self,
-        theme: &ui::Theme,
+        _theme: &ui::Theme,
         view: &SettingsView,
         is_vertical: bool,
     ) -> AnyElement {
-        div()
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
+        style::stack(is_vertical)
             .justify_center()
             .gap(px(style::CHIP_GAP))
             .child(Self::render_status_icon(
@@ -314,19 +274,12 @@ impl Settings {
                 view.battery_color,
             ))
             .when(!view.battery_text.is_empty(), |el| {
+                let label =
+                    style::bar_label(view.battery_text.clone(), is_vertical, view.battery_color);
                 el.child(if is_vertical {
-                    style::vertical_text_line(
-                        div()
-                            .text_size(style::label_size(theme, is_vertical))
-                            .text_color(view.battery_color)
-                            .child(view.battery_text.clone()),
-                    )
+                    style::vertical_text_line(label)
                 } else {
-                    div()
-                        .text_size(style::label_size(theme, is_vertical))
-                        .text_color(view.battery_color)
-                        .child(view.battery_text.clone())
-                        .into_any_element()
+                    label.into_any_element()
                 })
             })
             .into_any_element()
@@ -343,54 +296,44 @@ impl BarWidget for Settings {
         let view = self.view(theme, true);
         let icon_size = style::icon(true);
 
-        div()
-            .id("settings-widget")
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| {
-                    this.toggle_panel(event, window, cx);
-                }),
+        ButtonLike::new("settings-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                this.toggle_panel(event.position(), window, cx);
+            }))
+            .child(
+                style::stack(true)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    // Privacy icons (red, only shown when active)
+                    .children(view.privacy_icons.iter().copied().map(move |icon| {
+                        Self::render_status_icon(icon, icon_size, theme.colors.status.error)
+                    }))
+                    // Volume icon
+                    .child(Self::render_status_icon(
+                        view.volume_icon,
+                        icon_size,
+                        theme.colors.text,
+                    ))
+                    // Network icon
+                    .child(Self::render_status_icon(
+                        view.network_icon,
+                        icon_size,
+                        theme.colors.text,
+                    ))
+                    // Bluetooth icon (only when connected)
+                    .when_some(view.bluetooth_icon, |el, icon| {
+                        el.child(Self::render_status_icon(icon, icon_size, theme.colors.text))
+                    })
+                    // Power profile icon
+                    .child(Self::render_status_icon(
+                        view.power_profile_icon,
+                        icon_size,
+                        theme.colors.text,
+                    ))
+                    // Battery icon and percentage
+                    .child(self.render_battery_block(theme, &view, true)),
             )
-            // Privacy icons (red, only shown when active)
-            .children(
-                view.privacy_icons
-                    .iter()
-                    .copied()
-                    .map(move |icon| Self::render_status_icon(icon, icon_size, theme.status.error)),
-            )
-            // Volume icon
-            .child(Self::render_status_icon(
-                view.volume_icon,
-                icon_size,
-                theme.text.primary,
-            ))
-            // Network icon
-            .child(Self::render_status_icon(
-                view.network_icon,
-                icon_size,
-                theme.text.primary,
-            ))
-            // Bluetooth icon (only when connected)
-            .when_some(view.bluetooth_icon, |el, icon| {
-                el.child(Self::render_status_icon(
-                    icon,
-                    icon_size,
-                    theme.text.primary,
-                ))
-            })
-            // Power profile icon
-            .child(Self::render_status_icon(
-                view.power_profile_icon,
-                icon_size,
-                theme.text.primary,
-            ))
-            // Battery icon and percentage
-            .child(self.render_battery_block(theme, &view, true))
             .into_any_element()
     }
 
@@ -401,46 +344,37 @@ impl BarWidget for Settings {
         let icon_size = style::icon(false);
         let divider_color = style::widget_border(theme, bar, false);
 
-        div()
-            .id("settings-widget")
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(3.0))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| {
-                    this.toggle_panel(event, window, cx);
-                }),
+        ButtonLike::new("settings-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                this.toggle_panel(event.position(), window, cx);
+            }))
+            .child(
+                style::stack(false)
+                    .justify_center()
+                    .gap(px(3.0))
+                    .children(view.privacy_icons.iter().copied().map(move |icon| {
+                        Self::render_status_icon(icon, icon_size, theme.colors.status.error)
+                    }))
+                    .when(!view.privacy_icons.is_empty(), |el| {
+                        el.child(style::section_divider(divider_color))
+                    })
+                    .child(Self::render_status_icon(
+                        view.volume_icon,
+                        icon_size,
+                        theme.colors.text,
+                    ))
+                    .child(Self::render_status_icon(
+                        view.network_icon,
+                        icon_size,
+                        theme.colors.text,
+                    ))
+                    .when_some(view.bluetooth_icon, |el, icon| {
+                        el.child(Self::render_status_icon(icon, icon_size, theme.colors.text))
+                    })
+                    .child(style::section_divider(divider_color))
+                    .child(self.render_battery_block(theme, &view, false)),
             )
-            .children(
-                view.privacy_icons
-                    .iter()
-                    .copied()
-                    .map(move |icon| Self::render_status_icon(icon, icon_size, theme.status.error)),
-            )
-            .when(!view.privacy_icons.is_empty(), |el| {
-                el.child(style::section_divider(divider_color))
-            })
-            .child(Self::render_status_icon(
-                view.volume_icon,
-                icon_size,
-                theme.text.primary,
-            ))
-            .child(Self::render_status_icon(
-                view.network_icon,
-                icon_size,
-                theme.text.primary,
-            ))
-            .when_some(view.bluetooth_icon, |el, icon| {
-                el.child(Self::render_status_icon(
-                    icon,
-                    icon_size,
-                    theme.text.primary,
-                ))
-            })
-            .child(style::section_divider(divider_color))
-            .child(self.render_battery_block(theme, &view, false))
             .into_any_element()
     }
 }

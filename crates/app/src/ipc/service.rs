@@ -50,7 +50,10 @@ impl IpcSubscriber {
                 error!("IPC service error: {}", err);
                 warn!("Retrying IPC acquire without initial input");
 
-                let retry_args = Args { input: None };
+                let retry_args = Args {
+                    input: None,
+                    validate: false,
+                };
                 match Self::acquire(&retry_args) {
                     AcquireResult::Primary(subscriber) => Some(subscriber),
                     AcquireResult::Secondary => None,

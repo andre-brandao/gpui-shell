@@ -4,11 +4,11 @@
 //! typically used for dropdown menus, context menus, and popup dialogs.
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, MouseDownEvent, Pixels, Point, Render, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, layer_shell::*, point,
-    prelude::*, px,
+    AnyWindowHandle, App, Bounds, Pixels, Point, Render, Size, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, prelude::*, px,
 };
 use std::sync::Mutex;
+use ui::ActiveTheme;
 
 use crate::config::BarPosition;
 
@@ -34,10 +34,10 @@ impl Default for PanelConfig {
     }
 }
 
-/// Resolve panel anchor/margin from a click event.
+/// Resolve panel anchor/margin from a click position, in window coordinates.
 pub fn panel_placement_from_event(
     bar_position: BarPosition,
-    event: &MouseDownEvent,
+    position: Point<Pixels>,
     window: &Window,
     cx: &App,
     panel_size: Size<Pixels>,
@@ -50,8 +50,8 @@ pub fn panel_placement_from_event(
             (bounds, bounds)
         });
     let click = point(
-        window.bounds().origin.x + event.position.x,
-        window.bounds().origin.y + event.position.y,
+        window.bounds().origin.x + position.x,
+        window.bounds().origin.y + position.y,
     );
     panel_placement_from_click(
         bar_position,
@@ -213,6 +213,17 @@ pub fn toggle_panel<V: Render + 'static>(
     cx: &mut App,
     build: impl FnOnce(&mut gpui::Context<V>) -> V + 'static,
 ) -> bool {
+    toggle_panel_on_display(panel_id, config, None, cx, build)
+}
+
+/// Open a panel on an explicitly selected output.
+pub fn toggle_panel_on_display<V: Render + 'static>(
+    panel_id: &str,
+    config: PanelConfig,
+    display_id: Option<gpui::DisplayId>,
+    cx: &mut App,
+    build: impl FnOnce(&mut gpui::Context<V>) -> V + 'static,
+) -> bool {
     let mut guard = ACTIVE_PANEL.lock().unwrap();
 
     // Check if any panel is open
@@ -230,6 +241,7 @@ pub fn toggle_panel<V: Render + 'static>(
 
     // Open new panel
     let window_options = WindowOptions {
+        display_id,
         titlebar: None,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: Point::new(px(0.), px(0.)),
@@ -255,7 +267,10 @@ pub fn toggle_panel<V: Render + 'static>(
         ..Default::default()
     };
 
-    if let Ok(handle) = cx.open_window(window_options, move |_, cx| cx.new(build)) {
+    if let Ok(handle) = cx.open_window(window_options, move |window, cx| {
+        window.set_rem_size(cx.theme().font_size);
+        cx.new(build)
+    }) {
         *guard = Some((panel_id.to_string(), handle.into()));
         true
     } else {
@@ -271,6 +286,17 @@ pub fn close_panel(cx: &mut App) {
         let _ = cx.update_window(handle, |_, window, _cx| {
             window.remove_window();
         });
+    }
+}
+
+/// Forget a panel that has already closed itself through its window lifecycle.
+pub fn forget_panel(panel_id: &str) {
+    let mut guard = ACTIVE_PANEL.lock().unwrap();
+    if guard
+        .as_ref()
+        .is_some_and(|(active_panel_id, _)| active_panel_id == panel_id)
+    {
+        guard.take();
     }
 }
 

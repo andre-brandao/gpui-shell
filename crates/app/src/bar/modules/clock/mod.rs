@@ -4,9 +4,9 @@ mod config;
 pub use config::ClockConfig;
 
 use chrono::Local;
-use gpui::{AnyElement, Context, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, prelude::*, px};
 use std::time::Duration;
-use ui::ActiveTheme;
+use ui::{ActiveTheme, h_flex, v_flex};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -55,36 +55,30 @@ impl Clock {
             lines.push(self.formatted_time_horizontal(horizontal_fallback));
         }
 
-        div()
+        v_flex()
             .id("clock")
-            .flex()
-            .flex_col()
             .items_center()
             .gap(px(style::CHIP_GAP))
             .children(lines.into_iter().enumerate().map(|(idx, line)| {
-                style::vertical_text_line(
-                    div()
-                        .text_size(style::label_size(theme, true))
-                        .text_color(if idx == 0 {
-                            theme.text.secondary
-                        } else {
-                            theme.text.primary
-                        })
-                        .child(line),
-                )
+                let color = if idx == 0 {
+                    theme.colors.text_muted
+                } else {
+                    theme.colors.text
+                };
+                style::vertical_text_line(style::bar_label(line, true, color))
             }))
             .into_any_element()
     }
 
     fn render_horizontal_content(&self, theme: &ui::Theme, format: &str) -> AnyElement {
-        div()
+        h_flex()
             .id("clock")
-            .flex()
-            .items_center()
             .gap(px(style::CHIP_GAP))
-            .text_size(style::label_size(theme, false))
-            .text_color(theme.text.primary)
-            .child(self.formatted_time_horizontal(format))
+            .child(style::bar_label(
+                self.formatted_time_horizontal(format),
+                false,
+                theme.colors.text,
+            ))
             .into_any_element()
     }
 }

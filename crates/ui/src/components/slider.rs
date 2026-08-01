@@ -1,225 +1,419 @@
-use gpui::*;
+//! Slider - a draggable range input for selecting a numeric value.
+//!
+//! The parent owns the committed value; the slider keeps the in-drag value
+//! element-local so the thumb renders optimistically instead of lagging a
+//! slow handler (subprocess, D-Bus round-trip). Dragging goes through gpui's
+//! drag system rather than `on_mouse_move`, which stops firing once the
+//! pointer leaves the hitbox.
 
-use crate::{ActiveTheme, h_flex};
+use std::cell::Cell;
+use std::rc::Rc;
 
+use crate::theme::{ActiveTheme, Color, Spacing};
+use gpui::{
+    App, Bounds, BoxShadow, DragMoveEvent, ElementId, EntityId, IntoElement, MouseButton, Pixels,
+    Render, RenderOnce, SharedString, Styled, Window, canvas, div, point, prelude::*, px, relative,
+    size,
+};
+
+use crate::components::label::{Label, LabelCommon};
+use crate::components::stack::h_flex;
+use crate::theme::TextSize;
+use crate::traits::Disableable;
+use crate::traits::handlers::F32Handler;
+
+/// Drag payload identifying which slider is being dragged, so a drag started
+/// on one slider can't drive another one on the same screen.
 #[derive(Clone, Render)]
-pub struct Thumb(EntityId);
+pub struct SliderDrag(EntityId);
 
-pub enum SliderEvent {
-    Change(f32),
-}
+/// The value currently under the cursor, or `None` when not dragging.
+///
+/// Held per-element via [`Window::use_keyed_state`] so the thumb can render
+/// ahead of the owner's committed value.
+#[derive(Default)]
+struct DragValue(Option<f32>);
 
+/// A horizontal slider for selecting a numeric value within a range.
+#[derive(IntoElement)]
+#[must_use = "Slider does nothing unless rendered"]
 pub struct Slider {
+    id: ElementId,
+    value: f32,
     min: f32,
     max: f32,
-    step: f32,
-    value: f32,
-    percentage: f32,
-    bounds: Bounds<Pixels>,
-    track_color: Option<Hsla>,
-    fill_color: Option<Hsla>,
-    thumb_color: Option<Hsla>,
-}
-
-impl EventEmitter<SliderEvent> for Slider {}
-
-impl Default for Slider {
-    fn default() -> Self {
-        Self {
-            min: 0.0,
-            max: 100.0,
-            step: 1.0,
-            value: 0.0,
-            percentage: 0.0,
-            bounds: Bounds::default(),
-            track_color: None,
-            fill_color: None,
-            thumb_color: None,
-        }
-    }
+    step: Option<f32>,
+    disabled: bool,
+    label: Option<SharedString>,
+    show_value: bool,
+    on_change: Option<F32Handler>,
 }
 
 impl Slider {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(id: impl Into<ElementId>, value: f32) -> Self {
+        Self {
+            id: id.into(),
+            value,
+            min: 0.0,
+            max: 100.0,
+            step: None,
+            disabled: false,
+            label: None,
+            show_value: false,
+            on_change: None,
+        }
     }
 
     pub fn min(mut self, min: f32) -> Self {
         self.min = min;
-        self.update_thumb_pos();
         self
     }
 
     pub fn max(mut self, max: f32) -> Self {
         self.max = max;
-        self.update_thumb_pos();
         self
     }
 
     pub fn step(mut self, step: f32) -> Self {
-        self.step = step;
+        self.step = Some(step);
         self
     }
 
-    /// Set the track (background) color
-    pub fn track_color(mut self, color: Hsla) -> Self {
-        self.track_color = Some(color);
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
         self
     }
 
-    /// Set the fill (progress) color
-    pub fn fill_color(mut self, color: Hsla) -> Self {
-        self.fill_color = Some(color);
+    /// Show the current numeric value next to the slider.
+    pub fn show_value(mut self, show: bool) -> Self {
+        self.show_value = show;
         self
     }
 
-    /// Set the thumb color
-    pub fn thumb_color(mut self, color: Hsla) -> Self {
-        self.thumb_color = Some(color);
+    /// Register a change handler, invoked with the new value when dragged.
+    pub fn on_change(mut self, handler: impl Fn(f32, &mut Window, &mut App) + 'static) -> Self {
+        self.on_change = Some(Rc::new(handler));
         self
-    }
-
-    fn update_thumb_pos(&mut self) {
-        self.percentage = self.value.clamp(self.min, self.max) / self.max;
-    }
-
-    pub fn default_value(mut self, value: f32) -> Self {
-        self.value = value;
-        self.update_thumb_pos();
-        self
-    }
-
-    pub fn set_value(&mut self, value: f32, cx: &mut Context<Self>) {
-        self.value = value;
-        self.update_thumb_pos();
-        cx.notify();
-    }
-
-    pub fn value(&self) -> f32 {
-        self.value
-    }
-
-    fn update_value_by_position(
-        &mut self,
-        position: Point<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let bounds = self.bounds;
-        let min = self.min;
-        let max = self.max;
-        let step = self.step;
-
-        let percentage =
-            (position.x - bounds.left()).clamp(px(0.), bounds.size.width) / bounds.size.width;
-
-        let value = min + percentage * (max - min);
-
-        let value = (value / step).round() * step;
-
-        self.percentage = percentage;
-        self.value = value.clamp(self.min, self.max);
-        cx.emit(SliderEvent::Change(self.value));
-        cx.notify();
-    }
-
-    fn on_mouse_down(
-        &mut self,
-        event: &MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.update_value_by_position(event.position, window, cx);
-    }
-
-    fn render_thumb(
-        &self,
-        thumb_bar_size: Pixels,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl gpui::IntoElement {
-        let entity_id = cx.entity_id();
-        let theme = cx.theme();
-        let thumb_color = self.thumb_color.unwrap_or(theme.accent.primary);
-
-        div()
-            .id("thumb")
-            .on_drag(Thumb(entity_id), |drag, _, _, cx| {
-                cx.stop_propagation();
-                cx.new(|_| drag.clone())
-            })
-            .on_drag_move(
-                cx.listener(
-                    move |view, e: &DragMoveEvent<Thumb>, window, cx| match e.drag(cx) {
-                        Thumb(id) => {
-                            if *id != entity_id {
-                                return;
-                            }
-
-                            view.update_value_by_position(e.event.position, window, cx);
-                        }
-                    },
-                ),
-            )
-            .absolute()
-            .left(thumb_bar_size)
-            .top(px(-3.))
-            .ml_neg_2()
-            .size_3()
-            .border_1()
-            .border_color(thumb_color)
-            .rounded_full()
-            .shadow_md()
-            .bg(thumb_color)
     }
 }
 
-impl Render for Slider {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let track_color = self.track_color.unwrap_or(theme.bg.tertiary);
-        let fill_color = self.fill_color.unwrap_or(theme.accent.primary);
+impl Disableable for Slider {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
 
-        let thumb_bar_size = if self.percentage < 0.05 {
-            0.05 * self.bounds.size.width
+impl RenderOnce for Slider {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        // An in-progress drag wins over the owner's value, so the thumb
+        // tracks the cursor even while the handler is still in flight.
+        let drag_value = window.use_keyed_state((self.id.clone(), "slider-drag"), cx, |_, _| {
+            DragValue::default()
+        });
+        let displayed = drag_value.read(cx).0.unwrap_or(self.value);
+        let colors = *cx.theme().colors();
+
+        let range = self.max - self.min;
+        let fraction = if range > 0.0 {
+            ((displayed - self.min) / range).clamp(0.0, 1.0)
         } else {
-            self.percentage * self.bounds.size.width
+            0.0
         };
 
-        div().id("slider").child(
-            h_flex()
-                .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-                .items_center()
-                .w_full()
-                .flex_shrink_0()
-                .child(
-                    div()
-                        .id("bar")
-                        .relative()
-                        .w_full()
-                        .h(px(6.))
-                        .bg(track_color)
-                        .rounded(px(3.))
-                        .child(
-                            div()
-                                .absolute()
-                                .left_0()
-                                .h_full()
-                                .w(thumb_bar_size)
-                                .bg(fill_color)
-                                .rounded(px(3.)),
+        let track_bg = if self.disabled {
+            colors.element_disabled
+        } else {
+            colors.element_background
+        };
+        let fill_bg = if self.disabled {
+            colors.text_disabled
+        } else {
+            colors.accent
+        };
+        let thumb_bg = if self.disabled {
+            colors.text_disabled
+        } else {
+            colors.background
+        };
+        let thumb_border = if self.disabled {
+            colors.border_variant
+        } else {
+            colors.border_focused
+        };
+        let label_color = if self.disabled {
+            Color::Disabled
+        } else {
+            Color::Default
+        };
+
+        let track_height = px(4.0);
+        let thumb_size = px(12.0);
+        let ring_color = colors.border_focused.opacity(0.25);
+
+        // Capture the track bounds during paint so the click handler can
+        // compute a value from the pointer's X position.
+        let track_bounds: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds {
+            origin: point(px(0.0), px(0.0)),
+            size: size(px(1.0), px(1.0)),
+        }));
+
+        let paint_bounds = track_bounds.clone();
+
+        // The interaction area is intentionally taller than the visual track
+        // so the user can drag vertically without losing the cursor - same
+        // approach as HTML <input type="range">.
+        let track = div()
+            .id(self.id.clone())
+            .w_full()
+            .h(px(40.0))
+            .flex()
+            .items_center()
+            .child(
+                div()
+                    .w_full()
+                    .h(track_height)
+                    .rounded_full()
+                    .bg(track_bg)
+                    .relative()
+                    // Invisible canvas that captures its own bounds during paint.
+                    .child(
+                        canvas(
+                            move |bounds, _, _| {
+                                paint_bounds.set(bounds);
+                            },
+                            |_, _, _, _| {},
                         )
-                        .child(self.render_thumb(thumb_bar_size, window, cx))
-                        .child({
-                            let view = cx.entity().clone();
-                            canvas(
-                                move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                                |_, _, _, _| {},
-                            )
+                        .absolute()
+                        .size_full(),
+                    )
+                    // Filled portion
+                    .child(
+                        div()
                             .absolute()
-                            .size_full()
-                        }),
-                ),
-        )
+                            .left_0()
+                            .top_0()
+                            .h_full()
+                            .w(relative(fraction))
+                            .rounded_full()
+                            .bg(fill_bg),
+                    )
+                    // Thumb - shadcn-style: small white circle with a ring
+                    // halo on hover/active for affordance.
+                    .child(
+                        div()
+                            .absolute()
+                            .top(-(thumb_size - track_height) / 2.0)
+                            .left(relative(fraction))
+                            .ml(-thumb_size / 2.0)
+                            .size(thumb_size)
+                            .rounded_full()
+                            .bg(thumb_bg)
+                            .border_1()
+                            .border_color(thumb_border)
+                            .when(!self.disabled, |this| {
+                                this.cursor_pointer().hover(|s| {
+                                    s.border_color(colors.accent).shadow(vec![BoxShadow {
+                                        color: ring_color,
+                                        offset: point(px(0.), px(0.)),
+                                        blur_radius: px(0.),
+                                        spread_radius: px(3.),
+                                        inset: false,
+                                    }])
+                                })
+                            }),
+                    ),
+            )
+            .when_some(
+                (!self.disabled).then_some(self.on_change).flatten(),
+                |this, handler| {
+                    let min = self.min;
+                    let max = self.max;
+                    let step = self.step;
+                    let drag_id = drag_value.entity_id();
+
+                    let value_at = move |pos_x: Pixels, bounds: Bounds<Pixels>| {
+                        value_from_position(pos_x, bounds, min, max, step)
+                    };
+
+                    let down_bounds = track_bounds.clone();
+                    let move_bounds = track_bounds;
+                    let down_handler = handler.clone();
+                    let down_state = drag_value.clone();
+                    let move_state = drag_value.clone();
+                    let end_state = drag_value;
+
+                    this
+                        // Click anywhere on the track to jump there.
+                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                            let val = value_at(event.position.x, down_bounds.get());
+                            down_state.update(cx, |state, cx| {
+                                state.0 = Some(val);
+                                cx.notify();
+                            });
+                            down_handler(val, window, cx);
+                        })
+                        // gpui's drag system keeps delivering moves after the
+                        // pointer leaves the track, unlike `on_mouse_move`.
+                        .on_drag(SliderDrag(drag_id), |drag, _, _, cx| {
+                            cx.stop_propagation();
+                            cx.new(|_| drag.clone())
+                        })
+                        .on_drag_move(move |event: &DragMoveEvent<SliderDrag>, window, cx| {
+                            if event.drag(cx).0 != drag_id {
+                                return;
+                            }
+                            let val = value_at(event.event.position.x, move_bounds.get());
+                            // A drag delivers many more moves than distinct
+                            // stepped values, and handlers are often
+                            // expensive (a subprocess, a D-Bus round-trip), so
+                            // only fire when the value actually changes.
+                            let changed = move_state.update(cx, |state, cx| {
+                                if state.0 == Some(val) {
+                                    return false;
+                                }
+                                state.0 = Some(val);
+                                cx.notify();
+                                true
+                            });
+                            if changed {
+                                handler(val, window, cx);
+                            }
+                        })
+                        // Drop back to the owner's value once the drag ends.
+                        .on_mouse_up(MouseButton::Left, move |_, _, cx| {
+                            end_state.update(cx, |state, cx| {
+                                if state.0.take().is_some() {
+                                    cx.notify();
+                                }
+                            });
+                        })
+                },
+            );
+
+        let value_label = self.show_value.then(|| {
+            let text = if self.step.is_some_and(|s| s == s.round()) {
+                format!("{}", displayed as i64)
+            } else {
+                format!("{:.1}", displayed)
+            };
+            Label::new(text).size(TextSize::Small).color(label_color)
+        });
+
+        h_flex()
+            .gap(Spacing::Small.pixels())
+            .w_full()
+            .when_some(self.label, |this, label| {
+                this.child(Label::new(label).size(TextSize::Small).color(label_color))
+            })
+            .child(track)
+            .when_some(value_label, |this, label| this.child(label))
+    }
+}
+
+/// Map a pointer X position to a slider value, given the track's bounds.
+fn value_from_position(
+    pos_x: Pixels,
+    bounds: Bounds<Pixels>,
+    min: f32,
+    max: f32,
+    step: Option<f32>,
+) -> f32 {
+    let width = bounds.size.width.max(px(1.0));
+    let frac = ((pos_x - bounds.origin.x) / width).clamp(0.0, 1.0);
+    value_from_fraction(frac, min, max, step)
+}
+
+/// Map a 0..=1 track fraction to a clamped, step-snapped slider value.
+fn value_from_fraction(frac: f32, min: f32, max: f32, step: Option<f32>) -> f32 {
+    let range = max - min;
+    let mut val = min + frac * range;
+    if let Some(s) = step
+        && s > 0.0
+    {
+        val = (val / s).round() * s;
+    }
+    val.clamp(min, max)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_fraction_returns_min() {
+        assert_eq!(value_from_fraction(0.0, 0.0, 100.0, None), 0.0);
+    }
+
+    #[test]
+    fn full_fraction_returns_max() {
+        assert_eq!(value_from_fraction(1.0, 0.0, 100.0, None), 100.0);
+    }
+
+    #[test]
+    fn mid_fraction_returns_midpoint() {
+        assert_eq!(value_from_fraction(0.5, 0.0, 100.0, None), 50.0);
+    }
+
+    #[test]
+    fn step_snaps_to_nearest_increment() {
+        assert_eq!(value_from_fraction(0.27, 0.0, 100.0, Some(10.0)), 30.0);
+        assert_eq!(value_from_fraction(0.22, 0.0, 100.0, Some(10.0)), 20.0);
+    }
+
+    #[test]
+    fn step_rounding_stays_within_range() {
+        // A step that doesn't divide the range evenly: rounding could push
+        // the value past `max`, so clamp catches it.
+        let val = value_from_fraction(1.0, 0.0, 100.0, Some(30.0));
+        assert!(val <= 100.0);
+    }
+
+    #[test]
+    fn negative_range_reversed_bounds_still_clamp() {
+        let val = value_from_fraction(0.5, -50.0, 50.0, None);
+        assert_eq!(val, 0.0);
+    }
+
+    #[test]
+    fn zero_range_returns_min() {
+        assert_eq!(value_from_fraction(0.5, 42.0, 42.0, None), 42.0);
+    }
+
+    fn track(origin_x: f32, width: f32) -> Bounds<Pixels> {
+        Bounds {
+            origin: point(px(origin_x), px(0.0)),
+            size: size(px(width), px(4.0)),
+        }
+    }
+
+    #[test]
+    fn position_maps_across_the_track() {
+        let b = track(100.0, 200.0);
+        assert_eq!(value_from_position(px(100.0), b, 0.0, 100.0, None), 0.0);
+        assert_eq!(value_from_position(px(200.0), b, 0.0, 100.0, None), 50.0);
+        assert_eq!(value_from_position(px(300.0), b, 0.0, 100.0, None), 100.0);
+    }
+
+    /// The reason the drag goes through gpui's drag system: the pointer
+    /// routinely leaves the track when a user slams a slider to an end, and
+    /// those positions must pin rather than extrapolate.
+    #[test]
+    fn position_outside_the_track_pins_to_the_ends() {
+        let b = track(100.0, 200.0);
+        assert_eq!(value_from_position(px(-500.0), b, 0.0, 100.0, None), 0.0);
+        assert_eq!(value_from_position(px(9999.0), b, 0.0, 100.0, None), 100.0);
+    }
+
+    #[test]
+    fn zero_width_track_does_not_divide_by_zero() {
+        let val = value_from_position(px(50.0), track(0.0, 0.0), 0.0, 100.0, None);
+        assert!(val.is_finite());
+    }
+
+    #[test]
+    fn invalid_step_ignored() {
+        // Step <= 0 should not divide-by-zero; it's simply ignored.
+        assert_eq!(value_from_fraction(0.5, 0.0, 100.0, Some(0.0)), 50.0);
     }
 }

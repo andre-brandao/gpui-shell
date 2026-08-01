@@ -3,9 +3,12 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Size, Window, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
-use ui::ActiveTheme;
+use ui::{
+    ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName,
+    LabelCommon,
+};
 
 use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
@@ -15,12 +18,6 @@ use crate::state::watch;
 
 mod panel;
 pub use panel::MprisPanel;
-
-mod icons {
-    pub const PLAYING: &str = "󰐊";
-    pub const PAUSED: &str = "󰏤";
-    pub const STOPPED: &str = "󰓛";
-}
 
 /// Bar widget for media status and controls.
 pub struct Mpris {
@@ -41,12 +38,12 @@ impl Mpris {
         Self { subscriber, data }
     }
 
-    fn toggle_panel(&self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
+    fn toggle_panel(&self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
         let panel_size = Size::new(px(380.0), px(420.0));
         let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
         let config = PanelConfig {
             width: 380.0,
             height: 420.0,
@@ -68,12 +65,12 @@ impl Mpris {
             .or_else(|| self.data.players.first())
     }
 
-    fn icon(&self) -> &'static str {
+    fn icon(&self) -> IconName {
         match self.primary_player().map(|p| p.state) {
-            Some(PlaybackStatus::Playing) => icons::PLAYING,
-            Some(PlaybackStatus::Paused) => icons::PAUSED,
-            Some(PlaybackStatus::Stopped) => icons::STOPPED,
-            None => icons::STOPPED,
+            Some(PlaybackStatus::Playing) => IconName::Play,
+            Some(PlaybackStatus::Paused) => IconName::Pause,
+            Some(PlaybackStatus::Stopped) => IconName::Stop,
+            None => IconName::Stop,
         }
     }
 
@@ -100,46 +97,33 @@ impl Mpris {
     fn render_widget_content(
         &self,
         theme: &ui::Theme,
-        icon: &'static str,
+        icon: IconName,
         label: Option<String>,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let max_width = cx.config().bar.modules.mpris.max_width;
 
-        div()
-            .id("mpris-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .max_w(px(max_width))
-            .overflow_hidden()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| {
-                    this.toggle_panel(event, window, cx);
-                }),
-            )
+        ButtonLike::new("mpris-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
+                this.toggle_panel(event.position(), window, cx);
+            }))
             .child(
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(style::icon(is_vertical)))
-                    .text_color(theme.text.primary)
-                    .child(icon),
+                style::stack(is_vertical)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    .max_w(px(max_width))
+                    .overflow_hidden()
+                    .child(
+                        Icon::new(icon)
+                            .size(style::icon(is_vertical))
+                            .color(Color::Default),
+                    )
+                    .when_some(label, |el, label| {
+                        el.child(style::bar_label(label, is_vertical, theme.colors.text).truncate())
+                    }),
             )
-            .when_some(label, |el, label| {
-                el.child(
-                    div()
-                        .flex_shrink()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .text_size(style::label_size(theme, is_vertical))
-                        .text_color(theme.text.secondary)
-                        .child(label),
-                )
-            })
             .into_any_element()
     }
 }

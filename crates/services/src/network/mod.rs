@@ -19,52 +19,23 @@ use zbus::Connection;
 use self::dbus::access_point::AccessPointProxy;
 use self::dbus::statistics::StatisticsProxy;
 use self::nm::NetworkManager;
-use crate::ServiceStatus;
+use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Event-driven network subscriber.
 ///
 /// This subscriber monitors network state via NetworkManager D-Bus
 /// and provides reactive state updates through `futures_signals`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NetworkSubscriber {
     data: Mutable<NetworkData>,
-    status: Mutable<ServiceStatus>,
-    conn: Connection,
+    lifecycle: Lifecycle,
 }
 
 impl NetworkSubscriber {
-    /// Create a new network subscriber and start monitoring.
-    pub async fn new() -> anyhow::Result<Self> {
-        let conn = Connection::system().await?;
-        let status = Mutable::new(ServiceStatus::Initializing);
-
-        let initial_data = match fetch_network_data(&conn).await {
-            Ok(data) => {
-                status.set(ServiceStatus::Active);
-                data
-            }
-            Err(e) => {
-                error!("Failed to fetch initial network data: {}", e);
-                status.set(ServiceStatus::Error(None));
-                NetworkData::default()
-            }
-        };
-
-        let data = Mutable::new(initial_data);
-
-        // Start the D-Bus listener
-        start_listener(data.clone(), status.clone(), conn.clone());
-
-        Ok(Self { data, status, conn })
-    }
-
-    /// Fallback subscriber used when NetworkManager is unavailable during startup.
-    pub async fn unavailable() -> anyhow::Result<Self> {
-        Ok(Self {
-            data: Mutable::new(NetworkData::default()),
-            status: Mutable::new(ServiceStatus::Unavailable),
-            conn: Connection::system().await?,
-        })
+    /// Create a new network subscriber. Monitoring starts with
+    /// [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get a signal that emits when network state changes.
@@ -77,14 +48,10 @@ impl NetworkSubscriber {
         self.data.get_cloned()
     }
 
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
-    }
-
     /// Execute a network command.
     pub async fn dispatch(&self, command: NetworkCommand) -> anyhow::Result<()> {
-        let nm = NetworkManager::new(&self.conn).await?;
+        let conn = crate::bus::system().await?;
+        let nm = NetworkManager::new(&conn).await?;
 
         match command {
             NetworkCommand::SetWifiEnabled(enabled) => {
@@ -100,7 +67,7 @@ impl NetworkSubscriber {
                 debug!("Requesting WiFi scan");
                 let wireless_devices = nm.wireless_devices().await?;
                 for device in wireless_devices {
-                    let wireless = dbus::device::wireless::WirelessDeviceProxy::builder(&self.conn)
+                    let wireless = dbus::device::wireless::WirelessDeviceProxy::builder(&conn)
                         .path(&device)?
                         .build()
                         .await?;
@@ -120,6 +87,67 @@ impl NetworkSubscriber {
         }
 
         Ok(())
+    }
+}
+
+impl ManagedService for NetworkSubscriber {
+    fn name(&self) -> &'static str {
+        "Network"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<NetworkData>()
+            + data
+                .wireless_access_points
+                .iter()
+                .map(|ap| size_of::<AccessPoint>() + ap.ssid.len() + ap.path.as_str().len())
+                .sum::<usize>()
+            + data
+                .active_connections
+                .iter()
+                .map(|ac| size_of::<ActiveConnectionInfo>() + ac.name().len())
+                .sum::<usize>()
+            + data
+                .network_statistics
+                .iter()
+                .map(|stat| size_of::<NetworkStatistics>() + stat.device.len())
+                .sum::<usize>()
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        let data = self.data.clone();
+
+        tokio::spawn(async move {
+            let conn = match crate::bus::system().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    error!("Failed to connect to the system bus: {}", e);
+                    token.error(e.to_string());
+                    return;
+                }
+            };
+
+            match fetch_network_data(&conn).await {
+                Ok(fetched) => {
+                    data.set(fetched);
+                    token.active();
+                }
+                Err(e) => {
+                    error!("Failed to fetch initial network data: {}", e);
+                    token.error(e.to_string());
+                }
+            }
+
+            // Started even after a failed fetch: the listener recovers when
+            // NetworkManager comes back.
+            start_listener(data, token, conn);
+        });
     }
 }
 
@@ -143,7 +171,7 @@ async fn fetch_network_data(conn: &Connection) -> anyhow::Result<NetworkData> {
 }
 
 /// Start the D-Bus listener in a dedicated thread.
-fn start_listener(data: Mutable<NetworkData>, status: Mutable<ServiceStatus>, conn: Connection) {
+fn start_listener(data: Mutable<NetworkData>, token: RunToken, conn: Connection) {
     thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -152,22 +180,26 @@ fn start_listener(data: Mutable<NetworkData>, status: Mutable<ServiceStatus>, co
             Ok(rt) => rt,
             Err(e) => {
                 error!("Failed to create Tokio runtime for Network listener: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
+                token.error(e.to_string());
                 return;
             }
         };
 
         rt.block_on(async move {
-            if let Err(e) = run_listener(data, conn).await {
+            if let Err(e) = run_listener(data, conn, token.clone()).await {
                 error!("Network listener error: {}", e);
-                *status.lock_mut() = ServiceStatus::Error(None);
+                token.error(e.to_string());
             }
         });
     });
 }
 
 /// Run the network listener event loop.
-async fn run_listener(data: Mutable<NetworkData>, conn: Connection) -> anyhow::Result<()> {
+async fn run_listener(
+    data: Mutable<NetworkData>,
+    conn: Connection,
+    token: RunToken,
+) -> anyhow::Result<()> {
     info!("Network subscriber started");
 
     let nm = NetworkManager::new(&conn).await?;
@@ -402,7 +434,7 @@ async fn run_listener(data: Mutable<NetworkData>, conn: Connection) -> anyhow::R
     }
 
     // Process events
-    while (events.next().await).is_some() {}
+    while token.alive() && (events.next().await).is_some() {}
 
     Ok(())
 }

@@ -1,8 +1,9 @@
-use gpui::{AnyElement, Context, Window};
-use ui::ActiveTheme;
+use gpui::{AnyElement, Context, IntoElement, Window};
 
 use super::style;
 use crate::config::ActiveConfig;
+use ui::ActiveTheme;
+use ui::patterns::BarChip;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,22 +39,28 @@ pub(crate) trait BarWidget: Sized {
     }
 
     fn wrap_bar_shell(&mut self, cx: &mut Context<Self>, content: AnyElement) -> AnyElement {
+        let shell = self.shell();
+        if shell == BarWidgetShell::None {
+            return content;
+        }
+
         let theme = cx.theme();
         let bar = &cx.config().bar;
         let is_vertical = bar.is_vertical();
-        let is_interactive = self.is_interactive();
 
-        match self.shell() {
-            BarWidgetShell::None => content,
-            BarWidgetShell::Standard => style::bar_widget_slot(
-                is_vertical,
-                style::bar_widget_shell(theme, bar, is_vertical, is_interactive, content),
-            ),
-            BarWidgetShell::Group => style::bar_widget_slot(
-                is_vertical,
-                style::bar_group_shell(theme, bar, is_vertical, is_interactive, content),
-            ),
-        }
+        BarChip::new(content)
+            .vertical(is_vertical)
+            .grouped(shell == BarWidgetShell::Group)
+            .background(style::widget_background(theme, bar))
+            .border(
+                bar.widget_border
+                    .then(|| style::widget_border(theme, bar, is_vertical)),
+            )
+            .hover(
+                self.is_interactive()
+                    .then(|| style::widget_hover_background(theme, bar)),
+            )
+            .into_any_element()
     }
 
     fn render_bar_widget(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {

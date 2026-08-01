@@ -5,12 +5,12 @@ pub use config::ActiveWindowConfig;
 
 use gpui::{AnyElement, Context, Render, Window, div, prelude::*, px};
 use services::CompositorState;
-use ui::ActiveTheme;
 
 use super::{BarWidget, BarWidgetShell, style};
 use crate::config::ActiveConfig;
 use crate::state::AppState;
 use crate::state::watch;
+use ui::{ActiveTheme, Color, Icon, IconName, LabelCommon, h_flex, v_flex};
 
 /// Widget that displays the currently focused window's title.
 pub struct ActiveWindow {
@@ -70,7 +70,44 @@ impl ActiveWindow {
         }
     }
 
-    fn window_icon(&self) -> Option<&'static str> {
+    /// Substring to icon, in match order.
+    ///
+    /// Brand marks first, then the "what it *is*" fallbacks - an editor we
+    /// don't have a logo for is still a `<>`, a terminal is still a prompt.
+    /// Order carries real weight here: the haystack is class *and* title, so
+    /// a generic needle like "code" would otherwise swallow any window whose
+    /// title merely mentions it.
+    const WINDOW_ICON_HINTS: &[(&str, IconName)] = &[
+        ("firefox", IconName::Firefox),
+        // "chromium" does not contain "chrome", so both spellings are needed.
+        ("chrome", IconName::Chrome),
+        ("chromium", IconName::Chrome),
+        ("telegram", IconName::Telegram),
+        ("discord", IconName::Discord),
+        ("vesktop", IconName::Discord),
+        ("slack", IconName::Slack),
+        ("spotify", IconName::Spotify),
+        ("thunderbird", IconName::Thunderbird),
+        ("alacritty", IconName::Alacritty),
+        ("wezterm", IconName::Wezterm),
+        ("neovim", IconName::Neovim),
+        ("nvim", IconName::Neovim),
+        // Zed's app id, not a bare "zed": that is a substring of "optimized"
+        // and "analyzed", which any editor could have in a window title.
+        ("dev.zed", IconName::Zed),
+        ("code", IconName::VisualStudioCode),
+        ("kitty", IconName::Terminal),
+        ("terminal", IconName::Terminal),
+        ("nautilus", IconName::Folder),
+        ("thunar", IconName::Folder),
+        ("dolphin", IconName::Folder),
+        ("files", IconName::Folder),
+    ];
+
+    /// Icon for the focused window, keyed off its class/title.
+    ///
+    /// Anything unrecognised falls back to a generic window.
+    fn window_icon(&self) -> Option<IconName> {
         let window = self.state.active_window.as_ref()?;
         let haystack = format!(
             "{} {}",
@@ -78,41 +115,12 @@ impl ActiveWindow {
             window.title.to_lowercase()
         );
 
-        if haystack.contains("firefox") {
-            Some("󰈹")
-        } else if haystack.contains("chrome") || haystack.contains("chromium") {
-            Some("")
-        } else if haystack.contains("telegram") {
-            Some("")
-        } else if haystack.contains("discord") || haystack.contains("vesktop") {
-            Some("󰙯")
-        } else if haystack.contains("spotify") {
-            Some("󰓇")
-        } else if haystack.contains("steam") {
-            Some("󰓓")
-        } else if haystack.contains("thunderbird") {
-            Some("󰴃")
-        } else if haystack.contains("code")
-            || haystack.contains("zed")
-            || haystack.contains("neovim")
-            || haystack.contains("nvim")
-        {
-            Some("󰨞")
-        } else if haystack.contains("kitty")
-            || haystack.contains("alacritty")
-            || haystack.contains("wezterm")
-            || haystack.contains("terminal")
-        {
-            Some("󰆍")
-        } else if haystack.contains("files")
-            || haystack.contains("nautilus")
-            || haystack.contains("thunar")
-            || haystack.contains("dolphin")
-        {
-            Some("󰉋")
-        } else {
-            Some("󰣇")
-        }
+        Some(
+            Self::WINDOW_ICON_HINTS
+                .iter()
+                .find(|(needle, _)| haystack.contains(needle))
+                .map_or(IconName::Layout, |&(_, icon)| icon),
+        )
     }
 
     fn vertical_lines(&self, max_length: usize) -> Vec<String> {
@@ -225,32 +233,15 @@ impl BarWidget for ActiveWindow {
         }
 
         let vertical_lines = self.vertical_lines(15);
-        let text_primary = theme.text.primary;
-        let text_secondary = theme.text.secondary;
+        let text_color = theme.colors.text;
 
-        div()
+        v_flex()
             .id("active-window")
-            .flex()
-            .flex_col()
             .items_center()
             .gap(px(1.0))
-            .children(
-                vertical_lines
-                    .into_iter()
-                    .enumerate()
-                    .map(move |(idx, line)| {
-                        style::vertical_text_line(
-                            div()
-                                .text_size(style::label_size(theme, true))
-                                .text_color(if idx == 0 {
-                                    text_primary
-                                } else {
-                                    text_secondary
-                                })
-                                .child(line),
-                        )
-                    }),
-            )
+            .children(vertical_lines.into_iter().map(move |line| {
+                style::vertical_text_line(style::bar_label(line, true, text_color))
+            }))
             .into_any_element()
     }
 
@@ -268,32 +259,20 @@ impl BarWidget for ActiveWindow {
             None
         };
 
-        div()
+        h_flex()
             .id("active-window")
-            .flex()
-            .items_center()
             .justify_center()
             .gap(px(style::CHIP_GAP))
             .max_w(px(460.0))
             .overflow_hidden()
             .when_some(icon, |el, icon| {
                 el.child(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(px(style::icon(false)))
-                        .text_color(theme.text.secondary)
-                        .child(icon),
+                    Icon::new(icon)
+                        .size(style::icon(false))
+                        .color(Color::Default),
                 )
             })
-            .child(
-                div()
-                    .flex_shrink()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_size(style::label_size(theme, false))
-                    .text_color(theme.text.primary)
-                    .child(title),
-            )
+            .child(style::bar_label(title, false, theme.colors.text).truncate())
             .into_any_element()
     }
 }

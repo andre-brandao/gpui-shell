@@ -7,9 +7,13 @@ pub mod applications;
 pub mod audio;
 pub mod bluetooth;
 pub mod brightness;
+pub mod bus;
 pub mod compositor;
+pub mod lifecycle;
 pub mod mpris;
 pub mod network;
+#[allow(clippy::too_many_arguments)]
+// zbus's `#[interface(proxy(..))]` expands `notify` into a generated proxy method clippy flags
 pub mod notification;
 pub mod privacy;
 pub mod status;
@@ -28,8 +32,9 @@ pub use bluetooth::{
 pub use brightness::{BrightnessCommand, BrightnessData, BrightnessSubscriber};
 pub use compositor::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, CompositorSubscriber,
-    Monitor, Workspace,
+    Monitor, Window, WindowGeometry, Workspace,
 };
+pub use lifecycle::{Lifecycle, ManagedService, RunToken, ServiceMode};
 pub use mpris::{
     MprisCommand, MprisData, MprisPlayerData, MprisPlayerMetadata, MprisSubscriber, PlaybackStatus,
     PlayerCommand,
@@ -39,7 +44,7 @@ pub use network::{
     NetworkData, NetworkStatistics, NetworkSubscriber,
 };
 pub use notification::{
-    Notification, NotificationCommand, NotificationData, NotificationSubscriber,
+    LocalSlot, Notification, NotificationCommand, NotificationData, NotificationSubscriber,
 };
 pub use privacy::{ApplicationNode, Media, PrivacyData, PrivacySubscriber};
 pub use status::ServiceStatus;

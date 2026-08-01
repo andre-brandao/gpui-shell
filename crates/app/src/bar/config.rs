@@ -25,6 +25,18 @@ impl BarPosition {
     pub fn is_vertical(self) -> bool {
         matches!(self, Self::Left | Self::Right)
     }
+
+    /// The same edge, as the UI layer names it. Config keeps its own enum
+    /// because it carries the serde spelling.
+    pub fn edge(self) -> ui::patterns::BarEdge {
+        use ui::patterns::BarEdge;
+        match self {
+            Self::Left => BarEdge::Left,
+            Self::Right => BarEdge::Right,
+            Self::Top => BarEdge::Top,
+            Self::Bottom => BarEdge::Bottom,
+        }
+    }
 }
 
 /// Status bar configuration.
@@ -54,7 +66,7 @@ pub struct BarConfig {
 }
 
 /// Bar module configurations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModulesConfig {
     pub clock: ClockConfig,
@@ -67,23 +79,6 @@ pub struct ModulesConfig {
     pub keyboard_layout: KeyboardLayoutConfig,
     pub launcher_btn: LauncherBtnConfig,
     pub settings: SettingsConfig,
-}
-
-impl Default for ModulesConfig {
-    fn default() -> Self {
-        Self {
-            clock: ClockConfig::default(),
-            battery: BatteryConfig::default(),
-            workspaces: WorkspacesConfig::default(),
-            tray: TrayConfig::default(),
-            sysinfo: SysInfoConfig::default(),
-            mpris: MprisConfig::default(),
-            active_window: ActiveWindowConfig::default(),
-            keyboard_layout: KeyboardLayoutConfig::default(),
-            launcher_btn: LauncherBtnConfig::default(),
-            settings: SettingsConfig::default(),
-        }
-    }
 }
 
 impl Default for BarConfig {

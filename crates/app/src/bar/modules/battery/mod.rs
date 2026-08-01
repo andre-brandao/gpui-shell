@@ -3,9 +3,9 @@
 mod config;
 pub use config::BatteryConfig;
 
-use gpui::{AnyElement, Context, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, Window, prelude::*, px};
 use services::{BatteryState, UPowerData};
-use ui::ActiveTheme;
+use ui::{ActiveTheme, Color, Icon, IconName};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -18,7 +18,7 @@ pub struct Battery {
 }
 
 struct BatteryView {
-    icon: Option<&'static str>,
+    icon: Option<IconName>,
     text: String,
     icon_color: gpui::Hsla,
     text_color: gpui::Hsla,
@@ -40,11 +40,8 @@ impl Battery {
     }
 
     /// Get the battery icon based on current state.
-    fn battery_icon(&self) -> &'static str {
-        match &self.data.battery {
-            Some(battery) => battery.icon(),
-            None => "󰂑", // No battery
-        }
+    fn battery_icon(&self) -> IconName {
+        crate::icons::battery_data_icon(self.data.battery.as_ref())
     }
 
     /// Get the battery percentage text.
@@ -59,19 +56,19 @@ impl Battery {
         match &self.data.battery {
             Some(battery) => {
                 if battery.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if battery.is_low() {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else if matches!(
                     battery.state,
                     BatteryState::Charging | BatteryState::FullyCharged
                 ) {
-                    theme.status.success
+                    theme.colors.status.success
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             }
-            None => theme.text.muted,
+            None => theme.colors.text_muted,
         }
     }
 
@@ -79,16 +76,16 @@ impl Battery {
         match &self.data.battery {
             Some(battery) => {
                 if battery.is_critical() {
-                    theme.status.error
+                    theme.colors.status.error
                 } else if battery.is_low() {
-                    theme.status.warning
+                    theme.colors.status.warning
                 } else if battery.is_charging() {
-                    theme.status.info
+                    theme.colors.status.info
                 } else {
-                    theme.text.primary
+                    theme.colors.text
                 }
             }
-            None => theme.text.muted,
+            None => theme.colors.text_muted,
         }
     }
 
@@ -107,38 +104,26 @@ impl Battery {
 
     fn render_battery_content(
         &self,
-        theme: &ui::Theme,
+        _theme: &ui::Theme,
         view: BatteryView,
         is_vertical: bool,
     ) -> AnyElement {
-        div()
+        style::stack(is_vertical)
             .id("battery-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
             .gap(px(style::CHIP_GAP))
             .when_some(view.icon, |el, icon| {
                 el.child(
-                    div()
-                        .text_size(px(style::icon(is_vertical)))
-                        .text_color(view.icon_color)
-                        .child(icon),
+                    Icon::new(icon)
+                        .size(style::icon(is_vertical))
+                        .color(Color::Custom(view.icon_color)),
                 )
             })
             .when(!view.text.is_empty(), |this| {
+                let label = style::bar_label(view.text, is_vertical, view.text_color);
                 this.child(if is_vertical {
-                    style::vertical_text_line(
-                        div()
-                            .text_size(style::label_size(theme, is_vertical))
-                            .text_color(view.text_color)
-                            .child(view.text),
-                    )
+                    style::vertical_text_line(label)
                 } else {
-                    div()
-                        .text_size(style::label_size(theme, is_vertical))
-                        .text_color(view.text_color)
-                        .child(view.text)
-                        .into_any_element()
+                    label.into_any_element()
                 })
             })
             .into_any_element()

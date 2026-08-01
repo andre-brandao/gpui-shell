@@ -4,8 +4,8 @@ mod config;
 pub use config::LauncherBtnConfig;
 
 use crate::launcher;
-use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px};
-use ui::ActiveTheme;
+use gpui::{AnyElement, Context, Window, prelude::*};
+use ui::{ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName, IconSource};
 
 use super::{BarWidget, style};
 use crate::config::ActiveConfig;
@@ -13,7 +13,7 @@ use crate::config::ActiveConfig;
 /// A button widget that opens the launcher when clicked.
 pub struct LauncherBtn;
 
-const LAUNCHER_ICON: &str = "󰀻";
+const LAUNCHER_ICON: IconName = IconName::Layers;
 
 impl LauncherBtn {
     /// Create a new launcher button.
@@ -21,39 +21,23 @@ impl LauncherBtn {
         LauncherBtn
     }
 
-    fn icon(&self, configured_icon: &str) -> String {
-        if configured_icon.trim().is_empty() {
-            LAUNCHER_ICON.to_string()
-        } else {
-            configured_icon.to_string()
-        }
-    }
-
     fn render_button_content(
         &self,
-        icon: String,
-        theme: &ui::Theme,
+        icon: IconSource,
         is_vertical: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        div()
-            .id("launcher-btn")
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |_, _, _, cx| {
-                    launcher::toggle(None, cx);
-                }),
-            )
+        // The chip around this button already paints the hover and owns the
+        // padding, so the button itself stays transparent and unpadded.
+        ButtonLike::new("launcher-btn")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(move |_, _, _, cx| {
+                launcher::toggle(None, cx);
+            }))
             .child(
-                div().flex().items_center().justify_center().child(
-                    div()
-                        .text_size(px(style::icon(is_vertical)))
-                        .text_color(theme.text.primary)
-                        .child(icon),
-                ),
+                Icon::new(icon)
+                    .size(style::icon(is_vertical))
+                    .color(Color::Default),
             )
             .into_any_element()
     }
@@ -65,15 +49,15 @@ impl BarWidget for LauncherBtn {
     }
 
     fn render_vertical(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(self.icon(&config.icon), &theme, true, cx)
+        let icon = crate::icons::source_or(config.icon.as_ref(), LAUNCHER_ICON);
+        self.render_button_content(icon, true, cx)
     }
 
     fn render_horizontal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let theme = cx.theme().clone();
         let config = &cx.config().bar.modules.launcher_btn;
-        self.render_button_content(self.icon(&config.icon), &theme, false, cx)
+        let icon = crate::icons::source_or(config.icon.as_ref(), LAUNCHER_ICON);
+        self.render_button_content(icon, false, cx)
     }
 }
 

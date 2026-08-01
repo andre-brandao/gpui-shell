@@ -20,11 +20,13 @@ use zbus::{
 
 use crate::ServiceStatus;
 use crate::applications::icons::lookup_icon;
+use crate::lifecycle::{Lifecycle, ManagedService};
 
 const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
 const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 const DEFAULT_TIMEOUT_MS: i32 = 5000;
+const MAX_NOTIFICATION_HISTORY: usize = 200;
 
 /// A single desktop notification.
 #[derive(Debug, Clone, Default)]
@@ -63,6 +65,23 @@ impl NotificationData {
     }
 }
 
+/// A notification the shell posts about itself, one per slot: posting the same
+/// slot again replaces its card instead of stacking a second one, so a config
+/// error that re-fires on every bad save stays a single card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalSlot {
+    ConfigError,
+    ThemeError,
+}
+
+impl LocalSlot {
+    /// Slot ids count down from the top of the range and the daemon's count up
+    /// from 1, so the two can never meet.
+    fn id(self) -> u32 {
+        u32::MAX - self as u32
+    }
+}
+
 /// Commands for the notification service.
 #[derive(Debug, Clone)]
 pub enum NotificationCommand {
@@ -75,49 +94,17 @@ pub enum NotificationCommand {
 }
 
 /// Event-driven notification service.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NotificationSubscriber {
     data: Mutable<NotificationData>,
-    status: Mutable<ServiceStatus>,
-    conn: Option<Connection>,
+    lifecycle: Lifecycle,
 }
 
 impl NotificationSubscriber {
-    /// Create the notification daemon and begin listening on D-Bus.
-    pub async fn new() -> anyhow::Result<Self> {
-        let conn = zbus::connection::Connection::session().await?;
-        let data = Mutable::new(NotificationData::default());
-        let status = Mutable::new(ServiceStatus::Initializing);
-        let server = NotificationServer::new(data.clone(), conn.clone());
-        conn.object_server().at(OBJECT_PATH, server).await?;
-
-        let dbus_proxy = DBusProxy::new(&conn).await?;
-        let flags = RequestNameFlags::AllowReplacement;
-        if dbus_proxy.request_name(NAME, flags.into()).await? == RequestNameReply::InQueue {
-            warn!("Bus name '{NAME}' already owned, notifications will be unavailable");
-            status.set(ServiceStatus::Unavailable);
-            return Ok(Self {
-                data,
-                status,
-                conn: None,
-            });
-        }
-
-        status.set(ServiceStatus::Active);
-        Ok(Self {
-            data,
-            status,
-            conn: Some(conn),
-        })
-    }
-
-    /// Fallback subscriber when D-Bus notification name is unavailable.
-    pub fn disabled() -> Self {
-        Self {
-            data: Mutable::new(NotificationData::default()),
-            status: Mutable::new(ServiceStatus::Unavailable),
-            conn: None,
-        }
+    /// Create the notification subscriber. The D-Bus daemon is claimed by
+    /// [`ManagedService::start`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn subscribe(&self) -> MutableSignalCloned<NotificationData> {
@@ -126,11 +113,6 @@ impl NotificationSubscriber {
 
     pub fn get(&self) -> NotificationData {
         self.data.get_cloned()
-    }
-
-    /// Get the current service status.
-    pub fn status(&self) -> ServiceStatus {
-        self.status.get_cloned()
     }
 
     pub fn latest_popup(&self) -> Option<Notification> {
@@ -144,6 +126,54 @@ impl NotificationSubscriber {
             .filter_map(|id| data.notifications.iter().find(|n| n.id == *id).cloned())
             .take(limit)
             .collect()
+    }
+
+    /// Post a notification from the shell itself. We *are* the notification
+    /// daemon, so it goes straight into the state rather than out over D-Bus -
+    /// which also means it still shows when the bus name went to someone else
+    /// or the service is off.
+    ///
+    /// It stays until dismissed: an error the user has not read yet is worth
+    /// more than a tidy popup stack.
+    pub fn post_local(&self, slot: LocalSlot, summary: String, body: String) {
+        let id = slot.id();
+        let notification = Notification {
+            id,
+            app_name: "GPUi Shell".to_string(),
+            summary,
+            body,
+            urgency: 2,
+            timeout_ms: 0,
+            timestamp_ms: Utc::now().timestamp_millis(),
+            ..Notification::default()
+        };
+
+        let mut data = self.data.lock_mut();
+        data.notifications.retain(|n| n.id != id);
+        data.popup_ids.retain(|n| *n != id);
+        data.notifications.insert(0, notification);
+        // Do-not-disturb still applies: it lands in the center, unread.
+        if !data.dnd {
+            data.popup_ids.insert(0, id);
+        }
+        data.recompute_unread();
+    }
+
+    /// Drop a slot's notification, once whatever it complained about is fixed.
+    /// Only that card goes - nothing else can hold a slot id - and when the
+    /// slot is empty nothing is touched at all: this runs on every good save,
+    /// and every write lock wakes every subscriber.
+    pub fn clear_local(&self, slot: LocalSlot) {
+        let id = slot.id();
+        let posted = self
+            .data
+            .lock_ref()
+            .notifications
+            .iter()
+            .any(|n| n.id == id);
+        if posted {
+            remove_notification(&self.data, id);
+        }
     }
 
     pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
@@ -192,11 +222,13 @@ impl NotificationSubscriber {
     }
 
     async fn emit_action_invoked(&self, id: u32, action_key: &str) {
-        if let Some(conn) = &self.conn
-            && let Ok(iface) = conn
-                .object_server()
-                .interface::<_, NotificationServer>(OBJECT_PATH)
-                .await
+        let Ok(conn) = crate::bus::session().await else {
+            return;
+        };
+        if let Ok(iface) = conn
+            .object_server()
+            .interface::<_, NotificationServer>(OBJECT_PATH)
+            .await
         {
             let ctx = iface.signal_emitter();
             let _ = NotificationServer::action_invoked(ctx, id, action_key).await;
@@ -204,8 +236,9 @@ impl NotificationSubscriber {
     }
 
     async fn dismiss_by_id(&self, id: u32) -> anyhow::Result<()> {
-        if let Some(conn) = &self.conn {
-            let proxy = NotificationsProxy::new(conn).await?;
+        if self.lifecycle.is_up() {
+            let conn = crate::bus::session().await?;
+            let proxy = NotificationsProxy::new(&conn).await?;
             let _ = proxy.close_notification(id).await;
         }
         remove_notification(&self.data, id);
@@ -213,9 +246,112 @@ impl NotificationSubscriber {
     }
 }
 
-impl Default for NotificationSubscriber {
-    fn default() -> Self {
-        Self::disabled()
+impl ManagedService for NotificationSubscriber {
+    fn name(&self) -> &'static str {
+        "Notifications"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    /// Notification bodies and their action labels are kept in history, so
+    /// they dominate what this service retains.
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<NotificationData>()
+            + data.popup_ids.len() * size_of::<u32>()
+            + data
+                .notifications
+                .iter()
+                .map(|notification| {
+                    size_of::<Notification>()
+                        + notification.app_name.len()
+                        + notification.app_icon.len()
+                        + notification.summary.len()
+                        + notification.body.len()
+                        + notification
+                            .app_icon_path
+                            .as_ref()
+                            .map_or(0, |path| path.as_os_str().len())
+                        + notification
+                            .image_path
+                            .as_ref()
+                            .map_or(0, |path| path.as_os_str().len())
+                        + notification
+                            .actions
+                            .iter()
+                            .map(|(key, label)| key.len() + label.len())
+                            .sum::<usize>()
+                })
+                .sum::<usize>()
+    }
+
+    fn start(&self) {
+        let token = self.lifecycle.begin();
+        let data = self.data.clone();
+
+        tokio::spawn(async move {
+            let conn = match crate::bus::session().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    warn!("Failed to connect to the session bus: {e}");
+                    token.error(e.to_string());
+                    return;
+                }
+            };
+
+            // A previous run may still own the object path.
+            let _ = conn
+                .object_server()
+                .remove::<NotificationServer, _>(OBJECT_PATH)
+                .await;
+
+            let server = NotificationServer::new(data, conn.clone());
+            if let Err(e) = conn.object_server().at(OBJECT_PATH, server).await {
+                warn!("Failed to serve the notification interface: {e}");
+                token.error(e.to_string());
+                return;
+            }
+
+            let flags = RequestNameFlags::AllowReplacement;
+            match DBusProxy::new(&conn).await {
+                Ok(proxy) => match proxy.request_name(NAME, flags.into()).await {
+                    Ok(RequestNameReply::InQueue) => {
+                        warn!("Bus name '{NAME}' already owned, notifications unavailable");
+                        token.set(ServiceStatus::Unavailable);
+                    }
+                    Ok(_) => token.active(),
+                    Err(e) => {
+                        warn!("Failed to request bus name '{NAME}': {e}");
+                        token.error(e.to_string());
+                    }
+                },
+                Err(e) => {
+                    warn!("Failed to reach the session bus: {e}");
+                    token.error(e.to_string());
+                }
+            }
+        });
+    }
+
+    /// Releases the bus name as well: a stopped notification daemon must let
+    /// another one take over.
+    fn stop(&self) {
+        self.lifecycle.stop();
+
+        tokio::spawn(async move {
+            let Ok(conn) = crate::bus::session().await else {
+                return;
+            };
+            let _ = conn
+                .object_server()
+                .remove::<NotificationServer, _>(OBJECT_PATH)
+                .await;
+            if let Ok(proxy) = DBusProxy::new(&conn).await {
+                let _ = proxy.release_name(NAME).await;
+            }
+        });
     }
 }
 
@@ -302,14 +438,20 @@ impl NotificationServer {
             .get("urgency")
             .and_then(|v| u8::try_from(v.clone()).ok())
             .unwrap_or(1);
-        let image_path =
-            hint_string(&hints, &["image-path", "image_path"]).map(|p| normalize_path(&p));
+        // Some senders (e.g. Chromium) write the icon/image to a temp file and
+        // unlink it shortly after sending the notification, so only keep paths
+        // that still exist by the time we parse the hints - otherwise gpui's
+        // asset cache logs a load error for a file that's already gone.
+        let image_path = hint_string(&hints, &["image-path", "image_path"])
+            .map(|p| normalize_path(&p))
+            .filter(|p| p.exists());
         let app_icon_path = if is_image_source(app_icon) {
-            Some(normalize_path(app_icon))
+            Some(normalize_path(app_icon)).filter(|p| p.exists())
         } else {
             hint_string(&hints, &["app_icon", "icon-path", "icon_path"])
                 .filter(|value| is_image_source(value))
                 .map(|p| normalize_path(&p))
+                .filter(|p| p.exists())
         };
         // Fallback: resolve named icon via XDG icon theme lookup
         let app_icon_path = app_icon_path.or_else(|| {
@@ -356,6 +498,9 @@ impl NotificationServer {
             data.notifications.retain(|n| n.id != id);
             data.popup_ids.retain(|n| *n != id);
             data.notifications.insert(0, notification);
+            if data.notifications.len() > MAX_NOTIFICATION_HISTORY {
+                data.notifications.truncate(MAX_NOTIFICATION_HISTORY);
+            }
             if !data.dnd {
                 data.popup_ids.insert(0, id);
             }
@@ -372,8 +517,8 @@ impl NotificationServer {
             let conn = self.conn.clone();
             let data = self.data.clone();
             let timer_generations = self.timer_generations.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(timeout_ms as u64));
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(timeout_ms as u64)).await;
 
                 let should_close = timer_generations
                     .lock()
@@ -394,20 +539,14 @@ impl NotificationServer {
                 }
 
                 // Emit NotificationClosed with reason 1 (expired)
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("failed to build tokio runtime for notification timeout");
-                rt.block_on(async move {
-                    if let Ok(iface) = conn
-                        .object_server()
-                        .interface::<_, NotificationServer>(OBJECT_PATH)
-                        .await
-                    {
-                        let ctx = iface.signal_emitter();
-                        let _ = NotificationServer::notification_closed(ctx, id, 1).await;
-                    }
-                });
+                if let Ok(iface) = conn
+                    .object_server()
+                    .interface::<_, NotificationServer>(OBJECT_PATH)
+                    .await
+                {
+                    let ctx = iface.signal_emitter();
+                    let _ = NotificationServer::notification_closed(ctx, id, 1).await;
+                }
             });
         }
 
@@ -527,14 +666,73 @@ trait Notifications {
 mod tests {
     use super::*;
 
+    /// A config error has to reach the center as one sticky card, and the next
+    /// one about the same file must replace it rather than stack - a bad file
+    /// gets saved repeatedly while it is being fixed.
+    #[test]
+    fn a_local_slot_holds_a_single_sticky_notification() {
+        let notifications = NotificationSubscriber::new();
+
+        notifications.post_local(LocalSlot::ConfigError, "first".into(), "body".into());
+        notifications.post_local(LocalSlot::ConfigError, "second".into(), "body".into());
+
+        let data = notifications.get();
+        assert_eq!(data.notifications.len(), 1);
+        assert_eq!(data.notifications[0].summary, "second");
+        assert_eq!(data.unread_count, 1);
+        // Never expires on its own, and sits above the daemon's ids.
+        assert_eq!(data.notifications[0].timeout_ms, 0);
+        assert_eq!(data.popup_ids, vec![u32::MAX]);
+
+        notifications.clear_local(LocalSlot::ConfigError);
+        assert!(notifications.get().notifications.is_empty());
+    }
+
+    /// A file that parses again clears its own card and nothing else: neither
+    /// the other file's, nor anything that came in over the bus.
+    #[test]
+    fn clearing_a_slot_leaves_every_other_notification_alone() {
+        let notifications = NotificationSubscriber::new();
+        notifications.post_local(LocalSlot::ConfigError, "config".into(), String::new());
+        notifications.post_local(LocalSlot::ThemeError, "theme".into(), String::new());
+        notifications
+            .data
+            .lock_mut()
+            .notifications
+            .push(Notification {
+                id: 7,
+                summary: "from an app on the bus".to_string(),
+                ..Notification::default()
+            });
+
+        notifications.clear_local(LocalSlot::ConfigError);
+        // The second call has nothing left to do, and must not take the
+        // neighbours with it.
+        notifications.clear_local(LocalSlot::ConfigError);
+
+        let surviving: Vec<u32> = notifications
+            .get()
+            .notifications
+            .iter()
+            .map(|n| n.id)
+            .collect();
+        assert_eq!(surviving, vec![LocalSlot::ThemeError.id(), 7]);
+    }
+
     #[test]
     fn plain_path_unchanged() {
-        assert_eq!(normalize_path("/home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+        assert_eq!(
+            normalize_path("/home/user/pic.png"),
+            PathBuf::from("/home/user/pic.png")
+        );
     }
 
     #[test]
     fn strips_file_scheme() {
-        assert_eq!(normalize_path("file:///home/user/pic.png"), PathBuf::from("/home/user/pic.png"));
+        assert_eq!(
+            normalize_path("file:///home/user/pic.png"),
+            PathBuf::from("/home/user/pic.png")
+        );
     }
 
     #[test]
@@ -547,7 +745,10 @@ mod tests {
 
     #[test]
     fn decodes_utf8_sequence() {
-        assert_eq!(normalize_path("/tmp/%C3%A9.png"), PathBuf::from("/tmp/é.png"));
+        assert_eq!(
+            normalize_path("/tmp/%C3%A9.png"),
+            PathBuf::from("/tmp/é.png")
+        );
     }
 
     #[test]

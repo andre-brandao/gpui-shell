@@ -16,6 +16,11 @@
   pkg-config,
   rustToolchain,
   matugen,
+  cargo-flamegraph,
+  perf,
+  heaptrack,
+  inferno,
+  gum,
   vulkan-loader,
   wayland,
   xorg,
@@ -36,6 +41,15 @@ mkShell rec {
 
     rustToolchain
     matugen
+
+    # Prompts in scripts/ (flamegraph.sh, heaptrack.sh, release.sh).
+    gum
+
+    # Profiling
+    cargo-flamegraph # scripts/flamegraph.sh
+    perf
+    heaptrack # scripts/heaptrack.sh
+    inferno # renders heaptrack's folded stacks
   ];
 
   nativeBuildInputs = [

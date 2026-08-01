@@ -2,11 +2,12 @@
 //!
 //! This module provides an event-driven subscriber for monitoring compositor state
 //! (workspaces, monitors, active window, keyboard layout) and executing commands.
-//! It supports multiple compositor backends (Hyprland, Niri).
+//! It supports multiple compositor backends (Hyprland, Niri, Mango).
 //!
 //! Uses incremental updates with direct Mutable mutation for efficiency.
 
 pub mod hyprland;
+pub mod mango;
 pub mod niri;
 pub mod types;
 
@@ -14,8 +15,10 @@ use anyhow::Result;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use tracing::info;
 
+use crate::lifecycle::{Lifecycle, ManagedService, ServiceMode};
 pub use types::{
-    ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Workspace,
+    ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Window,
+    WindowGeometry, Workspace,
 };
 
 /// Event-driven compositor subscriber.
@@ -29,6 +32,7 @@ pub use types::{
 pub struct CompositorSubscriber {
     data: Mutable<CompositorState>,
     backend: CompositorBackend,
+    lifecycle: Lifecycle,
 }
 
 impl CompositorSubscriber {
@@ -38,7 +42,7 @@ impl CompositorSubscriber {
     /// Returns an error if no supported compositor is detected.
     pub async fn new() -> Result<Self> {
         let backend = detect_backend().ok_or_else(|| {
-            anyhow::anyhow!("No supported compositor detected (Hyprland or Niri)")
+            anyhow::anyhow!("No supported compositor detected (Hyprland, Niri or Mango)")
         })?;
 
         info!("Detected compositor backend: {}", backend.name());
@@ -47,6 +51,7 @@ impl CompositorSubscriber {
         let initial_state = match backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
             CompositorBackend::Niri => niri::fetch_full_state()?,
+            CompositorBackend::Mango => mango::fetch_full_state()?,
         };
 
         let data = Mutable::new(initial_state);
@@ -55,9 +60,17 @@ impl CompositorSubscriber {
         match backend {
             CompositorBackend::Hyprland => hyprland::start_listener(data.clone()),
             CompositorBackend::Niri => niri::start_listener(data.clone()),
+            CompositorBackend::Mango => mango::start_listener(data.clone()),
         }
 
-        Ok(Self { data, backend })
+        let lifecycle = Lifecycle::new(ServiceMode::Eager);
+        lifecycle.begin().active();
+
+        Ok(Self {
+            data,
+            backend,
+            lifecycle,
+        })
     }
 
     /// Get a signal that emits when compositor state changes.
@@ -80,6 +93,7 @@ impl CompositorSubscriber {
         match self.backend {
             CompositorBackend::Hyprland => hyprland::execute_command(command),
             CompositorBackend::Niri => niri::execute_command(command),
+            CompositorBackend::Mango => mango::execute_command(command),
         }
     }
 
@@ -91,9 +105,62 @@ impl CompositorSubscriber {
         let new_state = match self.backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
             CompositorBackend::Niri => niri::fetch_full_state()?,
+            CompositorBackend::Mango => mango::fetch_full_state()?,
         };
         self.data.set(new_state);
         Ok(())
+    }
+}
+
+impl ManagedService for CompositorSubscriber {
+    fn name(&self) -> &'static str {
+        "Compositor"
+    }
+
+    fn lifecycle(&self) -> &Lifecycle {
+        &self.lifecycle
+    }
+
+    fn memory_bytes(&self) -> usize {
+        let data = self.data.lock_ref();
+        size_of::<CompositorState>()
+            + data.keyboard_layout.len()
+            + data.submap.as_ref().map_or(0, String::len)
+            + data
+                .workspaces
+                .iter()
+                .map(|ws| size_of::<Workspace>() + ws.name.len() + ws.monitor.len())
+                .sum::<usize>()
+            + data
+                .monitors
+                .iter()
+                .map(|monitor| size_of::<Monitor>() + monitor.name.len())
+                .sum::<usize>()
+            + data
+                .windows
+                .iter()
+                .map(|window| {
+                    size_of::<Window>()
+                        + window.id.len()
+                        + window.app_id.len()
+                        + window.title.len()
+                        + window.monitor.len()
+                })
+                .sum::<usize>()
+            + data.active_window.as_ref().map_or(0, |window| {
+                size_of::<ActiveWindow>()
+                    + window.title.len()
+                    + window.class.len()
+                    + window.address.len()
+            })
+    }
+
+    /// The shell has no meaning without a compositor connection, so this one
+    /// is brought up by [`CompositorSubscriber::new`] and shown read-only.
+    fn start(&self) {}
+
+    fn controllable(&self) -> bool {
+        false
     }
 }
 
@@ -103,6 +170,8 @@ fn detect_backend() -> Option<CompositorBackend> {
         Some(CompositorBackend::Hyprland)
     } else if niri::is_available() {
         Some(CompositorBackend::Niri)
+    } else if mango::is_available() {
+        Some(CompositorBackend::Mango)
     } else {
         None
     }

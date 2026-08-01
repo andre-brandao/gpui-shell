@@ -3,9 +3,9 @@
 //! Clicking the widget opens a detailed system information panel.
 
 use crate::panel::{PanelConfig, toggle_panel};
-use gpui::{AnyElement, App, Context, MouseButton, Size, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Size, Window, prelude::*, px};
 use services::SysInfoData;
-use ui::ActiveTheme;
+use ui::{ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, IconName};
 
 mod config;
 pub use config::SysInfoConfig;
@@ -19,34 +19,6 @@ use crate::state::watch;
 mod panel;
 pub use panel::SysInfoPanel;
 
-/// Nerd Font icons for system info
-pub mod icons {
-    // CPU icons
-    pub const CPU: &str = "󰻠"; // nf-md-chip
-    pub const CPU_HIGH: &str = ""; // nf-fa-fire
-
-    // Memory icons
-    pub const MEMORY: &str = "󰍛"; // nf-md-memory
-    pub const SWAP: &str = "󰾴"; // nf-md-swap_horizontal
-
-    // Temperature icons
-    pub const TEMP: &str = "󱃂"; // nf-md-thermometer
-    pub const TEMP_HOT: &str = "󰸁"; // nf-md-thermometer_high
-
-    // Disk icons
-    pub const DISK: &str = "󰋊"; // nf-md-harddisk
-    pub const DISK_FOLDER: &str = "󰉋"; // nf-md-folder
-
-    // Network icons
-    pub const NETWORK: &str = "󰛳"; // nf-md-network
-    pub const IP: &str = "󰩟"; // nf-md-ip_network
-    pub const DOWNLOAD: &str = "󰇚"; // nf-md-download
-    pub const UPLOAD: &str = "󰕒"; // nf-md-upload
-
-    // System/header icon
-    pub const SYSTEM: &str = ""; // nf-fa-server
-}
-
 /// SysInfo widget showing CPU and memory usage in the bar.
 pub struct SysInfo {
     subscriber: services::SysInfoSubscriber,
@@ -54,7 +26,7 @@ pub struct SysInfo {
 }
 
 struct SysInfoStat {
-    icon: &'static str,
+    icon: IconName,
     text: String,
     color: gpui::Hsla,
 }
@@ -77,12 +49,12 @@ impl SysInfo {
         }
     }
 
-    fn toggle_panel(&mut self, event: &gpui::MouseDownEvent, window: &Window, cx: &mut App) {
+    fn toggle_panel(&mut self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
         let panel_size = Size::new(px(350.0), px(450.0));
         let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, event, window, cx, panel_size);
+            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
         let config = PanelConfig {
             width: 350.0,
             height: 450.0,
@@ -96,19 +68,19 @@ impl SysInfo {
         });
     }
 
-    fn cpu_icon(&self) -> &'static str {
+    fn cpu_icon(&self) -> IconName {
         if self.data.cpu_usage >= 90 {
-            icons::CPU_HIGH
+            IconName::Flame
         } else {
-            icons::CPU
+            IconName::Cpu
         }
     }
 
-    fn memory_icon(&self) -> &'static str {
+    fn memory_icon(&self) -> IconName {
         if self.data.memory_usage >= 90 {
-            icons::SWAP
+            IconName::ArrowDownUp
         } else {
-            icons::MEMORY
+            IconName::MemoryStick
         }
     }
 
@@ -129,7 +101,7 @@ impl SysInfo {
             stats.push(SysInfoStat {
                 icon: self.cpu_icon(),
                 text: Self::usage_text(cpu_usage, is_vertical),
-                color: theme.status.from_percentage(cpu_usage),
+                color: theme.colors.status.from_percentage(cpu_usage),
             });
         }
 
@@ -138,7 +110,7 @@ impl SysInfo {
             stats.push(SysInfoStat {
                 icon: self.memory_icon(),
                 text: Self::usage_text(memory_usage, is_vertical),
-                color: theme.status.from_percentage(memory_usage),
+                color: theme.colors.status.from_percentage(memory_usage),
             });
         }
 
@@ -147,16 +119,16 @@ impl SysInfo {
         {
             stats.push(SysInfoStat {
                 icon: if temp >= 70 {
-                    icons::TEMP_HOT
+                    IconName::Flame
                 } else {
-                    icons::TEMP
+                    IconName::Thermometer
                 },
                 text: if is_vertical {
                     temp.to_string()
                 } else {
                     format!("{temp}°C")
                 },
-                color: theme.status.from_temperature(temp),
+                color: theme.colors.status.from_temperature(temp),
             });
         }
 
@@ -169,22 +141,19 @@ impl SysInfo {
         stats: Vec<SysInfoStat>,
         is_vertical: bool,
     ) -> AnyElement {
-        div()
-            .id("sysinfo-widget")
-            .flex()
-            .when(is_vertical, |el| el.flex_col())
-            .items_center()
-            .justify_center()
-            .gap(px(style::CHIP_GAP))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event, window, cx| {
-                    this.toggle_panel(event, window, cx);
-                }),
-            )
-            .children(stats.into_iter().map(|stat| {
-                style::bar_stat(cx.theme(), is_vertical, stat.icon, stat.text, stat.color)
+        ButtonLike::new("sysinfo-widget")
+            .style(ButtonStyle::Transparent)
+            .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
+                this.toggle_panel(event.position(), window, cx);
             }))
+            .child(
+                style::stack(is_vertical)
+                    .justify_center()
+                    .gap(px(style::CHIP_GAP))
+                    .children(stats.into_iter().map(|stat| {
+                        style::bar_stat(is_vertical, stat.icon, stat.text, stat.color)
+                    })),
+            )
             .into_any_element()
     }
 }

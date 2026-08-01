@@ -6,8 +6,10 @@
 use anyhow::Result;
 use futures_signals::signal::Mutable;
 use hyprland::{
-    data::{Client, Devices, Monitors, Workspace as HWorkspace, Workspaces},
-    dispatch::{Dispatch, DispatchType, MonitorIdentifier, WorkspaceIdentifierWithSpecial},
+    data::{Client, Clients, Devices, Monitors, Workspace as HWorkspace, Workspaces},
+    dispatch::{
+        Dispatch, DispatchType, MonitorIdentifier, WindowIdentifier, WorkspaceIdentifierWithSpecial,
+    },
     event_listener::EventListener,
     prelude::*,
 };
@@ -20,6 +22,51 @@ use super::types::{ActiveWindow, CompositorCommand, CompositorState, Monitor, Wo
 /// Check if Hyprland is available (running).
 pub fn is_available() -> bool {
     std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some()
+}
+
+/// Map a Hyprland `Client` into our generic `Window`, resolving its
+/// monitor id to a name via the already-fetched monitor list.
+fn map_client(c: Client, monitors: &[super::types::Monitor]) -> super::types::Window {
+    let monitor = c
+        .monitor
+        .and_then(|id| monitors.iter().find(|m| m.id == id))
+        .map(|m| m.name.clone())
+        .unwrap_or_default();
+
+    super::types::Window {
+        id: c.address.to_string(),
+        app_id: c.class,
+        title: c.title,
+        monitor,
+        workspace_id: c.workspace.id,
+        is_focused: false,
+        is_minimized: false,
+        geometry: Some(super::types::WindowGeometry {
+            x: c.at.0 as i32,
+            y: c.at.1 as i32,
+            width: c.size.0 as u32,
+            height: c.size.1 as u32,
+        }),
+    }
+}
+
+/// Refetch the full client list and replace `state.windows` with it.
+/// Called from the window opened/closed/moved event handlers, which don't
+/// carry enough information in their event payload to patch the list
+/// incrementally.
+fn refresh_windows(state: &mut super::types::CompositorState) {
+    if let Ok(clients) = Clients::get() {
+        let monitors = state.monitors.clone();
+        let focused_address = state.active_window.as_ref().map(|w| w.address.clone());
+        state.windows = clients
+            .into_iter()
+            .map(|c| {
+                let mut w = map_client(c, &monitors);
+                w.is_focused = Some(&w.id) == focused_address.as_ref();
+                w
+            })
+            .collect();
+    }
 }
 
 /// Execute a compositor command synchronously.
@@ -53,6 +100,11 @@ pub fn execute_command(cmd: CompositorCommand) -> Result<()> {
                 hyprland::ctl::switch_xkb_layout::SwitchXKBLayoutCmdTypes::Next,
             )?;
         }
+        CompositorCommand::FocusWindow(address) => {
+            Dispatch::call(DispatchType::FocusWindow(WindowIdentifier::Address(
+                hyprland::shared::Address::new(address),
+            )))?;
+        }
         CompositorCommand::Custom(dispatcher, args) => {
             Dispatch::call(DispatchType::Custom(&dispatcher, &args))?;
         }
@@ -77,7 +129,7 @@ pub fn fetch_full_state() -> Result<CompositorState> {
         })
         .collect();
 
-    let monitors = Monitors::get()?
+    let monitors: Vec<Monitor> = Monitors::get()?
         .into_iter()
         .map(|m| Monitor {
             id: m.id,
@@ -90,6 +142,11 @@ pub fn fetch_full_state() -> Result<CompositorState> {
             y: m.y,
             scale: m.scale,
         })
+        .collect();
+
+    let windows: Vec<super::types::Window> = Clients::get()?
+        .into_iter()
+        .map(|c| map_client(c, &monitors))
         .collect();
 
     let active_workspace_id = HWorkspace::get_active().ok().map(|w| w.id);
@@ -115,6 +172,7 @@ pub fn fetch_full_state() -> Result<CompositorState> {
         monitors,
         active_workspace_id,
         active_window,
+        windows,
         keyboard_layout,
         submap: None,
     })
@@ -196,6 +254,10 @@ fn run_listener(data: Mutable<CompositorState>) -> Result<()> {
         listener.add_active_window_changed_handler(move |evt| {
             debug!("Active window changed: {:?}", evt);
             let mut state = data.lock_mut();
+            let focused_address = evt.as_ref().map(|w| w.address.to_string());
+            for w in state.windows.iter_mut() {
+                w.is_focused = Some(&w.id) == focused_address.as_ref();
+            }
             state.active_window = evt.map(|w| ActiveWindow {
                 title: w.title,
                 class: w.class,
@@ -221,6 +283,7 @@ fn run_listener(data: Mutable<CompositorState>) -> Result<()> {
             {
                 ws.windows = ws.windows.saturating_add(1);
             }
+            refresh_windows(&mut state);
         });
     }
 
@@ -238,6 +301,7 @@ fn run_listener(data: Mutable<CompositorState>) -> Result<()> {
                         ws.windows = ws_data.windows;
                     }
                 }
+                refresh_windows(&mut state);
             }
         });
     }
@@ -255,6 +319,7 @@ fn run_listener(data: Mutable<CompositorState>) -> Result<()> {
                         ws.windows = ws_data.windows;
                     }
                 }
+                refresh_windows(&mut state);
             }
         });
     }

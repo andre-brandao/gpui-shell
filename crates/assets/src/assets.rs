@@ -3,18 +3,25 @@ use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 
-/// Embed application assets for GPUI Component.
+/// The shell's embedded asset bundle.
 ///
-/// This assets provides icons svg files for [IconName](https://docs.rs/gpui-component/latest/gpui_component/enum.IconName.html).
+/// Ships the Lucide icon set under `icons/`, which is what `ui::IconName`
+/// resolves against. The embed root is the crate directory rather than
+/// `icons/` so the keys keep their `icons/` prefix - `IconName::path()`
+/// asks for `icons/<name>.svg`, and a mismatch here makes every icon
+/// silently resolve to nothing.
 ///
-/// ```
-/// use gpui::*;
-/// use assets::Assets;
-/// let app = Application::new().with_assets(Assets);
+/// Register it at startup:
+///
+/// ```no_run
+/// use gpui_platform::application;
+/// application().with_assets(assets::Assets).run(|_cx| {});
 /// ```
 #[derive(RustEmbed)]
-#[folder = "icons"]
-#[include = "./**/*.svg"]
+#[folder = "."]
+#[include = "icons/**/*.svg"]
+#[exclude = "icons/LICENSE"]
+#[exclude = "icons/README.md"]
 pub struct Assets;
 
 impl AssetSource for Assets {

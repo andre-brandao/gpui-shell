@@ -11,12 +11,14 @@ use std::sync::{
 use gpui::{AnyElement, App, div, img, prelude::*, px};
 use services::WallpaperCommand;
 use ui::{
-    ActiveTheme, Color, Label, LabelCommon, LabelSize, ListItem, ListItemSpacing, Switch,
-    SwitchSize, spacing,
+    ActiveTheme, Clickable, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem,
+    ListItemSpacing, Spacing, Switch, SwitchSize, TextSize, Toggleable,
 };
 
 use self::config::WallpaperConfig;
-use crate::launcher::view::{LauncherView, ViewContext, render_footer_hints};
+use ui::patterns::footer_hints;
+
+use crate::launcher::view::{LauncherView, ViewContext};
 use crate::state::AppState;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
@@ -32,6 +34,10 @@ const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp"];
 pub struct WallpaperView {
     prefix: String,
     directory: PathBuf,
+    /// Entries matching the current query, refreshed once per frame by
+    /// `update_matches`. Held rather than recomputed per row because
+    /// building it rescans the wallpaper directory off disk.
+    matches: Vec<WallpaperEntry>,
     matugen_type: String,
     matugen_source_color_index: usize,
     matugen_enabled: Arc<AtomicBool>,
@@ -44,6 +50,7 @@ impl WallpaperView {
         Self {
             prefix: config.prefix.clone(),
             directory,
+            matches: Vec::new(),
             matugen_type: "scheme-tonal-spot".into(),
             matugen_source_color_index: 0,
             matugen_enabled: Arc::new(AtomicBool::new(true)),
@@ -63,7 +70,7 @@ impl WallpaperView {
         matugen_source_color_index: usize,
         cx: &mut App,
     ) {
-        use ui::{Base16Colors, Theme};
+        use ui::{Base16Palette, Theme};
 
         // Always set the wallpaper first
         AppState::wallpaper(cx).dispatch(WallpaperCommand::SetWallpaper(path.clone()));
@@ -82,9 +89,9 @@ impl WallpaperView {
                 let result = cx
                     .background_executor()
                     .spawn(async move {
-                        Base16Colors::generate_from_wallpaper(
+                        Base16Palette::generate_from_wallpaper(
                             &path,
-                            &mode,
+                            mode,
                             &scheme_type,
                             source_index,
                         )
@@ -92,10 +99,13 @@ impl WallpaperView {
                     .await;
 
                 match result {
-                    Ok(theme) => {
-                        tracing::debug!("Matugen theme generated for: {}", path_display);
-                        // Apply the generated theme
-                        let _ = cx.update(|cx| {
+                    Ok(palette) => {
+                        tracing::debug!("Matugen palette generated for: {}", path_display);
+                        // Swap in the generated palette, keeping the user's
+                        // font size and any token overrides.
+                        cx.update(|cx| {
+                            let mut theme = cx.theme().clone();
+                            theme.set_palette("Wallpaper", palette);
                             Theme::set(theme, cx);
                         });
                     }
@@ -174,25 +184,29 @@ impl LauncherView for WallpaperView {
         "Wallpaper"
     }
 
-    fn icon(&self) -> &'static str {
-        "󰸉"
+    fn icon(&self) -> IconName {
+        IconName::Image
     }
 
     fn description(&self) -> &'static str {
         "Browse and set wallpapers"
     }
 
-    fn match_count(&self, vx: &ViewContext, _cx: &App) -> usize {
-        filtered_entries(&self.directory, vx.query).len()
+    fn update_matches(&mut self, vx: &ViewContext, _cx: &App) {
+        self.matches = filtered_entries(&self.directory, vx.query);
+    }
+
+    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
+        self.matches.len()
     }
 
     fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
         let theme = cx.theme();
-        let text_primary = theme.text.primary;
-        let text_muted = theme.text.muted;
-        let accent_primary = theme.accent.primary;
-        let bg_secondary = theme.bg.secondary;
-        let border = theme.border.default;
+        let text_primary = theme.colors.text;
+        let text_muted = theme.colors.text_muted;
+        let accent_primary = theme.colors.accent;
+        let bg_secondary = theme.colors.surface_background;
+        let border = theme.colors.border;
 
         let enabled = self.matugen_enabled.load(Ordering::Relaxed);
         let dark_mode = self.matugen_dark_mode.load(Ordering::Relaxed);
@@ -213,13 +227,13 @@ impl LauncherView for WallpaperView {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .px(px(spacing::LG))
-                        .py(px(spacing::MD))
+                        .px(Spacing::XLarge.pixels())
+                        .py(Spacing::Large.pixels())
                         .child(
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(spacing::MD))
+                                .gap(Spacing::Large.pixels())
                                 // Icon indicator
                                 .child(
                                     div()
@@ -232,15 +246,17 @@ impl LauncherView for WallpaperView {
                                         .bg(if enabled {
                                             accent_primary
                                         } else {
-                                            theme.interactive.default
+                                            theme.colors.element_background
                                         })
-                                        .text_color(if enabled {
-                                            theme.bg.primary
-                                        } else {
-                                            text_muted
-                                        })
-                                        .text_base()
-                                        .child("󱥚"),
+                                        .child(
+                                            Icon::new(IconName::Palette)
+                                                .size(IconSize::Small)
+                                                .color(Color::Custom(if enabled {
+                                                    theme.colors.background
+                                                } else {
+                                                    text_muted
+                                                })),
+                                        ),
                                 )
                                 .child(
                                     div()
@@ -262,11 +278,11 @@ impl LauncherView for WallpaperView {
                                 ),
                         )
                         .child(
-                            Switch::new("matugen-toggle")
-                                .checked(enabled)
+                            Switch::new("matugen-toggle", enabled)
                                 .size(SwitchSize::Medium)
                                 .on_click(move |checked, _, _cx| {
-                                    matugen_enabled_atomic.store(*checked, Ordering::Relaxed);
+                                    matugen_enabled_atomic
+                                        .store(checked.selected(), Ordering::Relaxed);
                                 }),
                         ),
                 )
@@ -277,48 +293,45 @@ impl LauncherView for WallpaperView {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .px(px(spacing::LG))
-                            .pb(px(spacing::MD))
-                            .pt(px(spacing::XS))
+                            .px(Spacing::XLarge.pixels())
+                            .pb(Spacing::Large.pixels())
+                            .pt(Spacing::XSmall.pixels())
                             .child(
-                                div().flex().items_center().gap(px(spacing::SM)).child(
-                                    div().text_color(text_muted).text_xs().child("Theme Mode"),
-                                ),
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(Spacing::Medium.pixels())
+                                    .child(
+                                        div().text_color(text_muted).text_xs().child("Theme Mode"),
+                                    ),
                             )
                             .child(
                                 div()
                                     .flex()
                                     .items_center()
-                                    .gap(px(spacing::SM))
+                                    .gap(Spacing::Medium.pixels())
+                                    .child(Icon::new(IconName::Sun).size(IconSize::XSmall).color(
+                                        Color::Custom(if dark_mode {
+                                            text_muted
+                                        } else {
+                                            accent_primary
+                                        }),
+                                    ))
                                     .child(
-                                        div()
-                                            .text_color(if dark_mode {
-                                                text_muted
-                                            } else {
-                                                accent_primary
-                                            })
-                                            .text_xs()
-                                            .child("󰖨"),
-                                    )
-                                    .child(
-                                        Switch::new("matugen-dark-mode-toggle")
-                                            .checked(dark_mode)
+                                        Switch::new("matugen-dark-mode-toggle", dark_mode)
                                             .size(SwitchSize::Small)
                                             .on_click(move |checked, _, _cx| {
                                                 matugen_dark_mode_atomic
-                                                    .store(*checked, Ordering::Relaxed);
+                                                    .store(checked.selected(), Ordering::Relaxed);
                                             }),
                                     )
-                                    .child(
-                                        div()
-                                            .text_color(if dark_mode {
-                                                accent_primary
-                                            } else {
-                                                text_muted
-                                            })
-                                            .text_xs()
-                                            .child("󰖔"),
-                                    ),
+                                    .child(Icon::new(IconName::Moon).size(IconSize::XSmall).color(
+                                        Color::Custom(if dark_mode {
+                                            accent_primary
+                                        } else {
+                                            text_muted
+                                        }),
+                                    )),
                             ),
                     )
                 })
@@ -326,16 +339,15 @@ impl LauncherView for WallpaperView {
         )
     }
 
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement {
-        let entries = filtered_entries(&self.directory, vx.query);
-        let Some(entry) = entries.get(index) else {
+    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
+        let Some(entry) = self.matches.get(index) else {
             return div().into_any_element();
         };
 
         let theme = cx.theme();
         let path_for_click = entry.path.clone();
         let preview_path = entry.path.clone();
-        let interactive_default = theme.interactive.default;
+        let interactive_default = theme.colors.element_background;
 
         // Clone Arc fields for closure
         let matugen_enabled = Arc::clone(&self.matugen_enabled);
@@ -377,19 +389,18 @@ impl LauncherView for WallpaperView {
                     .flex()
                     .flex_col()
                     .gap(px(1.))
-                    .child(Label::new(entry.name.clone()).size(LabelSize::Default))
+                    .child(Label::new(entry.name.clone()).size(TextSize::Default))
                     .child(
                         Label::new(extension)
-                            .size(LabelSize::XSmall)
+                            .size(TextSize::XSmall)
                             .color(Color::Muted),
                     ),
             )
             .into_any_element()
     }
 
-    fn on_select(&self, index: usize, vx: &ViewContext, cx: &mut App) -> bool {
-        let entries = filtered_entries(&self.directory, vx.query);
-        if let Some(entry) = entries.get(index) {
+    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
+        if let Some(entry) = self.matches.get(index) {
             Self::apply_wallpaper(
                 entry.path.clone(),
                 &self.matugen_enabled,
@@ -405,6 +416,6 @@ impl LauncherView for WallpaperView {
     }
 
     fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        render_footer_hints(vec![("Apply", "Enter"), ("Close", "Esc")], cx)
+        footer_hints(vec![("Apply", "Enter"), ("Close", "Esc")], cx)
     }
 }

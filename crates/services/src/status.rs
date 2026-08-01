@@ -13,6 +13,8 @@ pub enum ServiceStatus {
     Initializing,
     /// Service stopped due to error.
     Error(Option<String>),
+    /// Not started, or stopped on request.
+    Stopped,
     /// Service intentionally disabled or unavailable.
     Unavailable,
 }
@@ -23,22 +25,13 @@ impl ServiceStatus {
         matches!(self, ServiceStatus::Active)
     }
 
-    /// Get a Nerd Font icon representing the status.
-    pub fn icon(&self) -> &'static str {
-        match self {
-            ServiceStatus::Active => "󰄬",       // Check mark
-            ServiceStatus::Initializing => "󰥔", // Loading spinner
-            ServiceStatus::Error(_) => "󰅚",     // Error X
-            ServiceStatus::Unavailable => "󰪎",  // Disabled
-        }
-    }
-
     /// Get a human-readable label for the status.
     pub fn label(&self) -> &'static str {
         match self {
             ServiceStatus::Active => "Active",
             ServiceStatus::Initializing => "Starting",
             ServiceStatus::Error(_) => "Error",
+            ServiceStatus::Stopped => "Stopped",
             ServiceStatus::Unavailable => "Unavailable",
         }
     }

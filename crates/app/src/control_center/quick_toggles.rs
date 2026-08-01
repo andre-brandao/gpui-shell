@@ -4,11 +4,9 @@
 
 use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand};
-use ui::{ActiveTheme, icon_size, radius, spacing};
+use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
 
 use crate::state::AppState;
-
-use super::icons;
 
 /// Which section is currently expanded
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -81,20 +79,20 @@ pub fn render_quick_toggles(
     div()
         .flex()
         .flex_col()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .w_full()
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .w_full()
                 .child(render_simple_module(
                     "mic-toggle",
                     if mic_muted {
-                        icons::MICROPHONE_MUTE
+                        IconName::MicOff
                     } else {
-                        icons::MICROPHONE
+                        IconName::Mic
                     },
                     "Mic",
                     mic_status,
@@ -106,7 +104,7 @@ pub fn render_quick_toggles(
                 ))
                 .child(render_status_module(
                     "cam-status",
-                    icons::CAMERA,
+                    IconName::Camera,
                     "Cam",
                     cam_status,
                     cam_active,
@@ -117,14 +115,14 @@ pub fn render_quick_toggles(
             div()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
+                .gap(Spacing::Medium.pixels())
                 .w_full()
                 .child(render_expandable_module(
                     "wifi-toggle",
                     if wifi_enabled {
-                        icons::WIFI
+                        IconName::Wifi
                     } else {
-                        icons::WIFI_OFF
+                        IconName::WifiOff
                     },
                     "WiFi",
                     wifi_status,
@@ -145,9 +143,9 @@ pub fn render_quick_toggles(
                 .child(render_expandable_module(
                     "bt-toggle",
                     if bt_active {
-                        icons::BLUETOOTH
+                        IconName::Bluetooth
                     } else {
-                        icons::BLUETOOTH_OFF
+                        IconName::BluetoothOff
                     },
                     "Bluetooth",
                     bt_status,
@@ -171,7 +169,7 @@ pub fn render_quick_toggles(
 #[allow(clippy::too_many_arguments)]
 fn render_expandable_module(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     status: String,
     active: bool,
@@ -182,13 +180,13 @@ fn render_expandable_module(
 ) -> impl IntoElement {
     let theme = cx.theme();
 
-    let bg_secondary = theme.bg.secondary;
-    let border_subtle = theme.border.subtle;
-    let interactive_hover = theme.interactive.hover;
-    let accent_primary = theme.accent.primary;
-    let text_primary = theme.text.primary;
-    let text_secondary = theme.text.secondary;
-    let text_muted = theme.text.muted;
+    let bg_secondary = theme.colors.surface_background;
+    let border_subtle = theme.colors.border_variant;
+    let interactive_hover = theme.colors.element_hover;
+    let accent_primary = theme.colors.accent;
+    let text_primary = theme.colors.text;
+    let text_secondary = theme.colors.text;
+    let text_muted = theme.colors.text_muted;
 
     let border_color = if expanded {
         accent_primary
@@ -202,9 +200,9 @@ fn render_expandable_module(
         .id(id)
         .flex()
         .items_center()
-        .gap(px(spacing::XS))
+        .gap(Spacing::XSmall.pixels())
         .flex_1()
-        .rounded(px(radius::MD))
+        .rounded(Radius::Medium.pixels())
         .border_1()
         .border_color(border_color)
         .bg(bg_secondary)
@@ -214,19 +212,18 @@ fn render_expandable_module(
                 .flex_1()
                 .flex()
                 .items_center()
-                .gap(px(spacing::SM))
-                .px(px(spacing::SM))
-                .py(px(spacing::XS))
+                .gap(Spacing::Medium.pixels())
+                .px(Spacing::Medium.pixels())
+                .py(Spacing::XSmall.pixels())
                 .cursor_pointer()
                 .hover(move |s| s.bg(interactive_hover))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     on_toggle(cx);
                 })
                 .child(
-                    div()
-                        .text_size(px(icon_size::SM))
-                        .text_color(icon_color)
-                        .child(icon),
+                    Icon::new(icon)
+                        .size(IconSize::XSmall)
+                        .color(Color::Custom(icon_color)),
                 )
                 .child(
                     div()
@@ -235,13 +232,13 @@ fn render_expandable_module(
                         .gap(px(2.))
                         .child(
                             div()
-                                .text_size(theme.font_sizes.xs)
+                                .text_size(TextSize::XSmall.rems())
                                 .text_color(text_primary)
                                 .child(label),
                         )
                         .child(
                             div()
-                                .text_size(theme.font_sizes.xs)
+                                .text_size(TextSize::XSmall.rems())
                                 .text_color(status_color)
                                 .child(status),
                         ),
@@ -260,14 +257,13 @@ fn render_expandable_module(
                     on_expand(cx);
                 })
                 .child(
-                    div()
-                        .text_size(px(icon_size::SM))
-                        .text_color(text_muted)
-                        .child(if expanded {
-                            icons::CHEVRON_UP
-                        } else {
-                            icons::CHEVRON_DOWN
-                        }),
+                    Icon::new(if expanded {
+                        IconName::ChevronUp
+                    } else {
+                        IconName::ChevronDown
+                    })
+                    .size(IconSize::XSmall)
+                    .color(Color::Muted),
                 ),
         )
 }
@@ -275,7 +271,7 @@ fn render_expandable_module(
 #[allow(clippy::too_many_arguments)]
 fn render_simple_module(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     status: &'static str,
     active: bool,
@@ -284,22 +280,22 @@ fn render_simple_module(
 ) -> impl IntoElement {
     let theme = cx.theme();
 
-    let bg_secondary = theme.bg.secondary;
-    let border_subtle = theme.border.subtle;
-    let interactive_hover = theme.interactive.hover;
-    let accent_primary = theme.accent.primary;
-    let text_primary = theme.text.primary;
-    let text_muted = theme.text.muted;
+    let bg_secondary = theme.colors.surface_background;
+    let border_subtle = theme.colors.border_variant;
+    let interactive_hover = theme.colors.element_hover;
+    let accent_primary = theme.colors.accent;
+    let text_primary = theme.colors.text;
+    let text_muted = theme.colors.text_muted;
 
     div()
         .id(id)
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .flex_1()
-        .px(px(spacing::SM))
-        .py(px(spacing::XS))
-        .rounded(px(radius::MD))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::XSmall.pixels())
+        .rounded(Radius::Medium.pixels())
         .border_1()
         .border_color(border_subtle)
         .bg(bg_secondary)
@@ -309,10 +305,13 @@ fn render_simple_module(
             on_click(cx);
         })
         .child(
-            div()
-                .text_size(px(icon_size::SM))
-                .text_color(if active { accent_primary } else { text_muted })
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(if active {
+                    accent_primary
+                } else {
+                    text_muted
+                })),
         )
         .child(
             div()
@@ -321,13 +320,13 @@ fn render_simple_module(
                 .gap(px(2.))
                 .child(
                     div()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(text_primary)
                         .child(label),
                 )
                 .child(
                     div()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(text_muted)
                         .child(status),
                 ),
@@ -336,7 +335,7 @@ fn render_simple_module(
 
 fn render_status_module(
     id: &'static str,
-    icon: &'static str,
+    icon: IconName,
     label: &'static str,
     status: &'static str,
     active: bool,
@@ -344,29 +343,32 @@ fn render_status_module(
 ) -> impl IntoElement {
     let theme = cx.theme();
 
-    let bg_secondary = theme.bg.secondary;
-    let border_subtle = theme.border.subtle;
-    let text_primary = theme.text.primary;
-    let text_muted = theme.text.muted;
-    let status_warning = theme.status.warning;
+    let bg_secondary = theme.colors.surface_background;
+    let border_subtle = theme.colors.border_variant;
+    let text_primary = theme.colors.text;
+    let text_muted = theme.colors.text_muted;
+    let status_warning = theme.colors.status.warning;
 
     div()
         .id(id)
         .flex()
         .items_center()
-        .gap(px(spacing::SM))
+        .gap(Spacing::Medium.pixels())
         .flex_1()
-        .px(px(spacing::SM))
-        .py(px(spacing::XS))
-        .rounded(px(radius::MD))
+        .px(Spacing::Medium.pixels())
+        .py(Spacing::XSmall.pixels())
+        .rounded(Radius::Medium.pixels())
         .border_1()
         .border_color(border_subtle)
         .bg(bg_secondary)
         .child(
-            div()
-                .text_size(px(icon_size::SM))
-                .text_color(if active { status_warning } else { text_muted })
-                .child(icon),
+            Icon::new(icon)
+                .size(IconSize::XSmall)
+                .color(Color::Custom(if active {
+                    status_warning
+                } else {
+                    text_muted
+                })),
         )
         .child(
             div()
@@ -375,13 +377,13 @@ fn render_status_module(
                 .gap(px(2.))
                 .child(
                     div()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(text_primary)
                         .child(label),
                 )
                 .child(
                     div()
-                        .text_size(theme.font_sizes.xs)
+                        .text_size(TextSize::XSmall.rems())
                         .text_color(text_muted)
                         .child(status),
                 ),
