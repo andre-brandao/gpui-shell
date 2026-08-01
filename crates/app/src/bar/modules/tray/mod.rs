@@ -10,6 +10,7 @@ use gpui::{
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
+use std::collections::HashMap;
 use std::sync::Arc;
 use ui::patterns::PanelSurface;
 use ui::{
@@ -22,10 +23,23 @@ use crate::config::{ActiveConfig, Config};
 use crate::state::AppState;
 use crate::state::watch;
 
+/// A tray pixmap turned into an image GPUI can draw, kept across renders.
+struct CachedIcon {
+    /// The pixel buffer this was built from, to notice when the icon changes.
+    source: Arc<Vec<u8>>,
+    image: Arc<RenderImage>,
+}
+
 /// System tray widget that displays tray icons.
 pub struct Tray {
     subscriber: services::TraySubscriber,
     data: TrayData,
+    /// One image per item. GPUI uploads a `RenderImage` into the window's
+    /// sprite atlas keyed by the image's id, and every `RenderImage::new` takes
+    /// a fresh id - so building one per render (the bar repaints every time the
+    /// clock ticks) grew the atlas by a page every few minutes. Entries leave
+    /// the atlas only through `App::drop_image`; see `release_stale_icons`.
+    icons: HashMap<String, CachedIcon>,
 }
 
 impl Tray {
@@ -36,11 +50,88 @@ impl Tray {
 
         // Subscribe to tray data changes
         watch(cx, subscriber.subscribe(), |this, new_data, cx| {
+            this.release_stale_icons(&new_data, cx);
             this.data = new_data;
             cx.notify();
         });
 
-        Self { subscriber, data }
+        // The bar rebuilds its modules on a config reload, so hand back what
+        // this one is still holding rather than stranding it in the atlas.
+        cx.on_release(|this, cx| {
+            for cached in std::mem::take(&mut this.icons).into_values() {
+                cx.drop_image(cached.image, None);
+            }
+        })
+        .detach();
+
+        Self {
+            subscriber,
+            data,
+            icons: HashMap::new(),
+        }
+    }
+
+    /// Give GPUI back the atlas tiles for the icons this update retires.
+    ///
+    /// Dropping a `RenderImage` does not free its sprite-atlas entry - only
+    /// [`App::drop_image`] does - so an item that vanished and an icon the app
+    /// swapped out both have to be released here, or their tile stays for the
+    /// rest of the session.
+    fn release_stale_icons(&mut self, new_data: &TrayData, cx: &mut App) {
+        self.icons.retain(|name, cached| {
+            let still_drawn = new_data.items.iter().any(|item| {
+                item.name == *name
+                    && matches!(
+                        &item.icon,
+                        Some(TrayIcon::Pixmap { data, .. }) if Arc::ptr_eq(data, &cached.source)
+                    )
+            });
+
+            if !still_drawn {
+                cx.drop_image(cached.image.clone(), None);
+            }
+
+            still_drawn
+        });
+    }
+
+    /// The item's pixmap as a GPUI image, decoded once per icon.
+    fn pixmap_image(
+        &mut self,
+        item_name: &str,
+        width: u32,
+        height: u32,
+        data: &Arc<Vec<u8>>,
+    ) -> Option<Arc<RenderImage>> {
+        if let Some(cached) = self.icons.get(item_name)
+            && Arc::ptr_eq(&cached.source, data)
+        {
+            return Some(cached.image.clone());
+        }
+
+        // A buffer that does not match the stated size cannot be drawn. Bail
+        // before copying it, or the conversion below runs again every repaint.
+        if data.len() < width as usize * height as usize * 4 {
+            return None;
+        }
+
+        // Convert RGBA to BGRA
+        let mut bgra = data.to_vec();
+        for pixel in bgra.as_chunks_mut::<4>().0 {
+            pixel.swap(0, 2);
+        }
+
+        let buffer = RgbaImage::from_raw(width, height, bgra)?;
+        let image = Arc::new(RenderImage::new(vec![Frame::new(buffer)]));
+        self.icons.insert(
+            item_name.to_string(),
+            CachedIcon {
+                source: data.clone(),
+                image: image.clone(),
+            },
+        );
+
+        Some(image)
     }
 
     /// Handle left-clicking on a tray item.
@@ -89,7 +180,7 @@ impl Tray {
     }
 
     fn render_tray_item(
-        &self,
+        &mut self,
         item: TrayItem,
         icon_size: f32,
         item_size: f32,
@@ -97,23 +188,22 @@ impl Tray {
     ) -> AnyElement {
         let aux_item_name = item.name.clone();
 
-        let icon_element: AnyElement = if let Some((w, h, data)) = item.icon_pixmap() {
-            let mut bgra = data.to_vec();
-            for pixel in bgra.as_chunks_mut::<4>().0 {
-                pixel.swap(0, 2);
-            }
-            if let Some(buffer) = RgbaImage::from_raw(w, h, bgra) {
-                let frame = Frame::new(buffer);
-                let render_img = Arc::new(RenderImage::new(vec![frame]));
-                img(render_img).size(px(icon_size)).into_any_element()
-            } else {
-                render_icon_name(get_icon_name("", item.id.as_deref()), icon_size)
-            }
+        let pixmap = match &item.icon {
+            Some(TrayIcon::Pixmap {
+                width,
+                height,
+                data,
+            }) => self.pixmap_image(&item.name, *width, *height, data),
+            _ => None,
+        };
+
+        let icon_element: AnyElement = if let Some(image) = pixmap {
+            img(image).size(px(icon_size)).into_any_element()
         } else {
             let name = match &item.icon {
                 Some(TrayIcon::Name(name)) => get_icon_name(name, item.id.as_deref()),
-                None => get_icon_name("", item.id.as_deref()),
-                Some(TrayIcon::Pixmap { .. }) => unreachable!(),
+                // No name, or a pixmap that would not decode.
+                _ => get_icon_name("", item.id.as_deref()),
             };
             render_icon_name(name, icon_size)
         };
@@ -151,7 +241,7 @@ impl Tray {
     }
 
     fn render_tray_strip(
-        &self,
+        &mut self,
         items: Vec<TrayItem>,
         icon_size: f32,
         item_size: f32,
@@ -205,7 +295,7 @@ impl Render for Tray {
 
 /// Panel content for displaying a tray item's menu.
 struct TrayMenuPanel {
-    menu: MenuLayout,
+    menu: Arc<MenuLayout>,
     item_name: String,
     subscriber: services::TraySubscriber,
     /// Track which submenus are expanded (by menu ID)
@@ -214,7 +304,7 @@ struct TrayMenuPanel {
 
 impl TrayMenuPanel {
     fn new(
-        menu: MenuLayout,
+        menu: Arc<MenuLayout>,
         item_name: String,
         subscriber: services::TraySubscriber,
         cx: &mut Context<Self>,

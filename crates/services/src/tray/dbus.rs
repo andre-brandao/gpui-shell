@@ -265,6 +265,12 @@ pub trait StatusNotifierItem {
     #[zbus(property)]
     fn tooltip(&self) -> zbus::Result<(String, Vec<IconPixmap>, String, String)>;
 
+    /// Emitted when the icon changes. Apps signal this instead of, or as well
+    /// as, a PropertiesChanged on IconPixmap/IconName - the tray listener
+    /// watches both.
+    #[zbus(signal)]
+    fn new_icon(&self) -> zbus::Result<()>;
+
     /// Left-click activation.
     fn activate(&self, x: i32, y: i32) -> zbus::Result<()>;
 

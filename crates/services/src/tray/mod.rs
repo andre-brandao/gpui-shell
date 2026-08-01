@@ -17,8 +17,15 @@ use futures_signals::signal::{Mutable, MutableSignalCloned};
 use futures_util::StreamExt;
 use futures_util::stream::select_all;
 use tracing::{debug, error, info};
+use zbus::proxy::CacheProperties;
 
 use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
+
+/// Interface the item proxies below talk to.
+const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
+
+/// Properties whose change means the icon has to be re-read.
+const ICON_PROPERTIES: [&str; 2] = ["IconPixmap", "IconName"];
 
 /// Icon data for a tray item.
 #[derive(Debug, Clone)]
@@ -44,34 +51,13 @@ pub struct TrayItem {
     pub id: Option<String>,
     /// Icon for the tray item.
     pub icon: Option<TrayIcon>,
-    /// Menu layout.
-    pub menu: Option<MenuLayout>,
+    /// Menu layout. Behind an `Arc` because the bar clones every item it draws
+    /// on every repaint, and a menu tree is the expensive part of an item.
+    pub menu: Option<Arc<MenuLayout>>,
     /// Internal: D-Bus destination for commands.
     dest: String,
     /// Internal: Menu path.
     menu_path: String,
-}
-
-impl TrayItem {
-    /// Get the icon name if available.
-    pub fn icon_name(&self) -> Option<&str> {
-        match &self.icon {
-            Some(TrayIcon::Name(name)) => Some(name),
-            _ => None,
-        }
-    }
-
-    /// Get pixmap data if available.
-    pub fn icon_pixmap(&self) -> Option<(u32, u32, &[u8])> {
-        match &self.icon {
-            Some(TrayIcon::Pixmap {
-                width,
-                height,
-                data,
-            }) => Some((*width, *height, data.as_slice())),
-            _ => None,
-        }
-    }
 }
 
 /// System tray data.
@@ -137,27 +123,6 @@ impl TraySubscriber {
         self.data.get_cloned()
     }
 
-    /// Build a StatusNotifierItem proxy for the given item name.
-    async fn item_proxy(
-        conn: &zbus::Connection,
-        item_name: &str,
-    ) -> Option<StatusNotifierItemProxy<'static>> {
-        let (dest, path) = if let Some(idx) = item_name.find('/') {
-            (&item_name[..idx], &item_name[idx..])
-        } else {
-            (item_name, "/StatusNotifierItem")
-        };
-
-        StatusNotifierItemProxy::builder(conn)
-            .destination(dest.to_owned())
-            .ok()?
-            .path(path.to_owned())
-            .ok()?
-            .build()
-            .await
-            .ok()
-    }
-
     /// Execute a tray command.
     pub async fn dispatch(&self, command: TrayCommand) -> anyhow::Result<()> {
         let conn = crate::bus::session().await?;
@@ -185,25 +150,25 @@ impl TraySubscriber {
                     if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
                         let mut data = self.data.lock_mut();
                         if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name) {
-                            item.menu = Some(new_layout);
+                            item.menu = Some(Arc::new(new_layout));
                         }
                     }
                 }
             }
             TrayCommand::Activate { item_name } => {
-                if let Some(proxy) = Self::item_proxy(&conn, &item_name).await {
+                if let Ok(proxy) = item_proxy(&conn, &item_name).await {
                     debug!("Activating tray item {}", item_name);
                     let _ = proxy.activate(0, 0).await;
                 }
             }
             TrayCommand::SecondaryActivate { item_name } => {
-                if let Some(proxy) = Self::item_proxy(&conn, &item_name).await {
+                if let Ok(proxy) = item_proxy(&conn, &item_name).await {
                     debug!("Secondary-activating tray item {}", item_name);
                     let _ = proxy.secondary_activate(0, 0).await;
                 }
             }
             TrayCommand::ContextMenu { item_name } => {
-                if let Some(proxy) = Self::item_proxy(&conn, &item_name).await {
+                if let Ok(proxy) = item_proxy(&conn, &item_name).await {
                     debug!("Context menu for tray item {}", item_name);
                     let _ = proxy.context_menu(0, 0).await;
                 }
@@ -229,7 +194,7 @@ impl TraySubscriber {
                             let mut data = self.data.lock_mut();
                             if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name)
                             {
-                                item.menu = Some(new_layout);
+                                item.menu = Some(Arc::new(new_layout));
                             }
                         }
                     }
@@ -239,6 +204,132 @@ impl TraySubscriber {
 
         Ok(())
     }
+}
+
+/// Split an item name into its D-Bus destination and object path.
+fn split_item_name(name: &str) -> (&str, &str) {
+    match name.find('/') {
+        Some(idx) => (&name[..idx], &name[idx..]),
+        None => (name, "/StatusNotifierItem"),
+    }
+}
+
+/// Build a StatusNotifierItem proxy for the given item name.
+///
+/// Property caching is off on purpose. With it on, zbus calls `GetAll` on the
+/// first property read and keeps every property as an `OwnedValue` for as long
+/// as the proxy lives - and zvariant stores a byte array as one `Value` per
+/// byte, so an item's `IconPixmap` costs megabytes in that form. The proxies
+/// the listener holds live for the whole session, so that memory never came
+/// back. Reads are plain `Get` calls now: the shell asks for an icon rarely,
+/// and it keeps only the decoded pixels it actually draws.
+async fn item_proxy(
+    conn: &zbus::Connection,
+    item_name: &str,
+) -> anyhow::Result<StatusNotifierItemProxy<'static>> {
+    let (dest, path) = split_item_name(item_name);
+
+    Ok(StatusNotifierItemProxy::builder(conn)
+        .destination(dest.to_owned())?
+        .path(path.to_owned())?
+        .cache_properties(CacheProperties::No)
+        .build()
+        .await?)
+}
+
+/// Read an item's icon: the largest pixmap it offers, else its themed icon name.
+async fn fetch_icon(proxy: &StatusNotifierItemProxy<'_>) -> Option<TrayIcon> {
+    let pixmap = proxy.icon_pixmap().await.ok().and_then(|icons| {
+        icons
+            .into_iter()
+            .filter(|i| i.width > 0 && i.height > 0 && !i.bytes.is_empty())
+            .max_by_key(|i| (i.width, i.height))
+            .map(|mut i| {
+                // Convert ARGB to RGBA
+                for pixel in i.bytes.as_chunks_mut::<4>().0 {
+                    pixel.rotate_left(1);
+                }
+                TrayIcon::Pixmap {
+                    width: i.width as u32,
+                    height: i.height as u32,
+                    data: Arc::new(i.bytes),
+                }
+            })
+    });
+
+    // Apps that offer no pixmap - the property errors, or is an empty array -
+    // name a themed icon instead.
+    match pixmap {
+        Some(icon) => Some(icon),
+        None => proxy
+            .icon_name()
+            .await
+            .ok()
+            .filter(|n| !n.is_empty())
+            .map(TrayIcon::Name),
+    }
+}
+
+/// Whether two icons carry the same picture.
+fn same_icon(a: &TrayIcon, b: &TrayIcon) -> bool {
+    match (a, b) {
+        (TrayIcon::Name(a), TrayIcon::Name(b)) => a == b,
+        (
+            TrayIcon::Pixmap {
+                width: aw,
+                height: ah,
+                data: ad,
+            },
+            TrayIcon::Pixmap {
+                width: bw,
+                height: bh,
+                data: bd,
+            },
+        ) => aw == bw && ah == bh && (Arc::ptr_eq(ad, bd) || ad == bd),
+        _ => false,
+    }
+}
+
+/// Re-read one item's icon and store it.
+async fn refresh_icon(
+    proxy: &StatusNotifierItemProxy<'_>,
+    item_name: &str,
+    data: &Mutable<TrayData>,
+) {
+    let Some(icon) = fetch_icon(proxy).await else {
+        return;
+    };
+
+    // Apps announce an icon change twice as often as not (NewIcon *and*
+    // PropertiesChanged), and dropping a `lock_mut` guard wakes every
+    // subscriber whether or not anything changed - which costs a full clone of
+    // the tray state and a repaint. So compare under a read lock first, and let
+    // it go before taking the write lock: holding both deadlocks.
+    {
+        let guard = data.lock_ref();
+        match guard.items.iter().find(|i| i.name == item_name) {
+            Some(item) if item.icon.as_ref().is_some_and(|old| same_icon(old, &icon)) => return,
+            Some(_) => {}
+            None => return,
+        }
+    }
+
+    let mut guard = data.lock_mut();
+    if let Some(item) = guard.items.iter_mut().find(|i| i.name == item_name) {
+        item.icon = Some(icon);
+    }
+}
+
+/// Whether a PropertiesChanged signal touches the item's icon.
+fn changes_icon(change: &zbus::fdo::PropertiesChanged) -> bool {
+    let Ok(args) = change.args() else {
+        return false;
+    };
+
+    args.interface_name == ITEM_INTERFACE
+        && ICON_PROPERTIES.iter().any(|prop| {
+            args.changed_properties.contains_key(prop) || args.invalidated_properties.contains(prop)
+        })
 }
 
 /// Fetch current tray data.
@@ -259,44 +350,10 @@ async fn fetch_tray_data(conn: &zbus::Connection) -> anyhow::Result<TrayData> {
 
 /// Create a TrayItem from a StatusNotifierItem.
 async fn create_tray_item(conn: &zbus::Connection, name: &str) -> anyhow::Result<TrayItem> {
-    let (dest, path) = if let Some(idx) = name.find('/') {
-        (&name[..idx], &name[idx..])
-    } else {
-        (name, "/StatusNotifierItem")
-    };
+    let (dest, _) = split_item_name(name);
+    let item_proxy = item_proxy(conn, name).await?;
 
-    let item_proxy = StatusNotifierItemProxy::builder(conn)
-        .destination(dest.to_owned())?
-        .path(path.to_owned())?
-        .build()
-        .await?;
-
-    // Get icon - try pixmap first, then name
-    let icon = match item_proxy.icon_pixmap().await {
-        Ok(icons) => {
-            icons
-                .into_iter()
-                .max_by_key(|i| (i.width, i.height))
-                .map(|mut i| {
-                    // Convert ARGB to RGBA
-                    for pixel in i.bytes.as_chunks_mut::<4>().0 {
-                        pixel.rotate_left(1);
-                    }
-                    TrayIcon::Pixmap {
-                        width: i.width as u32,
-                        height: i.height as u32,
-                        data: Arc::new(i.bytes),
-                    }
-                })
-        }
-        Err(_) => item_proxy
-            .icon_name()
-            .await
-            .ok()
-            .filter(|n| !n.is_empty())
-            .map(TrayIcon::Name),
-    };
-
+    let icon = fetch_icon(&item_proxy).await;
     let title = item_proxy.title().await.ok();
     let id = item_proxy.id().await.ok();
 
@@ -311,7 +368,11 @@ async fn create_tray_item(conn: &zbus::Connection, name: &str) -> anyhow::Result
             .build()
             .await?;
 
-        menu_proxy.get_layout(0, -1, &[]).await.ok().map(|(_, l)| l)
+        menu_proxy
+            .get_layout(0, -1, &[])
+            .await
+            .ok()
+            .map(|(_, l)| Arc::new(l))
     } else {
         None
     };
@@ -350,7 +411,7 @@ impl ManagedService for TraySubscriber {
                         Some(TrayIcon::Pixmap { data, .. }) => data.len(),
                         None => 0,
                     };
-                    let menu = item.menu.as_ref().map_or(0, menu_layout_bytes);
+                    let menu = item.menu.as_deref().map_or(0, menu_layout_bytes);
                     size_of::<TrayItem>()
                         + item.name.len()
                         + item.title.as_ref().map_or(0, String::len)
@@ -497,58 +558,57 @@ async fn run_listener(
     let mut menu_streams = Vec::with_capacity(items.len());
 
     for item in &items {
-        let (dest, path) = if let Some(idx) = item.name.find('/') {
-            (&item.name[..idx], &item.name[idx..])
-        } else {
-            (item.name.as_str(), "/StatusNotifierItem")
-        };
+        let (dest, path) = split_item_name(&item.name);
 
-        // Icon pixmap changes
-        let item_proxy_result = StatusNotifierItemProxy::builder(conn)
-            .destination(dest.to_owned())
-            .and_then(|b| b.path(path.to_owned()));
-
-        if let Ok(builder) = item_proxy_result
-            && let Ok(proxy) = builder.build().await
-        {
-            // Icon pixmap changes
-            let name = item.name.clone();
-            let data_icon = data.clone();
-            icon_streams.push(
-                proxy
-                    .receive_icon_pixmap_changed()
-                    .await
-                    .filter_map(move |icon_change| {
-                        let name = name.clone();
-                        let data = data_icon.clone();
-                        async move {
-                            if let Ok(icons) = icon_change.get().await {
-                                let icons: Vec<dbus::IconPixmap> = icons;
-                                if let Some(mut icon) =
-                                    icons.into_iter().max_by_key(|i| (i.width, i.height))
-                                {
-                                    for pixel in icon.bytes.as_chunks_mut::<4>().0 {
-                                        pixel.rotate_left(1);
-                                    }
-                                    let tray_icon = TrayIcon::Pixmap {
-                                        width: icon.width as u32,
-                                        height: icon.height as u32,
-                                        data: Arc::new(icon.bytes),
-                                    };
-
-                                    let mut guard = data.lock_mut();
-                                    if let Some(item) =
-                                        guard.items.iter_mut().find(|i| i.name == name)
-                                    {
-                                        item.icon = Some(tray_icon);
-                                    }
-                                }
+        // Icon changes. Apps announce them with the NewIcon signal, with a
+        // PropertiesChanged on IconPixmap/IconName, or both, so watch the two
+        // and re-read the icon when either fires.
+        if let Ok(proxy) = item_proxy(conn, &item.name).await {
+            if let Ok(new_icon) = proxy.receive_new_icon().await {
+                let name = item.name.clone();
+                let data_icon = data.clone();
+                let icon_proxy = proxy.clone();
+                icon_streams.push(
+                    new_icon
+                        .filter_map(move |_| {
+                            let name = name.clone();
+                            let data = data_icon.clone();
+                            let proxy = icon_proxy.clone();
+                            async move {
+                                refresh_icon(&proxy, &name, &data).await;
+                                Some(())
                             }
-                            Some(())
-                        }
-                    })
-                    .boxed(),
-            );
+                        })
+                        .boxed(),
+                );
+            }
+
+            let properties = zbus::fdo::PropertiesProxy::builder(conn)
+                .destination(dest.to_owned())
+                .and_then(|b| b.path(path.to_owned()));
+
+            if let Ok(builder) = properties
+                && let Ok(properties) = builder.build().await
+                && let Ok(changes) = properties.receive_properties_changed().await
+            {
+                let name = item.name.clone();
+                let data_icon = data.clone();
+                icon_streams.push(
+                    changes
+                        .filter_map(move |change| {
+                            let name = name.clone();
+                            let data = data_icon.clone();
+                            let proxy = proxy.clone();
+                            async move {
+                                if changes_icon(&change) {
+                                    refresh_icon(&proxy, &name, &data).await;
+                                }
+                                Some(())
+                            }
+                        })
+                        .boxed(),
+                );
+            }
         }
 
         // Menu layout changes
@@ -577,7 +637,7 @@ async fn run_listener(
                                     if let Some(item) =
                                         guard.items.iter_mut().find(|i| i.name == name)
                                     {
-                                        item.menu = Some(layout);
+                                        item.menu = Some(Arc::new(layout));
                                     }
                                 }
                                 Some(())
