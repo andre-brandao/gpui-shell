@@ -1,6 +1,6 @@
 //! Wallpaper service with pluggable engine support.
 //!
-//! Manages wallpaper setting via external tools. Currently supports `swww`.
+//! Manages wallpaper setting via external tools. Currently supports `awww`.
 //! Spawns the daemon on startup and provides commands to set wallpapers.
 
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WallpaperEngine {
     #[default]
-    Swww,
+    Awww,
 }
 
 /// Current wallpaper state.
@@ -65,7 +65,7 @@ impl WallpaperSubscriber {
             WallpaperCommand::SetWallpaper(path) => {
                 // Optimistic update
                 self.data.lock_mut().current = Some(path.clone());
-                set_wallpaper_swww(&path);
+                set_wallpaper_awww(&path);
             }
         }
     }
@@ -90,48 +90,48 @@ impl ManagedService for WallpaperSubscriber {
                 .map_or(0, |path| path.as_os_str().len())
     }
 
-    /// Stopping only detaches the shell: `swww-daemon` is an external process
+    /// Stopping only detaches the shell: `awww-daemon` is an external process
     /// and keeps the current wallpaper up.
     fn start(&self) {
         start_daemon(self.lifecycle.begin());
     }
 }
 
-/// Start the swww daemon if it's not already running.
+/// Start the awww daemon if it's not already running.
 fn start_daemon(token: RunToken) {
     thread::spawn(move || {
-        // Check if swww is already running
-        let running = Command::new("swww")
+        // Check if awww is already running
+        let running = Command::new("awww")
             .arg("query")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
 
         if running {
-            debug!("swww daemon already running");
+            debug!("awww daemon already running");
             token.active();
             return;
         }
 
-        debug!("Starting swww daemon");
-        match Command::new("swww-daemon").spawn() {
+        debug!("Starting awww daemon");
+        match Command::new("awww-daemon").spawn() {
             Ok(_) => {
-                debug!("swww daemon started");
+                debug!("awww daemon started");
                 token.active();
             }
             Err(e) => {
-                warn!("Failed to start swww daemon: {}", e);
+                warn!("Failed to start awww daemon: {}", e);
                 token.error(e.to_string());
             }
         }
     });
 }
 
-/// Set wallpaper using swww.
-fn set_wallpaper_swww(path: &Path) {
+/// Set wallpaper using awww.
+fn set_wallpaper_awww(path: &Path) {
     let path = path.to_path_buf();
     thread::spawn(move || {
-        let result = Command::new("swww")
+        let result = Command::new("awww")
             .args([
                 "img",
                 &path.to_string_lossy(),
@@ -144,7 +144,7 @@ fn set_wallpaper_swww(path: &Path) {
 
         match result {
             Ok(_) => debug!("Wallpaper set to: {}", path.display()),
-            Err(e) => error!("Failed to set wallpaper via swww: {}", e),
+            Err(e) => error!("Failed to set wallpaper via awww: {}", e),
         }
     });
 }

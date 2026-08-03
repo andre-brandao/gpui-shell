@@ -1,4 +1,6 @@
-# GPUi Shell (Placeholder name)
+![Trailer](./docs/public/trailer.gif)
+
+<!--![Banner](./docs/public/banner-dark.png)-->
 
 A Wayland desktop shell built with GPUI (Zed's UI framework) in Rust. Provides a
 system bar, command launcher, and control center for Hyprland, Mango and Niri
@@ -64,7 +66,6 @@ https://github.com/user-attachments/assets/71003c4b-8b02-4585-8ddb-17560c27b389
 - **Single-instance** — running again opens launcher (via socket)
 - **Privacy mode** — temporarily disable screenshare/camera indicators
 - **Applications** — desktop file parsing and icon loading
-
 
 ## Quick Start
 
