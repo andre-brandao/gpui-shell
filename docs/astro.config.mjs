@@ -8,6 +8,16 @@ export default defineConfig({
     starlight({
       title: 'GPUi Shell',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/andre-brandao/gpui-shell' }],
+      head: [
+        {
+          tag: 'script',
+          attrs: {
+            src: 'https://a.developing.company/api/script.js',
+            'data-site-id': 'dd3d22977696',
+            defer: true,
+          },
+        },
+      ],
       sidebar: [
         {
           label: 'Getting Started',
