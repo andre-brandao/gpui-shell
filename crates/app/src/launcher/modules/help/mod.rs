@@ -1,4 +1,4 @@
-//! Help view showing available launcher commands and system information.
+//! Help view showing available launcher commands.
 
 pub mod config;
 
@@ -9,11 +9,9 @@ use ui::{
 };
 
 use self::config::HelpConfig;
-use crate::icons;
 use crate::launcher::view::{LauncherView, ViewContext};
-use crate::state::AppState;
 
-/// Help view - shows available commands and system status.
+/// Help view - shows available commands.
 pub struct HelpView {
     prefix: String,
     entries: Vec<HelpEntry>,
@@ -47,119 +45,6 @@ impl HelpView {
             entries,
             matches: Vec::new(),
         }
-    }
-
-    fn render_system_info(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        let theme = cx.theme();
-        let sysinfo = AppState::sysinfo(cx).get();
-        let upower = AppState::upower(cx).get();
-
-        let cpu_usage = sysinfo.cpu_usage;
-        let memory_usage = sysinfo.memory_usage;
-        let cpu_color = theme.colors.status.from_percentage(cpu_usage);
-        let memory_color = theme.colors.status.from_percentage(memory_usage);
-
-        let cpu_icon = if cpu_usage >= 90 {
-            IconName::Flame
-        } else {
-            IconName::Cpu
-        };
-
-        let temp_text = sysinfo
-            .temperature
-            .map(|t| format!("{}°C", t))
-            .unwrap_or_else(|| "—".to_string());
-
-        let battery_icon = icons::battery_data_icon(upower.battery.as_ref());
-
-        let battery_text = if let Some(ref battery) = upower.battery {
-            format!("{}%", battery.percentage)
-        } else {
-            String::new()
-        };
-
-        let text_muted = theme.colors.text_muted;
-
-        div()
-            .w_full()
-            .px(Spacing::Large.pixels())
-            .py(Spacing::Medium.pixels())
-            .bg(theme.colors.surface_background)
-            .rounded(px(8.))
-            .flex()
-            .items_center()
-            .justify_between()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(
-                        Icon::new(cpu_icon)
-                            .size(IconSize::Small)
-                            .color(Color::Custom(cpu_color)),
-                    )
-                    .child(
-                        div()
-                            .text_size(TextSize::Small.rems())
-                            .text_color(cpu_color)
-                            .child(format!("{}%", cpu_usage)),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(
-                        Icon::new(IconName::MemoryStick)
-                            .size(IconSize::Small)
-                            .color(Color::Custom(memory_color)),
-                    )
-                    .child(
-                        div()
-                            .text_size(TextSize::Small.rems())
-                            .text_color(memory_color)
-                            .child(format!("{}%", memory_usage)),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(
-                        Icon::new(IconName::Thermometer)
-                            .size(IconSize::Small)
-                            .color(Color::Muted),
-                    )
-                    .child(
-                        div()
-                            .text_size(TextSize::Small.rems())
-                            .text_color(text_muted)
-                            .child(temp_text),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(
-                        Icon::new(battery_icon)
-                            .size(IconSize::Small)
-                            .color(Color::Muted),
-                    )
-                    .when(!battery_text.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_size(TextSize::Small.rems())
-                                .text_color(text_muted)
-                                .child(battery_text.clone()),
-                        )
-                    }),
-            )
-            .into_any_element()
     }
 
     /// Prefix of the entry at `index` in the current match list.
@@ -268,53 +153,15 @@ impl LauncherView for HelpView {
             .into_any_element()
     }
 
-    fn render_header(&self, vx: &ViewContext, cx: &App) -> Option<AnyElement> {
+    fn render_header(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
         Some(
             div()
-                .flex()
-                .flex_col()
-                .gap(Spacing::XLarge.pixels())
                 .p(Spacing::Medium.pixels())
-                .child(self.render_system_info(vx, cx))
+                .px(Spacing::Large.pixels())
                 .child(
-                    div().px(Spacing::Medium.pixels()).child(
-                        Label::new("COMMANDS")
-                            .size(TextSize::XSmall)
-                            .color(Color::Disabled),
-                    ),
-                )
-                .into_any_element(),
-        )
-    }
-
-    fn render_footer(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
-        Some(
-            div()
-                .px(Spacing::Medium.pixels())
-                .pt(Spacing::Medium.pixels())
-                .pb(Spacing::Medium.pixels())
-                .flex()
-                .flex_col()
-                .gap(Spacing::XSmall.pixels())
-                .child(
-                    Label::new("USAGE")
+                    Label::new("COMMANDS")
                         .size(TextSize::XSmall)
                         .color(Color::Disabled),
-                )
-                .child(
-                    Label::new("• Type a prefix (like @, $, !) to switch to that view")
-                        .size(TextSize::Small)
-                        .color(Color::Muted),
-                )
-                .child(
-                    Label::new("• Type without prefix to search apps directly")
-                        .size(TextSize::Small)
-                        .color(Color::Muted),
-                )
-                .child(
-                    Label::new("• Press ? anytime to return to this help")
-                        .size(TextSize::Small)
-                        .color(Color::Muted),
                 )
                 .into_any_element(),
         )

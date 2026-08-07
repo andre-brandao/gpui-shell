@@ -349,39 +349,22 @@ impl Launcher {
         "Search apps or type @, $, !, ? for commands...".to_string()
     }
 
-    fn prefix_hint_label(name: &str) -> String {
-        match name {
-            "Applications" => "apps".to_string(),
-            "Web Search" => "web".to_string(),
-            _ => name.to_lowercase(),
-        }
-    }
-
-    fn format_prefix_hint(prefix: &str, name: &str) -> Option<String> {
-        let prefix = prefix.trim();
-        if prefix.is_empty() {
-            return None;
-        }
-
-        let label = Self::prefix_hint_label(name);
-        let spacer = if prefix.chars().count() > 1 { " " } else { "" };
-        Some(format!("{prefix}{spacer}{label}"))
-    }
-
+    /// Bare view prefixes for the footer - `@  $  !  ;ws  ;wp  ~  ;s  ?`.
+    /// Full names live in the `?` help view.
     fn footer_prefix_hints(&self) -> String {
-        let mut hints: Vec<String> = self
+        let mut prefixes: Vec<&str> = self
             .views
             .iter()
-            .filter_map(|view| Self::format_prefix_hint(view.prefix(), view.name()))
+            .map(|view| view.prefix().trim())
+            .filter(|prefix| !prefix.is_empty())
             .collect();
 
-        if let Some(help_hint) =
-            Self::format_prefix_hint(self.help_view.prefix(), self.help_view.name())
-        {
-            hints.push(help_hint);
+        let help = self.help_view.prefix().trim();
+        if !help.is_empty() {
+            prefixes.push(help);
         }
 
-        hints.join(" · ")
+        prefixes.join("  ")
     }
 }
 

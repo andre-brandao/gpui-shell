@@ -135,8 +135,15 @@ impl RenderOnce for LauncherFrame {
                         .flex()
                         .items_center()
                         .justify_between()
+                        .gap(Spacing::XLarge.pixels())
                         .child(
+                            // Hints yield to the actions: clip rather than
+                            // push them off the edge.
                             div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .overflow_hidden()
+                                .whitespace_nowrap()
                                 .text_size(TextSize::XSmall.rems())
                                 .text_color(disabled)
                                 .children(self.hints),

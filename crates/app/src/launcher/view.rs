@@ -143,7 +143,8 @@ pub trait LauncherView: Send + Sync {
         false
     }
 
-    /// Render content for the footer action bar.
+    /// Content for the footer's action side. Most views want key hints via
+    /// [`footer_hints`], but any element goes.
     fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
         footer_hints(vec![("Open", "Enter"), ("Close", "Esc")], cx)
     }
