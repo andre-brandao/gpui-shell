@@ -10,13 +10,15 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use gpui::{App, Global};
+use gpui::{App, AppContext, Global};
 use serde::{Deserialize, Serialize};
 use services::ServiceMode;
 
-use super::ActiveConfig;
 use super::persistence::{config_dir, parse_toml, write_toml};
+use super::{ActiveConfig, ConfigSignals};
 
 /// State written by the shell itself.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -30,6 +32,11 @@ pub struct State {
 }
 
 impl Global for State {}
+
+/// Last save generation handed out, and the last one written. Saves run on
+/// the background executor, so an older one finishing late must not land.
+static NEXT_SAVE: AtomicU64 = AtomicU64::new(0);
+static WRITTEN_SAVE: Mutex<u64> = Mutex::new(0);
 
 impl State {
     /// Load `state.toml` into the global. A broken one is not worth a fuss:
@@ -55,6 +62,7 @@ impl State {
     pub fn set_pinned(pinned: Vec<String>, cx: &mut App) {
         cx.global_mut::<Self>().pinned = Some(pinned);
         Self::save(cx);
+        ConfigSignals::publish(cx);
     }
 
     /// Startup mode for a service: what the UI last saved, else what
@@ -72,10 +80,21 @@ impl State {
     }
 
     fn save(cx: &App) {
-        let state = cx.global::<Self>();
-        if let Err(err) = state_path().and_then(|path| write_toml(&path, state)) {
-            tracing::warn!("Failed to persist state: {err:#}");
-        }
+        let state = cx.global::<Self>().clone();
+        let generation = NEXT_SAVE.fetch_add(1, Ordering::Relaxed) + 1;
+        cx.background_spawn(async move {
+            let Ok(mut written) = WRITTEN_SAVE.lock() else {
+                return;
+            };
+            if *written > generation {
+                return;
+            }
+            match state_path().and_then(|path| write_toml(&path, &state)) {
+                Ok(()) => *written = generation,
+                Err(err) => tracing::warn!("Failed to persist state: {err:#}"),
+            }
+        })
+        .detach();
     }
 }
 

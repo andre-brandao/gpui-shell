@@ -95,7 +95,12 @@ fn every_icon_renders_a_readable_silhouette() {
             .unwrap_or_else(|error| panic!("{name:?} failed to render: {error}"));
 
         let pixels = image.as_bytes(0).expect("rendered frame");
-        let opaque = pixels.chunks_exact(4).filter(|px| px[3] > 8).count();
+        let opaque = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|px| px[3] > 8)
+            .count();
         coverage.push((
             format!("{name:?}"),
             opaque as f32 / (pixels.len() / 4) as f32,

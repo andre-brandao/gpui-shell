@@ -24,11 +24,14 @@ pub struct NotificationConfig {
     pub center_height: f32,
     pub popup_position: NotificationPopupPosition,
     pub popup_width: f32,
+    /// Maximum height of the popup stack at rest; it is as tall as its
+    /// notifications. Hovered, it fans out up to the screen height.
     pub popup_height: f32,
     pub popup_margin_top: f32,
     pub popup_margin_right: f32,
     pub popup_margin_bottom: f32,
     pub popup_margin_left: f32,
+    /// Most popups shown at once; older ones stay in the notification center.
     pub popup_stack_limit: usize,
     pub popup_card_collapsed_height: f32,
     pub popup_card_expanded_height: f32,
@@ -47,7 +50,7 @@ impl Default for NotificationConfig {
             popup_margin_right: 0.0,
             popup_margin_bottom: 0.0,
             popup_margin_left: 0.0,
-            popup_stack_limit: 4,
+            popup_stack_limit: 16,
             popup_card_collapsed_height: 92.0,
             popup_card_expanded_height: 170.0,
             icons: NotificationIcons::default(),

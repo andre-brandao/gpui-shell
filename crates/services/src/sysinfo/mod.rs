@@ -157,6 +157,9 @@ impl ManagedService for SysInfoSubscriber {
     }
 }
 
+/// Bar readings don't need to be fresher than this, and each poll walks /proc.
+const POLL_INTERVAL: Duration = Duration::from_secs(5);
+
 /// Format speed in KB/s or MB/s.
 fn format_speed(kb_per_sec: u32) -> String {
     if kb_per_sec >= 1000 {
@@ -189,16 +192,17 @@ fn start_listener(data: Mutable<SysInfoData>, token: RunToken) {
                 &mut last_transmitted,
             );
 
-            // Only update if changed
+            // Only update if changed. Through the token: a stop can land during
+            // the sleep, and this thread must not publish after it.
             if *data.lock_ref() != new_data {
                 debug!(
                     "SysInfo updated: CPU {}%, MEM {}%, TEMP {:?}°C",
                     new_data.cpu_usage, new_data.memory_usage, new_data.temperature
                 );
-                *data.lock_mut() = new_data;
+                token.write(&data, |data| *data = new_data);
             }
 
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(POLL_INTERVAL);
         }
     });
 }

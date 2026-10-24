@@ -2,6 +2,8 @@
 //!
 //! This module provides a configurable shell bar for any screen edge.
 
+use futures::StreamExt;
+use futures_signals::signal::SignalExt;
 use gpui::{
     AnyElement, App, Bounds, Context, DisplayId, Size, Window, WindowBackgroundAppearance,
     WindowBounds, WindowKind, WindowOptions, layer_shell::*, point, prelude::*, px,
@@ -11,26 +13,60 @@ use ui::patterns::BarSurface;
 
 use super::config::BarPosition;
 use super::modules::Widget;
-use crate::config::{ActiveConfig, Config};
+use crate::config::{ActiveConfig, ConfigSignals};
+use crate::state::watch;
+
+/// One of the bar's three widget lists, kept with the names it was built from.
+struct Section {
+    names: Vec<String>,
+    widgets: Vec<Widget>,
+}
+
+impl Section {
+    fn new(names: &[String], cx: &mut Context<Bar>) -> Self {
+        Self {
+            names: names.to_vec(),
+            widgets: Widget::create_many(names, cx),
+        }
+    }
+
+    /// Rebuild only when the list changed, so untouched widgets keep their state.
+    fn sync(&mut self, names: &[String], cx: &mut Context<Bar>) {
+        if self.names != names {
+            *self = Self::new(names, cx);
+        }
+    }
+
+    fn render(&self) -> Vec<AnyElement> {
+        self.widgets.iter().map(Widget::render).collect()
+    }
+}
 
 /// The main bar view.
 struct Bar {
     position: BarPosition,
-    start_widgets: Vec<Widget>,
-    center_widgets: Vec<Widget>,
-    end_widgets: Vec<Widget>,
+    start: Section,
+    center: Section,
+    end: Section,
 }
 
 impl Bar {
     /// Create a bar with configuration.
     fn new(cx: &mut Context<Self>) -> Self {
         let config = cx.config().bar.clone();
-        let position = config.position;
+        let bar = ConfigSignals::global(cx).bar.signal_cloned();
+        watch(cx, bar, |this, bar, cx| {
+            this.start.sync(&bar.start, cx);
+            this.center.sync(&bar.center, cx);
+            this.end.sync(&bar.end, cx);
+            cx.notify();
+        });
+
         Self {
-            position,
-            start_widgets: Widget::create_many(&config.start, cx),
-            center_widgets: Widget::create_many(&config.center, cx),
-            end_widgets: Widget::create_many(&config.end, cx),
+            position: config.position,
+            start: Section::new(&config.start, cx),
+            center: Section::new(&config.center, cx),
+            end: Section::new(&config.end, cx),
         }
     }
 }
@@ -40,16 +76,12 @@ impl Render for Bar {
         window.set_rem_size(cx.theme().font_size);
         let bar = &cx.config().bar;
 
-        let start: Vec<AnyElement> = self.start_widgets.iter().map(|w| w.render()).collect();
-        let center: Vec<AnyElement> = self.center_widgets.iter().map(|w| w.render()).collect();
-        let end: Vec<AnyElement> = self.end_widgets.iter().map(|w| w.render()).collect();
-
         BarSurface::new(self.position.edge())
             .border(bar.show_border)
             .padding(px(bar.padding))
-            .start(start)
-            .center(center)
-            .end(end)
+            .start(self.start.render())
+            .center(self.center.render())
+            .end(self.end.render())
     }
 }
 
@@ -122,11 +154,13 @@ pub fn window_options(
 
 /// Initialize the bar using the current global config.
 pub fn init(cx: &mut App) {
-    cx.observe_global::<Config>(|cx| {
-        tracing::info!("Config changed; reloading bar windows");
-        reload(cx);
-    })
-    .detach();
+    // Only the anchor and exclusive zone need new windows; `Bar` applies the
+    // rest in place.
+    let layout = ConfigSignals::global(cx)
+        .bar
+        .signal_ref(|bar| (bar.position, bar.size))
+        .dedupe()
+        .to_stream();
 
     cx.spawn(async move |cx| {
         // Small delay to allow Wayland to enumerate displays
@@ -136,7 +170,13 @@ pub fn init(cx: &mut App) {
 
         tracing::info!("Bar opened");
 
-        cx.update(open_all_bar_windows)
+        cx.update(open_all_bar_windows);
+
+        let mut layout = layout.skip(1);
+        while layout.next().await.is_some() {
+            tracing::info!("Bar layout changed; reopening bar windows");
+            cx.update(reload);
+        }
     })
     .detach();
 }
@@ -144,7 +184,7 @@ pub fn init(cx: &mut App) {
 /// Open the bar with custom configuration.
 pub fn open_with_config(display_id: Option<DisplayId>, cx: &mut App) -> bool {
     match cx.open_window(window_options(display_id, cx), move |window, cx| {
-        crate::state::record_window_display(window.window_handle(), display_id);
+        crate::state::record_window_display(window.window_handle(), display_id, cx);
         cx.new(Bar::new)
     }) {
         Ok(_) => true,

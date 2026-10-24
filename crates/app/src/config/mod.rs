@@ -1,6 +1,7 @@
 //! Application configuration stored as a GPUI global.
 
 mod persistence;
+mod signals;
 mod state;
 mod theme;
 
@@ -12,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use services::{FileWatcher, LocalSlot, ServiceMode};
 use ui::{StoredTheme, Theme};
 
+pub use signals::ConfigSignals;
 pub use state::State;
 
 use crate::state::AppState;
@@ -71,7 +73,7 @@ impl Config {
     /// next save fixes the file. `gpuishell --validate` reports where the
     /// parse gave up.
     pub fn init(cx: &mut App) {
-        let config = match persistence::load() {
+        let config = match persistence::load_or_create() {
             Ok(config) => config,
             Err(err) => {
                 tracing::warn!("Failed to load config, using defaults: {err:#}");
@@ -90,6 +92,7 @@ impl Config {
         cx.set_global(theme);
         cx.set_global(config);
         State::init(cx);
+        ConfigSignals::init(cx);
         Self::start_hot_reload(cx);
     }
 
@@ -105,6 +108,7 @@ impl Config {
         match persistence::load() {
             Ok(config) => {
                 *cx.global_mut::<Config>() = config;
+                ConfigSignals::publish(cx);
                 AppState::notification(cx).clear_local(LocalSlot::ConfigError);
             }
             Err(err) => {

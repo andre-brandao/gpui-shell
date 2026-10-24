@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 use zbus::{
     Connection, Result,
@@ -25,9 +26,26 @@ pub struct StatusNotifierWatcher {
     items: Vec<(UniqueName<'static>, String)>,
 }
 
+/// The running watcher: the shared connection serving it and the task that
+/// tracks bus names. Dropping it ends that task, so a retry or restart never
+/// leaves a second tracker behind.
+pub struct WatcherServer {
+    pub connection: Connection,
+    tracker: JoinHandle<()>,
+}
+
+impl Drop for WatcherServer {
+    fn drop(&mut self) {
+        self.tracker.abort();
+    }
+}
+
 impl StatusNotifierWatcher {
     /// Start the StatusNotifierWatcher D-Bus server.
-    pub async fn start_server() -> anyhow::Result<Connection> {
+    ///
+    /// The object and the bus name stay registered across restarts (a second
+    /// `at` or `request_name` is a no-op); only the tracker is per attempt.
+    pub async fn start_server() -> anyhow::Result<WatcherServer> {
         let connection = crate::bus::session().await?;
         let watcher = StatusNotifierWatcher::default();
         connection.object_server().at(OBJECT_PATH, watcher).await?;
@@ -46,7 +64,7 @@ impl StatusNotifierWatcher {
 
         let internal_connection = connection.clone();
         let internal_interface = interface.clone();
-        tokio::spawn(async move {
+        let tracker = tokio::spawn(async move {
             let mut have_bus_name = false;
             let unique_name = internal_connection.unique_name().map(|x| x.as_ref());
 
@@ -104,7 +122,10 @@ impl StatusNotifierWatcher {
             debug!("Failed initial tray item discovery: {e}");
         }
 
-        Ok(connection)
+        Ok(WatcherServer {
+            connection,
+            tracker,
+        })
     }
 
     async fn discover_items(
@@ -282,7 +303,7 @@ pub trait StatusNotifierItem {
 }
 
 /// Menu layout from DBusMenu.
-#[derive(Clone, Debug, Type)]
+#[derive(Clone, Debug, PartialEq, Type)]
 #[zvariant(signature = "(ia{sv}av)")]
 pub struct MenuLayout(pub i32, pub MenuLayoutProps, pub Vec<MenuLayout>);
 
@@ -297,7 +318,7 @@ impl<'a> serde::Deserialize<'a> for MenuLayout {
 }
 
 /// Menu layout properties.
-#[derive(Clone, Debug, Default, Type, zvariant::DeserializeDict)]
+#[derive(Clone, Debug, Default, PartialEq, Type, zvariant::DeserializeDict)]
 #[zvariant(signature = "dict")]
 pub struct MenuLayoutProps {
     #[zvariant(rename = "children-display")]

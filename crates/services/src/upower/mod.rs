@@ -9,10 +9,10 @@ pub mod dbus;
 use std::time::Duration;
 
 use anyhow::Result;
-use futures_signals::signal::{Mutable, MutableSignalCloned};
+use futures_signals::signal::Mutable;
 use futures_util::StreamExt;
 use futures_util::stream::select_all;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use zbus::Connection;
 
 use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
@@ -73,7 +73,7 @@ impl PowerProfile {
 }
 
 /// Battery data from UPower.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct BatteryData {
     /// Charge percentage (0-100).
     pub percentage: u8,
@@ -147,8 +147,16 @@ impl BatteryData {
     }
 }
 
+/// Battery charge limit, on hardware that supports one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChargeLimit {
+    pub enabled: bool,
+    /// Percentage charging stops at.
+    pub end_threshold: Option<u8>,
+}
+
 /// Complete UPower service data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct UPowerData {
     /// Battery data (None if no battery present).
     pub battery: Option<BatteryData>,
@@ -156,10 +164,13 @@ pub struct UPowerData {
     pub power_profile: PowerProfile,
     /// Whether power profiles daemon is available.
     pub power_profiles_available: bool,
-    /// Whether currently running on battery power.
-    pub on_battery: bool,
+    /// Whether running on battery power; `None` when UPower can't tell.
+    /// Unlike the battery state, it doesn't flip when charging pauses.
+    pub on_battery: Option<bool>,
     /// Whether the lid is closed (if applicable).
     pub lid_closed: Option<bool>,
+    /// `None` when no battery supports a charge limit.
+    pub charge_limit: Option<ChargeLimit>,
 }
 
 impl UPowerData {
@@ -195,11 +206,16 @@ impl UPowerData {
         };
 
         // Get system power state
-        let on_battery = upower.on_battery().await.unwrap_or(false);
+        let on_battery = upower.on_battery().await.ok();
         let lid_closed = if upower.lid_is_present().await.unwrap_or(false) {
             Some(upower.lid_is_closed().await.unwrap_or(false))
         } else {
             None
+        };
+
+        let charge_limit = match charge_limit_device(conn).await {
+            Some(device) => Self::fetch_charge_limit(&device).await,
+            None => None,
         };
 
         Ok(Self {
@@ -208,6 +224,21 @@ impl UPowerData {
             power_profiles_available,
             on_battery,
             lid_closed,
+            charge_limit,
+        })
+    }
+
+    async fn fetch_charge_limit(device: &DeviceProxy<'_>) -> Option<ChargeLimit> {
+        let enabled = device.charge_threshold_enabled().await.ok()?;
+        let end_threshold = device
+            .charge_end_threshold()
+            .await
+            .ok()
+            .filter(|t| (1..=100).contains(t))
+            .map(|t| t as u8);
+        Some(ChargeLimit {
+            enabled,
+            end_threshold,
         })
     }
 
@@ -259,8 +290,31 @@ pub enum UPowerCommand {
     SetPowerProfile(PowerProfile),
     /// Cycle to the next power profile.
     CyclePowerProfile,
+    /// Turn the battery charge limit on or off.
+    SetChargeLimit(bool),
     /// Refresh battery data.
     Refresh,
+}
+
+/// The laptop battery that supports a charge limit, if any. The display
+/// device is a composite and never does.
+async fn charge_limit_device(conn: &Connection) -> Option<DeviceProxy<'static>> {
+    let upower = UPowerService::new(conn).await.ok()?;
+    for path in upower.enumerate_devices().await.ok()? {
+        let Ok(builder) = DeviceProxy::builder(conn).path(path) else {
+            continue;
+        };
+        let Ok(device) = builder.build().await else {
+            continue;
+        };
+        let is_system_battery = device.device_type().await.ok() == Some(DeviceType::Battery)
+            && device.power_supply().await.unwrap_or(false);
+        // Errors on UPower without charge threshold support.
+        if is_system_battery && device.charge_threshold_supported().await.unwrap_or(false) {
+            return Some(device);
+        }
+    }
+    None
 }
 
 /// Event-driven UPower subscriber.
@@ -269,8 +323,15 @@ pub enum UPowerCommand {
 /// providing reactive state updates through `futures_signals`.
 #[derive(Debug, Clone, Default)]
 pub struct UPowerSubscriber {
-    data: Mutable<UPowerData>,
-    lifecycle: Lifecycle,
+    core: crate::ServiceCore<UPowerData, UPowerCommand>,
+}
+
+impl std::ops::Deref for UPowerSubscriber {
+    type Target = crate::ServiceCore<UPowerData, UPowerCommand>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
 }
 
 impl UPowerSubscriber {
@@ -280,25 +341,33 @@ impl UPowerSubscriber {
         Self::default()
     }
 
-    /// Get a signal that emits when data changes.
-    pub fn subscribe(&self) -> MutableSignalCloned<UPowerData> {
-        self.data.signal_cloned()
-    }
-
-    /// Get the current data snapshot.
-    pub fn get(&self) -> UPowerData {
-        self.data.get_cloned()
-    }
-
-    /// Execute a command.
-    pub async fn dispatch(&self, command: UPowerCommand) -> Result<()> {
+    async fn execute(&self, command: UPowerCommand) -> Result<()> {
         match command {
             UPowerCommand::SetPowerProfile(profile) => {
                 self.set_power_profile(profile).await?;
             }
             UPowerCommand::CyclePowerProfile => {
-                let current = self.data.lock_ref().power_profile;
-                self.set_power_profile(current.next()).await?;
+                // Ask the daemon rather than the cache: a second click queued
+                // behind the first must not see the profile it is replacing.
+                let conn = crate::bus::system().await?;
+                let current = PowerProfilesProxy::new(&conn)
+                    .await?
+                    .active_profile()
+                    .await?;
+                self.set_power_profile(PowerProfile::from(current.as_str()).next())
+                    .await?;
+            }
+            UPowerCommand::SetChargeLimit(enabled) => {
+                let conn = crate::bus::system().await?;
+                let device = charge_limit_device(&conn)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("No battery supports a charge limit"))?;
+                device.enable_charge_threshold(enabled).await?;
+                debug!("Set charge limit: {}", enabled);
+                // Some kernels apply it without a PropertiesChanged.
+                if let Some(limit) = self.data.lock_mut().charge_limit.as_mut() {
+                    limit.enabled = enabled;
+                }
             }
             UPowerCommand::Refresh => {
                 self.refresh().await?;
@@ -320,13 +389,13 @@ impl UPowerSubscriber {
     async fn refresh(&self) -> Result<()> {
         let conn = crate::bus::system().await?;
         let new_data = UPowerData::init(&conn).await?;
-        self.data.set(new_data);
+        self.data.set_neq(new_data);
         debug!("Refreshed UPower data");
         Ok(())
     }
 
     /// Run the event monitoring loop.
-    async fn run(&self, token: RunToken) -> Result<()> {
+    async fn run(&self) -> Result<()> {
         info!("UPower subscriber started");
 
         let conn = crate::bus::system().await?;
@@ -454,7 +523,7 @@ impl UPowerSubscriber {
                     async move {
                         if let Ok(value) = change.get().await {
                             debug!("On battery changed: {}", value);
-                            data.lock_mut().on_battery = value;
+                            data.lock_mut().on_battery = Some(value);
                         }
                     }
                 }
@@ -487,6 +556,28 @@ impl UPowerSubscriber {
             }
         };
 
+        let charge_limit_stream = match charge_limit_device(&conn).await {
+            Some(device) => device
+                .receive_charge_threshold_enabled_changed()
+                .await
+                .then({
+                    let data = data.clone();
+                    move |change| {
+                        let data = data.clone();
+                        async move {
+                            if let Ok(value) = change.get().await {
+                                debug!("Charge limit changed: {}", value);
+                                if let Some(limit) = data.lock_mut().charge_limit.as_mut() {
+                                    limit.enabled = value;
+                                }
+                            }
+                        }
+                    }
+                })
+                .boxed(),
+            None => futures_util::stream::pending().boxed(),
+        };
+
         // Combine all streams
         let mut events = select_all(vec![
             percentage_stream,
@@ -496,44 +587,21 @@ impl UPowerSubscriber {
             warning_stream,
             on_battery_stream,
             profile_stream,
+            charge_limit_stream,
         ]);
 
-        // Process events
-        while token.alive() && (events.next().await).is_some() {
-            // Events are processed in their respective handlers
-        }
+        // Process events; the handlers write as they go.
+        while events.next().await.is_some() {}
 
-        warn!("UPower event stream ended unexpectedly");
-        Ok(())
+        anyhow::bail!("UPower event streams ended")
     }
 
     /// Bring the subscriber up: fetch a snapshot, then monitor.
-    async fn run_from_scratch(&self, token: RunToken) {
-        let conn = match crate::bus::system().await {
-            Ok(conn) => conn,
-            Err(e) => {
-                error!("Failed to connect to the system bus: {}", e);
-                token.error(e.to_string());
-                return;
-            }
-        };
-
-        match UPowerData::init(&conn).await {
-            Ok(data) => {
-                self.data.set(data);
-                token.active();
-            }
-            Err(e) => {
-                error!("Failed to initialize UPower data: {}", e);
-                token.error(e.to_string());
-                return;
-            }
-        }
-
-        if let Err(e) = self.run(token.clone()).await {
-            error!("UPower subscriber error: {}", e);
-            token.error(e.to_string());
-        }
+    async fn run_from_scratch(&self, token: RunToken) -> Result<()> {
+        let conn = crate::bus::system().await?;
+        self.data.set_neq(UPowerData::init(&conn).await?);
+        token.active();
+        self.run().await
     }
 
     /// Helper to update a single battery field.
@@ -564,7 +632,17 @@ impl ManagedService for UPowerSubscriber {
 
     fn start(&self) {
         let token = self.lifecycle.begin();
+
         let subscriber = self.clone();
-        tokio::spawn(async move { subscriber.run_from_scratch(token).await });
+        self.jobs.run(token.clone(), move |command| {
+            let subscriber = subscriber.clone();
+            async move { subscriber.execute(command).await }
+        });
+
+        let subscriber = self.clone();
+        token.supervise(self.name(), move |token| {
+            let subscriber = subscriber.clone();
+            async move { subscriber.run_from_scratch(token).await }
+        });
     }
 }

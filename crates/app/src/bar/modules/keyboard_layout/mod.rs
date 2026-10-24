@@ -43,12 +43,8 @@ impl KeyboardLayout {
 
     /// Cycle to the next keyboard layout.
     fn next_layout(&self) {
-        if let Err(e) = self
-            .compositor
-            .dispatch(CompositorCommand::NextKeyboardLayout)
-        {
-            tracing::error!("Failed to switch keyboard layout: {}", e);
-        }
+        self.compositor
+            .dispatch(CompositorCommand::NextKeyboardLayout);
     }
 
     /// Get a short display name for the keyboard layout.

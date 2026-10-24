@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Workspaces module configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkspacesConfig {
     pub show_icons: bool,

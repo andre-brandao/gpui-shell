@@ -73,7 +73,18 @@ body:
     attributes:
       label: Compositor Version
       description: What version of your compositor?
-      placeholder: "e.g., Hyprland v0.45.0"
+      placeholder: "e.g., Hyprland v0.45.0 (hyprctl version / niri --version)"
+    validations:
+      required: true
+
+  - type: input
+    id: gpuishell-version
+    attributes:
+      label: GPUi Shell Version
+      description: Release tag, or the commit you built from (`git rev-parse --short HEAD`, or the gpuishell rev in your flake.lock)
+      placeholder: "e.g., v0.2.0 or fb4173c"
+    validations:
+      required: true
 
   - type: dropdown
     id: os

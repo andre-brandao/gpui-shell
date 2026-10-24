@@ -4,16 +4,17 @@ mod dbus;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::thread;
 
+use anyhow::Context;
 use dbus::MprisPlayerProxy;
-use futures_signals::signal::{Mutable, MutableSignalCloned};
+use futures_signals::signal::Mutable;
 use futures_util::StreamExt;
 use futures_util::future::join_all;
 use futures_util::stream::select_all;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, info, trace};
 use zbus::{Connection, fdo::DBusProxy, zvariant::OwnedValue};
 
+use crate::jobs::JobQueue;
 use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 const MPRIS_PLAYER_SERVICE_PREFIX: &str = "org.mpris.MediaPlayer2.";
@@ -144,10 +145,32 @@ pub enum PlayerCommand {
 }
 
 /// Reactive MPRIS subscriber.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MprisSubscriber {
-    data: Mutable<MprisData>,
-    lifecycle: Lifecycle,
+    core: crate::ServiceCore<MprisData, MprisCommand>,
+}
+
+impl std::ops::Deref for MprisSubscriber {
+    type Target = crate::ServiceCore<MprisData, MprisCommand>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
+}
+
+impl Default for MprisSubscriber {
+    fn default() -> Self {
+        Self {
+            core: crate::ServiceCore::with_jobs(
+                // A volume drag only needs its last value per player.
+                JobQueue::new("MPRIS").coalesce(|older, newer| {
+                    older.service_name == newer.service_name
+                        && matches!(older.command, PlayerCommand::Volume(_))
+                        && matches!(newer.command, PlayerCommand::Volume(_))
+                }),
+            ),
+        }
+    }
 }
 
 impl MprisSubscriber {
@@ -157,18 +180,9 @@ impl MprisSubscriber {
         Self::default()
     }
 
-    /// Get a signal that emits when MPRIS state changes.
-    pub fn subscribe(&self) -> MutableSignalCloned<MprisData> {
-        self.data.signal_cloned()
-    }
-
-    /// Get the current MPRIS state snapshot.
-    pub fn get(&self) -> MprisData {
-        self.data.get_cloned()
-    }
-
-    /// Execute a command for a specific player.
-    pub async fn dispatch(&self, command: MprisCommand) -> anyhow::Result<()> {
+    /// The listener picks up the resulting property changes, so there is
+    /// no refetch here racing it with an older snapshot.
+    async fn execute(command: MprisCommand) -> anyhow::Result<()> {
         let conn = crate::bus::session().await?;
         let proxy = MprisPlayerProxy::builder(&conn)
             .destination(command.service_name.as_str())?
@@ -189,10 +203,6 @@ impl MprisSubscriber {
                 let normalized = (v.clamp(0.0, 100.0)) / 100.0;
                 proxy.set_volume(normalized).await?;
             }
-        }
-
-        if let Ok(new_data) = fetch_mpris_data(&conn).await {
-            *self.data.lock_mut() = new_data;
         }
 
         Ok(())
@@ -234,18 +244,9 @@ impl ManagedService for MprisSubscriber {
         let token = self.lifecycle.begin();
         let data = self.data.clone();
 
-        tokio::spawn(async move {
-            let conn = match crate::bus::session().await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    error!("Failed to connect to the session bus: {}", e);
-                    token.error(e.to_string());
-                    return;
-                }
-            };
+        self.jobs.run(token.clone(), Self::execute);
 
-            start_listener(data, token, conn);
-        });
+        token.supervise(self.name(), move |token| run(data.clone(), token));
     }
 }
 
@@ -299,55 +300,31 @@ async fn fetch_mpris_data(conn: &Connection) -> anyhow::Result<MprisData> {
     Ok(MprisData { players })
 }
 
-/// Start the MPRIS listener in a dedicated thread.
-fn start_listener(data: Mutable<MprisData>, token: RunToken, conn: Connection) {
-    thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!("Failed to create Tokio runtime for MPRIS listener: {}", e);
-                token.error(e.to_string());
-                return;
-            }
-        };
-
-        rt.block_on(async move {
-            if let Err(e) = run_listener(data, token.clone(), conn).await {
-                error!("MPRIS listener error: {}", e);
-                token.error(e.to_string());
-            }
-        });
-    });
+/// One attempt: connect, then follow players. Ends only with an error, which
+/// the supervisor answers with a fresh attempt.
+async fn run(data: Mutable<MprisData>, token: RunToken) -> anyhow::Result<()> {
+    let conn = crate::bus::session()
+        .await
+        .context("connecting to the session bus")?;
+    run_listener(data, &token, conn).await
 }
 
-/// Run the MPRIS event listener loop.
+/// Run the MPRIS event listener loop. It only returns on error; a stop
+/// drops it.
 async fn run_listener(
     data: Mutable<MprisData>,
-    token: RunToken,
+    token: &RunToken,
     conn: Connection,
 ) -> anyhow::Result<()> {
     info!("MPRIS subscriber started");
 
-    while token.alive() {
-        let current = match fetch_mpris_data(&conn).await {
-            Ok(value) => {
-                token.active();
-                value
-            }
-            Err(err) => {
-                error!("Failed to fetch MPRIS data: {}", err);
-                token.error(err.to_string());
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                continue;
-            }
-        };
+    loop {
+        let current = fetch_mpris_data(&conn)
+            .await
+            .context("fetching MPRIS players")?;
+        token.active();
 
-        if data.get_cloned() != current {
-            *data.lock_mut() = current.clone();
-        }
+        data.set_neq(current.clone());
 
         let dbus = DBusProxy::new(&conn).await?;
         let mut streams = vec![
@@ -414,14 +391,9 @@ async fn run_listener(
         }
 
         let mut events = select_all(streams);
-        while token.alive() {
-            let first = match events.next().await {
-                Some(event) => event,
-                None => {
-                    warn!("MPRIS event stream ended unexpectedly");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                    break;
-                }
+        loop {
+            let Some(first) = events.next().await else {
+                anyhow::bail!("MPRIS event stream ended");
             };
 
             let mut batch = vec![first];
@@ -526,6 +498,4 @@ async fn run_listener(
             }
         }
     }
-
-    Ok(())
 }

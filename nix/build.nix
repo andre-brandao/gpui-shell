@@ -38,7 +38,6 @@ let
       relPath = lib.removePrefix root path;
       topLevelInclueds = [
         "crates"
-        "assets"
         "Cargo.toml"
       ];
       firstComp = builtins.head (lib.path.subpath.components relPath);

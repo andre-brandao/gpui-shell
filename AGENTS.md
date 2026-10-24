@@ -53,8 +53,16 @@ Services are global singletons accessed via `AppState` (`crates/app/src/state.rs
 
 Each one implements `ManagedService` (`crates/services/src/lifecycle.rs`): a
 `Lifecycle` owns its status and a run generation, `start()` (re)runs the
-listener with a fresh `RunToken`, and listeners must check `token.alive()` in
-their loop so a stop or restart retires them. Startup mode per service lives in
+listener with a fresh `RunToken`, and a stop or restart must retire the old
+run at once, not at its next event. Async listeners run on the shared tokio
+runtime through `token.supervise(name, |token| run(..))` (never a thread with
+its own runtime): one attempt returns `Err` on any failure and never retries
+on its own; the supervisor backs off and runs it again. Blocking ones
+(PulseAudio, PipeWire, udev) wake on `token.cancelled()` and write through
+`token.write`. Commands go through the
+service's `JobQueue` (`crates/services/src/jobs.rs`): `dispatch` queues, one
+worker per run executes them in order, and `request` awaits a result. UI code
+never `cx.spawn`s a command or blocks on one. Startup mode per service lives in
 `config.toml` under `[services]` (`eager`, `lazy` or `off`); lazy services start
 on first `AppState::x(cx)` access. The `;s` launcher view shows status, retained
 state size and the restart/stop/mode actions.
@@ -91,6 +99,9 @@ Commands use `CompositorCommand` enum with backend-specific implementations.
 
 ## Important Conventions
 
+- **Comments**: small and concise. One line that says *why* when the code
+  does not; no narration of what the code already shows, no essays in module
+  docs
 - **Async timers**: Use `cx.background_executor().timer(duration).await` (NOT
   `tokio::time::sleep`)
 - **Theme colors**: Access via `cx.theme().colors()` and `cx.theme().status()`

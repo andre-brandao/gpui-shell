@@ -12,7 +12,7 @@ mod refinement;
 mod schemes;
 mod tokens;
 
-pub use base16::Base16Palette;
+pub use base16::{Base16Palette, WallpaperPalettes};
 pub use colors::{Color, StatusColors, ThemeColors};
 pub use refinement::{StatusColorsRefinement, ThemeColorsRefinement};
 pub use schemes::{ThemeScheme, builtin_schemes};

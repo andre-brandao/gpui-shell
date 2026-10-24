@@ -115,7 +115,7 @@ pub struct AccessPoint {
 }
 
 /// Information about an active network connection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActiveConnectionInfo {
     Wired {
         name: String,
@@ -146,7 +146,7 @@ impl ActiveConnectionInfo {
 }
 
 /// Network traffic statistics for a device.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkStatistics {
     pub(crate) prev_tx: u64,
     pub(crate) prev_rx: u64,
@@ -182,8 +182,34 @@ impl NetworkStatistics {
     }
 }
 
+/// A saved VPN or WireGuard profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VpnProfile {
+    /// Profile name (`connection.id`).
+    pub name: String,
+    /// Settings object path, what [`NetworkCommand::ConnectVpn`] takes.
+    pub path: OwnedObjectPath,
+    /// Whether the profile is currently active.
+    pub active: bool,
+}
+
+/// The last WiFi connect the shell started, until it succeeds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WifiAttempt {
+    pub ssid: String,
+    pub status: WifiAttemptStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WifiAttemptStatus {
+    Connecting,
+    /// NetworkManager had no password, or rejected the one given.
+    NeedsPassword,
+    Failed(String),
+}
+
 /// Network service data.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkData {
     /// Whether WiFi is enabled.
     pub wifi_enabled: bool,
@@ -195,6 +221,12 @@ pub struct NetworkData {
     pub connectivity: ConnectivityState,
     /// Network traffic statistics per device.
     pub network_statistics: Vec<NetworkStatistics>,
+    /// A WiFi scan was requested and has not reported back yet.
+    pub scanning: bool,
+    /// Saved VPN profiles, by name.
+    pub vpn_profiles: Vec<VpnProfile>,
+    /// Outcome of the last connect started from the shell.
+    pub wifi_attempt: Option<WifiAttempt>,
 }
 
 impl Default for NetworkData {
@@ -205,6 +237,9 @@ impl Default for NetworkData {
             wireless_access_points: Vec::new(),
             connectivity: ConnectivityState::Unknown,
             network_statistics: Vec::new(),
+            scanning: false,
+            vpn_profiles: Vec::new(),
+            wifi_attempt: None,
         }
     }
 }
@@ -222,7 +257,7 @@ impl NetworkData {
 }
 
 /// Commands for the Network service.
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum NetworkCommand {
     /// Enable or disable WiFi.
     SetWifiEnabled(bool),
@@ -237,4 +272,35 @@ pub enum NetworkCommand {
     },
     /// Disconnect the active WiFi connection by SSID.
     Disconnect(String),
+    /// Delete every saved profile for this SSID.
+    Forget(String),
+    /// Forget the last connect's outcome, e.g. when its prompt closes.
+    DismissWifiAttempt,
+    /// Activate a saved VPN profile by its settings path.
+    ConnectVpn(OwnedObjectPath),
+    /// Deactivate a VPN profile by its settings path.
+    DisconnectVpn(OwnedObjectPath),
+}
+
+// By hand so the job queue's command logs never print a password.
+impl std::fmt::Debug for NetworkCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SetWifiEnabled(enabled) => {
+                f.debug_tuple("SetWifiEnabled").field(enabled).finish()
+            }
+            Self::ToggleWifi => f.write_str("ToggleWifi"),
+            Self::RequestScan => f.write_str("RequestScan"),
+            Self::Connect { ssid, password } => f
+                .debug_struct("Connect")
+                .field("ssid", ssid)
+                .field("password", &password.as_ref().map(|_| "<redacted>"))
+                .finish(),
+            Self::Disconnect(ssid) => f.debug_tuple("Disconnect").field(ssid).finish(),
+            Self::Forget(ssid) => f.debug_tuple("Forget").field(ssid).finish(),
+            Self::DismissWifiAttempt => f.write_str("DismissWifiAttempt"),
+            Self::ConnectVpn(path) => f.debug_tuple("ConnectVpn").field(path).finish(),
+            Self::DisconnectVpn(path) => f.debug_tuple("DisconnectVpn").field(path).finish(),
+        }
+    }
 }

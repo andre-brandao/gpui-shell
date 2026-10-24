@@ -108,16 +108,8 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
                     .min(0.0)
                     .max(100.0)
                     .step(1.0)
-                    .on_change(move |value, _window, cx| {
-                        // Brightness writes go through logind, so the dispatch
-                        // is async - unlike the audio one.
-                        let services = services_slider.clone();
-                        cx.spawn(async move |_| {
-                            let _ = services
-                                .dispatch(BrightnessCommand::SetPercent(value as u8))
-                                .await;
-                        })
-                        .detach();
+                    .on_change(move |value, _window, _cx| {
+                        services_slider.dispatch(BrightnessCommand::SetPercent(value as u8));
                     }),
             ),
         )
@@ -127,19 +119,11 @@ pub fn render_brightness_slider(cx: &App) -> impl IntoElement {
         .child(render_adjustment_buttons(
             "brightness",
             cx,
-            move |cx| {
-                let s = services_dec.clone();
-                cx.spawn(async move |_| {
-                    let _ = s.dispatch(BrightnessCommand::Decrease(5)).await;
-                })
-                .detach();
+            move |_cx| {
+                services_dec.dispatch(BrightnessCommand::Decrease(5));
             },
-            move |cx| {
-                let s = services_inc.clone();
-                cx.spawn(async move |_| {
-                    let _ = s.dispatch(BrightnessCommand::Increase(5)).await;
-                })
-                .detach();
+            move |_cx| {
+                services_inc.dispatch(BrightnessCommand::Increase(5));
             },
         ))
         .into_any_element()

@@ -54,4 +54,8 @@ pub trait ActiveConnection {
     /// Vpn property.
     #[zbus(property)]
     fn vpn(&self) -> zbus::Result<bool>;
+
+    /// StateChanged signal: `NMActiveConnectionState` and its reason.
+    #[zbus(signal, name = "StateChanged")]
+    fn state_transition(&self, state: u32, reason: u32) -> zbus::Result<()>;
 }

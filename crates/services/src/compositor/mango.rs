@@ -155,6 +155,7 @@ fn build_monitors(monitors: &[Value]) -> (Vec<Workspace>, Vec<Monitor>, Option<i
                     monitor_id: Some(idx as i128),
                     windows: tag["client_count"].as_i64().unwrap_or(0) as u16,
                     is_special: false,
+                    has_urgent: tag["is_urgent"].as_bool().unwrap_or(false),
                 });
                 if is_active && active_tag == Some(tag_index) {
                     active_workspace_id = Some(ws_id);
@@ -214,6 +215,8 @@ fn build_windows(
                 workspace_id: (monitor_index as i32) * 100 + tag_index,
                 is_focused: c["is_focused"].as_bool().unwrap_or(false),
                 is_minimized: c["is_minimized"].as_bool().unwrap_or(false),
+                is_urgent: false,
+                pid: None,
                 geometry: Some(super::types::WindowGeometry {
                     x: c["x"].as_i64().unwrap_or(0) as i32,
                     y: c["y"].as_i64().unwrap_or(0) as i32,

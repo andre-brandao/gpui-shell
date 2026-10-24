@@ -159,6 +159,7 @@ pub enum IconName {
     Server,
     Settings,
     Share,
+    Shield,
     Sidebar,
     SkipBack,
     SkipForward,

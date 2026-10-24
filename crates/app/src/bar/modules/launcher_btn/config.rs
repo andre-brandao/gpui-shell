@@ -9,7 +9,7 @@ use crate::icons::ConfigIcon;
 /// `icon` is either a name from the embedded set (`icon = "layers"`) or a
 /// path to your own file (`icon = "~/.config/gpuishell/icons/mine.svg"`).
 /// Omit it - or give something we can't resolve - to get the built-in icon.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LauncherBtnConfig {
     #[serde(

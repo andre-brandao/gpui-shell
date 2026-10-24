@@ -3,13 +3,13 @@
 //! Manages wallpaper setting via external tools. Currently supports `awww`.
 //! Spawns the daemon on startup and provides commands to set wallpapers.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 
-use futures_signals::signal::{Mutable, MutableSignalCloned};
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
+use crate::jobs::JobQueue;
 use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
 
 /// Supported wallpaper engines.
@@ -36,10 +36,28 @@ pub enum WallpaperCommand {
 }
 
 /// Reactive wallpaper subscriber.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct WallpaperSubscriber {
-    data: Mutable<WallpaperData>,
-    lifecycle: Lifecycle,
+    core: crate::ServiceCore<WallpaperData, WallpaperCommand>,
+}
+
+impl std::ops::Deref for WallpaperSubscriber {
+    type Target = crate::ServiceCore<WallpaperData, WallpaperCommand>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
+}
+
+impl Default for WallpaperSubscriber {
+    fn default() -> Self {
+        Self {
+            core: crate::ServiceCore::with_jobs(
+                // Clicking through the picker only needs the last pick applied.
+                JobQueue::new("Wallpaper").coalesce(|_, _| true),
+            ),
+        }
+    }
 }
 
 impl WallpaperSubscriber {
@@ -49,25 +67,15 @@ impl WallpaperSubscriber {
         Self::default()
     }
 
-    /// Get a signal that emits when wallpaper state changes.
-    pub fn subscribe(&self) -> MutableSignalCloned<WallpaperData> {
-        self.data.signal_cloned()
-    }
-
-    /// Get the current wallpaper data snapshot.
-    pub fn get(&self) -> WallpaperData {
-        self.data.get_cloned()
-    }
-
-    /// Execute a wallpaper command.
-    pub fn dispatch(&self, command: WallpaperCommand) {
+    async fn execute(&self, command: WallpaperCommand) -> anyhow::Result<()> {
         match command {
             WallpaperCommand::SetWallpaper(path) => {
-                // Optimistic update
-                self.data.lock_mut().current = Some(path.clone());
-                set_wallpaper_awww(&path);
+                let shown = path.clone();
+                tokio::task::spawn_blocking(move || set_wallpaper_awww(&shown)).await??;
+                self.data.lock_mut().current = Some(path);
             }
         }
+        Ok(())
     }
 }
 
@@ -93,7 +101,15 @@ impl ManagedService for WallpaperSubscriber {
     /// Stopping only detaches the shell: `awww-daemon` is an external process
     /// and keeps the current wallpaper up.
     fn start(&self) {
-        start_daemon(self.lifecycle.begin());
+        let token = self.lifecycle.begin();
+
+        let subscriber = self.clone();
+        self.jobs.run(token.clone(), move |command| {
+            let subscriber = subscriber.clone();
+            async move { subscriber.execute(command).await }
+        });
+
+        start_daemon(token);
     }
 }
 
@@ -127,24 +143,20 @@ fn start_daemon(token: RunToken) {
     });
 }
 
-/// Set wallpaper using awww.
-fn set_wallpaper_awww(path: &Path) {
-    let path = path.to_path_buf();
-    thread::spawn(move || {
-        let result = Command::new("awww")
-            .args([
-                "img",
-                &path.to_string_lossy(),
-                "--transition-type",
-                "fade",
-                "--transition-duration",
-                "1",
-            ])
-            .spawn();
-
-        match result {
-            Ok(_) => debug!("Wallpaper set to: {}", path.display()),
-            Err(e) => error!("Failed to set wallpaper via awww: {}", e),
-        }
-    });
+/// Set wallpaper using awww, waiting for it so the child is reaped and a
+/// failure is reported instead of assumed away.
+fn set_wallpaper_awww(path: &std::path::Path) -> anyhow::Result<()> {
+    let status = Command::new("awww")
+        .args([
+            "img",
+            &path.to_string_lossy(),
+            "--transition-type",
+            "fade",
+            "--transition-duration",
+            "1",
+        ])
+        .status()?;
+    anyhow::ensure!(status.success(), "awww img exited with {status}");
+    debug!("Wallpaper set to: {}", path.display());
+    Ok(())
 }

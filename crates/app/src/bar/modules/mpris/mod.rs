@@ -3,7 +3,7 @@
 mod config;
 pub use config::MprisConfig;
 
-use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Size, Window, prelude::*, px};
+use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Window, prelude::*, px};
 use services::{MprisData, PlaybackStatus};
 use ui::{
     ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, Color, Icon, IconName,
@@ -12,9 +12,9 @@ use ui::{
 
 use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::AppState;
 use crate::state::watch;
+use crate::windows::{PanelConfig, PanelSize, ShellWindows, panel_placement_from_event};
 
 mod panel;
 pub use panel::MprisPanel;
@@ -41,18 +41,20 @@ impl Mpris {
     fn toggle_panel(&self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
-        let panel_size = Size::new(px(380.0), px(420.0));
-        let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
-        let config = PanelConfig {
+        let size = PanelSize::FitHeight {
             width: 380.0,
-            height: 420.0,
+            max_height: 600.0,
+        };
+        let (anchor, margin) =
+            panel_placement_from_event(config.bar.position, at, window, cx, size.initial());
+        let config = PanelConfig {
+            size,
             anchor,
             margin,
             namespace: "mpris-panel".to_string(),
         };
 
-        toggle_panel("mpris", config, cx, move |cx| {
+        ShellWindows::toggle_panel(cx, window, "mpris", config, move |cx| {
             MprisPanel::new(subscriber, cx)
         });
     }

@@ -1,6 +1,7 @@
 //! Quick toggle buttons for the Control Center.
 //!
-//! Provides compact modules for WiFi, Bluetooth, Microphone, and Camera status.
+//! Provides compact modules for WiFi, Bluetooth, VPN, Microphone, and Camera
+//! status.
 
 use gpui::{App, MouseButton, div, prelude::*, px};
 use services::{AudioCommand, BluetoothCommand, BluetoothState, NetworkCommand};
@@ -15,6 +16,7 @@ pub enum ExpandedSection {
     None,
     WiFi,
     Bluetooth,
+    Vpn,
     Power,
 }
 
@@ -66,6 +68,15 @@ pub fn render_quick_toggles(
         "On".to_string()
     };
 
+    // Shown only when there is a profile to toggle.
+    let vpns = network.vpn_profiles.clone();
+    let active_vpns: Vec<_> = vpns.iter().filter(|v| v.active).cloned().collect();
+    let vpn_status = match active_vpns.as_slice() {
+        [] => "Off".to_string(),
+        [vpn] => vpn.name.clone(),
+        many => format!("{} on", many.len()),
+    };
+
     let mic_status = if mic_muted { "Muted" } else { "On" };
     let cam_status = if cam_active { "In use" } else { "Idle" };
 
@@ -75,6 +86,8 @@ pub fn render_quick_toggles(
 
     let on_toggle_wifi = on_toggle_section.clone();
     let on_toggle_bt = on_toggle_section.clone();
+    let on_toggle_vpn = on_toggle_section.clone();
+    let on_expand_vpn = on_toggle_section.clone();
 
     div()
         .flex()
@@ -109,7 +122,30 @@ pub fn render_quick_toggles(
                     cam_status,
                     cam_active,
                     cx,
-                )),
+                ))
+                .when(!vpns.is_empty(), |el| {
+                    let services_vpn = services_wifi.clone();
+                    el.child(render_expandable_module(
+                        "vpn-toggle",
+                        IconName::Shield,
+                        "VPN",
+                        vpn_status,
+                        !active_vpns.is_empty(),
+                        expanded == ExpandedSection::Vpn,
+                        cx,
+                        // Off when any is on; otherwise pick one from the list.
+                        move |cx| {
+                            if active_vpns.is_empty() {
+                                on_toggle_vpn(ExpandedSection::Vpn, cx);
+                            }
+                            for vpn in &active_vpns {
+                                services_vpn
+                                    .dispatch(NetworkCommand::DisconnectVpn(vpn.path.clone()));
+                            }
+                        },
+                        move |cx| on_expand_vpn(ExpandedSection::Vpn, cx),
+                    ))
+                }),
         )
         .child(
             div()
@@ -129,13 +165,7 @@ pub fn render_quick_toggles(
                     wifi_enabled,
                     expanded == ExpandedSection::WiFi,
                     cx,
-                    move |cx| {
-                        let services = services_wifi.clone();
-                        cx.spawn(async move |_| {
-                            let _ = services.dispatch(NetworkCommand::ToggleWifi).await;
-                        })
-                        .detach();
-                    },
+                    move |_| services_wifi.dispatch(NetworkCommand::ToggleWifi),
                     move |cx| {
                         on_toggle_wifi(ExpandedSection::WiFi, cx);
                     },
@@ -152,13 +182,7 @@ pub fn render_quick_toggles(
                     bt_active,
                     expanded == ExpandedSection::Bluetooth,
                     cx,
-                    move |cx| {
-                        let services = services_bt.clone();
-                        cx.spawn(async move |_| {
-                            let _ = services.dispatch(BluetoothCommand::Toggle).await;
-                        })
-                        .detach();
-                    },
+                    move |_| services_bt.dispatch(BluetoothCommand::Toggle),
                     move |cx| {
                         on_toggle_bt(ExpandedSection::Bluetooth, cx);
                     },

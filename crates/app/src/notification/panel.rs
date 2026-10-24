@@ -6,9 +6,9 @@ use ui::{ActiveTheme, Color, Icon, IconSize, Radius, Spacing, TextSize};
 
 use crate::config::ActiveConfig;
 use crate::state::watch;
+use crate::windows::ShellWindows;
 
-use super::card::notification_card_body;
-use super::dispatch_notification_command;
+use super::card::{activate_notification, is_critical, notification_card_body};
 
 pub(super) struct NotificationCenter {
     subscriber: NotificationSubscriber,
@@ -47,6 +47,7 @@ impl Render for NotificationCenter {
                 .children(notifications.into_iter().map(|item| {
                     let dismiss_subscriber = self.subscriber.clone();
                     let id = item.id;
+                    let clicked = item.clone();
                     div()
                         .relative()
                         .w_full()
@@ -54,8 +55,26 @@ impl Render for NotificationCenter {
                         .rounded(Radius::Large.pixels())
                         .bg(theme.colors.background)
                         .border_1()
-                        .border_color(theme.colors.border)
-                        .child(notification_card_body(&item, cx, true, &self.subscriber))
+                        .border_color(if is_critical(&item) {
+                            theme.colors.status.error
+                        } else {
+                            theme.colors.border
+                        })
+                        .when(item.has_default_action(), |el| {
+                            el.cursor_pointer()
+                                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                    activate_notification(&clicked, cx);
+                                    // Out of the way of the window it focused.
+                                    ShellWindows::close_panel(cx);
+                                })
+                        })
+                        .child(notification_card_body(
+                            &item,
+                            cx,
+                            true,
+                            false,
+                            &self.subscriber,
+                        ))
                         .child(
                             div()
                                 .absolute()
@@ -64,11 +83,10 @@ impl Render for NotificationCenter {
                                 .cursor_pointer()
                                 .on_mouse_down(
                                     MouseButton::Left,
-                                    cx.listener(move |_, _, _, _cx| {
-                                        dispatch_notification_command(
-                                            dismiss_subscriber.clone(),
-                                            NotificationCommand::Dismiss(id),
-                                        );
+                                    cx.listener(move |_, _, _, cx| {
+                                        cx.stop_propagation();
+                                        dismiss_subscriber
+                                            .dispatch(NotificationCommand::Dismiss(id));
                                     }),
                                 )
                                 .child(
@@ -119,10 +137,9 @@ impl Render for NotificationCenter {
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(move |_, _, _, _cx| {
-                                            dispatch_notification_command(
-                                                dnd_subscriber.clone(),
-                                                NotificationCommand::SetDnd(!dnd_enabled),
-                                            );
+                                            dnd_subscriber.dispatch(NotificationCommand::SetDnd(
+                                                !dnd_enabled,
+                                            ));
                                         }),
                                     )
                                     .child(
@@ -143,10 +160,8 @@ impl Render for NotificationCenter {
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(move |_, _, _, _cx| {
-                                            dispatch_notification_command(
-                                                clear_subscriber.clone(),
-                                                NotificationCommand::DismissAll,
-                                            );
+                                            clear_subscriber
+                                                .dispatch(NotificationCommand::DismissAll);
                                         }),
                                     )
                                     .child("Clear"),
@@ -154,9 +169,11 @@ impl Render for NotificationCenter {
                     ),
             )
             .child(
+                // Sized by content so the panel can fit it; scrolls at the cap.
                 div()
                     .id("notification-center-list")
-                    .flex_1()
+                    .flex_grow_1()
+                    .min_h_0()
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll_handle)
                     .flex()

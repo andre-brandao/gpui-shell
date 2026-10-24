@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 /// Represents a desktop application entry.
 #[derive(Debug, Clone)]
@@ -57,7 +57,16 @@ impl Application {
             debug!("Launching application: {} ({})", name, exec_cleaned.trim());
 
             match Command::new("sh").args(["-c", &exec_cleaned]).spawn() {
-                Ok(_) => debug!("Application launched: {}", name),
+                Ok(mut child) => {
+                    debug!("Application launched: {}", name);
+                    match child.wait() {
+                        Ok(status) if !status.success() => {
+                            warn!("Application exited with {status}: {name}");
+                        }
+                        Err(e) => error!("Failed to reap {}: {}", name, e),
+                        _ => {}
+                    }
+                }
                 Err(e) => error!("Failed to launch {}: {}", name, e),
             }
         });

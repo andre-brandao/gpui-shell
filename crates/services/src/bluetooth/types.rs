@@ -30,7 +30,7 @@ pub struct BluetoothDevice {
 }
 
 /// Bluetooth service data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BluetoothData {
     /// Current Bluetooth adapter state.
     pub state: BluetoothState,
@@ -58,7 +58,7 @@ impl BluetoothData {
 }
 
 /// Commands for the Bluetooth service.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BluetoothCommand {
     /// Toggle Bluetooth power on/off.
     Toggle,

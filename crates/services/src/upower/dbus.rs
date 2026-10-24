@@ -226,6 +226,21 @@ pub trait Device {
     /// Icon name.
     #[zbus(property)]
     fn icon_name(&self) -> zbus::Result<String>;
+
+    /// Whether the battery can hold its charge below full (UPower 1.90+).
+    #[zbus(property)]
+    fn charge_threshold_supported(&self) -> zbus::Result<bool>;
+
+    /// Whether the charge limit is on.
+    #[zbus(property)]
+    fn charge_threshold_enabled(&self) -> zbus::Result<bool>;
+
+    /// Percentage charging stops at while the limit is on.
+    #[zbus(property)]
+    fn charge_end_threshold(&self) -> zbus::Result<u32>;
+
+    /// Turn the charge limit on or off.
+    fn enable_charge_threshold(&self, enabled: bool) -> zbus::Result<()>;
 }
 
 /// Main UPower D-Bus proxy.

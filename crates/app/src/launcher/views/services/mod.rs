@@ -9,47 +9,59 @@
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*, px};
+use std::time::Duration;
+
+use gpui::{AnyElement, App, Context, EventEmitter, Window, div, prelude::*, px};
 use services::{ServiceMode, ServiceStatus};
-use ui::patterns::footer_hints;
 use ui::{
     ActiveTheme, Color, Icon, IconName, IconSize, Label, LabelCommon, ListItem, ListItemSpacing,
     Spacing, TextSize, Toggleable,
 };
 
-use crate::icons;
-
 use self::config::ServicesConfig;
 use crate::config::State;
+use crate::icons;
+use crate::launcher::item::Item;
+use crate::launcher::view::{
+    Items, LauncherView, Matching, Outcome, ViewDescriptor, ViewEvent, ViewMeta,
+};
+use crate::state::{AppState, watch};
 
 /// Icon for the services view itself, and for any service without a more
 /// specific one.
 const SERVICES_ICON: IconName = IconName::Gauge;
-use crate::launcher::view::{InputResult, LauncherView, ViewContext, ViewInput};
-use crate::state::AppState;
+
+/// How often the resident-memory figure in the header is refreshed.
+const RSS_INTERVAL: Duration = Duration::from_secs(1);
+
+pub fn descriptor(config: &ServicesConfig) -> ViewDescriptor {
+    let prefix = config.prefix.clone();
+    ViewDescriptor::new(
+        ViewMeta {
+            id: "services",
+            prefix: config.prefix.clone().into(),
+            name: "Services",
+            icon: SERVICES_ICON,
+            description: "Inspect, restart and configure services",
+            default: false,
+            in_help: true,
+        },
+        move |cx| ServicesView::new(prefix.clone(), cx),
+    )
+}
 
 /// Services status view.
 pub struct ServicesView {
     prefix: String,
-    /// Every service, and what the query resolves to. Both are rebuilt once
-    /// per frame by `update_matches`; the header reads the unfiltered list so
-    /// its summary covers services the query hides.
+    /// Every service as of the last query; the header summarises all of
+    /// them, including those the query hides.
     services: Vec<ServiceInfo>,
-    level: Level,
+    /// Set when the query names one service exactly.
+    detail: Option<(ServiceInfo, Vec<Action>)>,
+    rss: Option<usize>,
 }
 
-/// What the current query resolves to.
-enum Level {
-    /// Every service matching the query.
-    List(Vec<ServiceInfo>),
-    /// One service, plus what can be done to it.
-    Detail {
-        service: ServiceInfo,
-        actions: Vec<Action>,
-    },
-}
-
-/// Snapshot of one service, taken once per frame.
+/// Snapshot of one service.
 #[derive(Clone)]
 struct ServiceInfo {
     name: &'static str,
@@ -100,11 +112,37 @@ impl Action {
 }
 
 impl ServicesView {
-    pub fn new(config: &ServicesConfig) -> Self {
+    fn new(prefix: String, cx: &mut Context<Self>) -> Self {
+        // Keeps the view live while a service starts, errors or is stopped
+        // from the view itself.
+        let signals: Vec<_> = AppState::managed_services(cx)
+            .into_iter()
+            .map(|service| service.status_signal())
+            .collect();
+        for signal in signals {
+            watch(cx, signal, |_, _, cx| cx.emit(ViewEvent::ItemsChanged));
+        }
+
+        cx.spawn(async move |this, cx| {
+            loop {
+                let rss = cx.background_spawn(async { process_rss_bytes() }).await;
+                let alive = this.update(cx, |this, cx| {
+                    this.rss = rss;
+                    cx.notify();
+                });
+                if alive.is_err() {
+                    break;
+                }
+                cx.background_executor().timer(RSS_INTERVAL).await;
+            }
+        })
+        .detach();
+
         Self {
-            prefix: config.prefix.clone(),
+            prefix,
             services: Vec::new(),
-            level: Level::List(Vec::new()),
+            detail: None,
+            rss: None,
         }
     }
 
@@ -136,87 +174,127 @@ impl ServicesView {
         actions
     }
 
-    /// The service the current level is about, if any.
-    fn detail(&self) -> Option<(&ServiceInfo, &[Action])> {
-        match &self.level {
-            Level::Detail { service, actions } => Some((service, actions)),
-            Level::List(_) => None,
+    fn run(&self, action: Action, cx: &mut Context<Self>) {
+        let Some((info, _)) = &self.detail else {
+            return;
+        };
+        let name = info.name;
+        let Some(service) = AppState::managed_services(cx)
+            .into_iter()
+            .find(|service| service.name() == name)
+        else {
+            return;
+        };
+
+        match action {
+            Action::Start => service.start(),
+            Action::Stop => service.stop(),
+            Action::Restart => service.restart(),
+            Action::SetMode(mode) => {
+                service.lifecycle().set_mode(mode);
+                // Turning a running service off stops it now; the other modes
+                // only decide what happens at the next startup.
+                if mode == ServiceMode::Off {
+                    service.stop();
+                }
+                State::set_service_mode(name, mode, cx);
+            }
         }
+        // A mode change fires no status signal.
+        cx.emit(ViewEvent::ItemsChanged);
     }
 }
 
+impl EventEmitter<ViewEvent> for ServicesView {}
+
 impl LauncherView for ServicesView {
-    fn prefix(&self) -> &str {
-        &self.prefix
+    fn matching(&self) -> Matching {
+        if self.detail.is_some() {
+            Matching::View
+        } else {
+            Matching::Shell
+        }
     }
 
-    fn name(&self) -> &'static str {
-        "Services"
-    }
-
-    fn icon(&self) -> IconName {
-        SERVICES_ICON
-    }
-
-    fn description(&self) -> &'static str {
-        "Inspect, restart and configure services"
-    }
-
-    fn update_matches(&mut self, vx: &ViewContext, cx: &App) {
-        let query = vx.query.trim().to_lowercase();
+    fn items(&mut self, query: &str, cx: &mut Context<Self>) -> Items {
+        let query = query.trim().to_lowercase();
         self.services = Self::snapshot(cx);
-        let services = &self.services;
 
         // An exact name match opens that service rather than filtering to it.
-        if let Some(service) = services
+        self.detail = self
+            .services
             .iter()
             .find(|service| service.name.to_lowercase() == query)
-        {
-            self.level = Level::Detail {
-                actions: Self::actions_for(service),
-                service: service.clone(),
-            };
-            return;
-        }
+            .map(|service| (service.clone(), Self::actions_for(service)));
 
-        self.level = Level::List(
-            services
+        let items = match &self.detail {
+            Some((_, actions)) => actions
                 .iter()
-                .filter(|service| {
-                    query.is_empty()
-                        || service.name.to_lowercase().contains(&query)
-                        || service.status.label().to_lowercase().contains(&query)
-                        || service.mode.label().contains(query.as_str())
+                .enumerate()
+                .map(|(ix, action)| {
+                    Item::new(format!("action:{ix}"), action.label())
+                        .subtitle(action.description())
+                        .action("run", "Run")
                 })
-                .cloned()
                 .collect(),
-        );
+            None => self
+                .services
+                .iter()
+                .map(|service| {
+                    Item::new(service.name, service.name)
+                        .subtitle(service.status.label())
+                        .keywords(service.mode.label())
+                        .action("open", "Open")
+                })
+                .collect(),
+        };
+        Items::Ready(items)
     }
 
-    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
-        match &self.level {
-            Level::List(services) => services.len(),
-            Level::Detail { actions, .. } => actions.len(),
+    fn activate(&mut self, item: &Item, _action: &str, cx: &mut Context<Self>) -> Outcome {
+        match &self.detail {
+            Some((_, actions)) => {
+                let action = item
+                    .id
+                    .strip_prefix("action:")
+                    .and_then(|ix| ix.parse::<usize>().ok())
+                    .and_then(|ix| actions.get(ix).copied());
+                if let Some(action) = action {
+                    self.run(action, cx);
+                }
+                Outcome::Stay
+            }
+            None => Outcome::SetQuery(format!("{} {}", self.prefix, item.id.to_lowercase())),
         }
     }
 
-    fn render_item(&self, index: usize, selected: bool, _vx: &ViewContext, cx: &App) -> AnyElement {
-        match &self.level {
-            Level::List(services) => match services.get(index) {
-                Some(service) => render_service_row(service, selected, cx),
-                None => div().into_any_element(),
-            },
-            Level::Detail { service, actions } => match actions.get(index) {
-                Some(action) => render_action_row(action, service, selected),
-                None => div().into_any_element(),
-            },
+    fn render_row(
+        &self,
+        item: &Item,
+        selected: bool,
+        _window: &Window,
+        cx: &App,
+    ) -> Option<AnyElement> {
+        match &self.detail {
+            Some((service, actions)) => {
+                let ix: usize = item.id.strip_prefix("action:")?.parse().ok()?;
+                Some(render_action_row(actions.get(ix)?, service, selected))
+            }
+            None => {
+                let service = self.services.iter().find(|s| s.name == item.id.as_ref())?;
+                Some(render_service_row(service, selected, cx))
+            }
         }
     }
 
-    fn render_header(&self, _vx: &ViewContext, cx: &App) -> Option<AnyElement> {
+    fn render_header(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let theme = cx.theme();
 
-        let (summary, color, section) = match self.detail() {
+        let (summary, color, section) = match &self.detail {
             Some((service, _)) => (
                 format!(
                     "{} · {} · {} · {}",
@@ -246,7 +324,7 @@ impl LauncherView for ServicesView {
                     services.len(),
                     format_bytes(retained)
                 );
-                if let Some(rss) = process_rss_bytes() {
+                if let Some(rss) = self.rss {
                     summary.push_str(&format!(" · {} resident", format_bytes(rss)));
                 }
 
@@ -263,7 +341,8 @@ impl LauncherView for ServicesView {
         };
 
         let error = self
-            .detail()
+            .detail
+            .as_ref()
             .and_then(|(service, _)| service.status.error_message().map(String::from));
 
         Some(
@@ -311,66 +390,6 @@ impl LauncherView for ServicesView {
                 )
                 .into_any_element(),
         )
-    }
-
-    /// Enter opens the selected service; inside a service it runs the
-    /// selected action through [`Self::on_select`].
-    fn handle_input(&self, input: &ViewInput, vx: &ViewContext, _cx: &mut App) -> InputResult {
-        let Level::List(services) = &self.level else {
-            return InputResult::Unhandled;
-        };
-        let ViewInput::Enter = input else {
-            return InputResult::Unhandled;
-        };
-
-        match services.get(vx.selected_index) {
-            Some(service) => InputResult::Handled {
-                query: service.name.to_lowercase(),
-                close: false,
-            },
-            None => InputResult::Unhandled,
-        }
-    }
-
-    fn on_select(&self, index: usize, _vx: &ViewContext, cx: &mut App) -> bool {
-        let Some((info, actions)) = self.detail() else {
-            return false;
-        };
-        let Some(action) = actions.get(index).copied() else {
-            return false;
-        };
-
-        let name = info.name;
-        let Some(service) = AppState::managed_services(cx)
-            .into_iter()
-            .find(|service| service.name() == name)
-        else {
-            return false;
-        };
-
-        match action {
-            Action::Start => service.start(),
-            Action::Stop => service.stop(),
-            Action::Restart => service.restart(),
-            Action::SetMode(mode) => {
-                service.lifecycle().set_mode(mode);
-                // Turning a running service off stops it now; the other modes
-                // only decide what happens at the next startup.
-                if mode == ServiceMode::Off {
-                    service.stop();
-                }
-                State::set_service_mode(name, mode, cx);
-            }
-        }
-
-        false
-    }
-
-    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        match self.detail() {
-            Some(_) => footer_hints(vec![("Run", "Enter"), ("Close", "Esc")], cx),
-            None => footer_hints(vec![("Open", "Enter"), ("Close", "Esc")], cx),
-        }
     }
 }
 

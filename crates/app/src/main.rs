@@ -24,8 +24,8 @@ mod keybinds;
 pub mod launcher;
 pub mod notification;
 pub mod osd;
-mod panel;
 pub mod state;
+mod windows;
 
 #[tokio::main]
 async fn main() {
@@ -62,6 +62,7 @@ async fn main() {
         config::Config::init(cx);
         // Registers the TextField / Menu keybindings the component set needs.
         ui::init(cx);
+        windows::ShellWindows::init(cx);
         state::AppState::init(services, cx);
 
         // Register keybindings

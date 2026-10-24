@@ -55,7 +55,7 @@ _Goal: make outside contributions safe and pleasant before asking for them._
       [adding a bar module](docs/src/content/docs/developer/unstable/bar-module.md)
       and [adding a launcher view](docs/src/content/docs/developer/unstable/launcher-view.md).
       They get rewritten once the module APIs settle (v0.4).
-- [ ] Issue templates: add a "compositor + version" field to the bug report.
+- [x] Issue templates: add a "compositor + version" field to the bug report.
 
 ## v0.3: Reliability
 
@@ -63,12 +63,12 @@ _Goal: the shell runs for days without a restart._
 
 Services lifecycle (do these in order):
 
-- [ ] Service cancellation: stop/restart actually stops the old run. Today a
+- [x] Service cancellation: stop/restart actually stops the old run. Today a
       quiet bus parks the listener forever, which leaks a thread and runtime
       on every restart, and stale listeners can still write data.
 - [ ] Service supervision: retry with backoff instead of dying on the first
       error, replacing the hand-rolled retry loops in tray/mpris.
-- [ ] Command dispatch through a per-service job queue instead of a mix of
+- [x] Command dispatch through a per-service job queue instead of a mix of
       inline calls, foreground `cx.spawn` and a thread per command.
 - [ ] Compositor as a managed service, with a `RunToken` and a supervised
       reconnect after a compositor reload kills the IPC socket.

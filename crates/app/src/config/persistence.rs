@@ -26,7 +26,9 @@ pub fn config_path() -> anyhow::Result<PathBuf> {
     Ok(config_dir()?.join("config.toml"))
 }
 
-pub fn load() -> anyhow::Result<Config> {
+/// Load `config.toml`, writing the defaults when there is none yet. Startup
+/// only: on a reload an absent file is a save in flight, see [`load`].
+pub fn load_or_create() -> anyhow::Result<Config> {
     let path = config_path()?;
     match parse_toml(&path)? {
         Some(config) => Ok(config),
@@ -36,6 +38,14 @@ pub fn load() -> anyhow::Result<Config> {
             Ok(config)
         }
     }
+}
+
+/// Load `config.toml`. An absent file is an error, not the defaults: editors
+/// that save by rename leave it missing for a moment, and applying the
+/// defaults then would silently move the bar and drop every setting.
+pub fn load() -> anyhow::Result<Config> {
+    let path = config_path()?;
+    parse_toml(&path)?.ok_or_else(|| anyhow!("{} does not exist", path.display()))
 }
 
 /// Read and parse a TOML file. `Ok(None)` when it isn't there, so every caller

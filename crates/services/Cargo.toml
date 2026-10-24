@@ -23,3 +23,6 @@ serde-saphyr = "0.0"
 sysinfo = "0.39"
 udev = "0.9"
 libpulse-binding = "2.30"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

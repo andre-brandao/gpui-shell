@@ -50,7 +50,7 @@ pub enum DockHoverEffect {
 }
 
 /// Dock configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DockConfig {
     /// Screen edge the dock is anchored to. Independent of `bar.position`.

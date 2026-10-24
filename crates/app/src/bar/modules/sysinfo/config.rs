@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// SysInfo module configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SysInfoConfig {
     pub show_cpu: bool,

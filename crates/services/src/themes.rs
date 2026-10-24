@@ -136,6 +136,16 @@ impl ThemeRepository {
         self.cache_dir.join(".git").exists()
     }
 
+    /// When the clone was last fetched; `FETCH_HEAD` is rewritten by every
+    /// pull, `HEAD` only exists from the clone.
+    pub fn last_updated(&self) -> Option<std::time::SystemTime> {
+        ["FETCH_HEAD", "HEAD"].iter().find_map(|name| {
+            fs::metadata(self.cache_dir.join(".git").join(name))
+                .and_then(|meta| meta.modified())
+                .ok()
+        })
+    }
+
     /// Directory containing Base16 YAML files inside the cloned repo.
     fn schemes_dir(&self) -> PathBuf {
         self.cache_dir.join(&self.subdirectory)

@@ -1,371 +1,356 @@
-//! Launcher module providing an application launcher overlay.
-//!
-//! The launcher provides a keyboard-driven interface for:
-//! - Searching and launching applications (@ prefix, or default)
-//! - Running shell commands ($ prefix)
-//! - Web search with multiple providers (! prefix with shebangs)
-//! - Switching workspaces (;ws prefix)
-//! - Viewing help and available commands (? prefix)
+//! Keyboard-driven launcher. The launcher owns the window, the input, the
+//! selection and the rows; views (`views/`) supply items or a custom body.
 
 pub mod config;
-pub mod modules;
+pub mod item;
+mod matcher;
+mod route;
+pub mod row;
 pub mod view;
+pub mod views;
+
+use std::ops::Range;
 
 use gpui::{
-    App, Bounds, Context, FocusHandle, Focusable, Point, ScrollHandle, Size, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div,
-    layer_shell::*, prelude::*, px,
+    App, Bounds, ClickEvent, Context, EntityId, FocusHandle, Focusable, Point, ScrollHandle, Size,
+    Subscription, Task, Window, WindowBackgroundAppearance, WindowBounds, WindowKind,
+    WindowOptions, div, layer_shell::*, prelude::*, px,
 };
-use modules::{HelpView, all_views};
-use ui::patterns::LauncherFrame;
-use ui::{ActiveTheme, InputBuffer, VariableList, VariableListScrollHandle, render_input_line};
-use view::{InputResult, LauncherView, ViewContext, ViewInput, is_prefix};
+use ui::patterns::{LauncherFrame, footer_hints};
+use ui::{
+    ActiveTheme, Color, InputBuffer, Label, LabelCommon, ScrollStrategy, Spacing, TextSize,
+    ThumbnailCache, VirtualList, VirtualListScrollHandle, render_input_line,
+};
 
+use self::item::Item;
+use self::matcher::{Ranked, Ranker};
+use self::route::Route;
+use self::view::{
+    Body, Hint, Items, Matching, NavKey, Outcome, ViewDescriptor, ViewHandle, ViewMeta,
+};
 use crate::config::Config;
 use crate::keybinds::{
     Backspace, Cancel, Confirm, CursorDown, CursorLeft, CursorRight, CursorUp, DeleteWordBack,
-    PageDown, PageUp, SelectAll, SelectLeft, SelectRight, SelectWordLeft, SelectWordRight,
-    WordLeft, WordRight,
+    PageDown, PageUp, SecondaryConfirm, SelectAll, SelectLeft, SelectRight, SelectWordLeft,
+    SelectWordRight, WordLeft, WordRight,
 };
-use crate::state::{AppState, watch};
 
-/// Number of items to jump when using Page Up/Down.
-const ITEMS_PER_PAGE: usize = 7;
+/// Rows to jump on Page Up/Down.
+const ROWS_PER_PAGE: usize = 7;
 
-/// Which view owns the current query.
-///
-/// Resolved as a slot rather than a `&dyn LauncherView` so the launcher can
-/// still take `&mut` on the view to refresh its matches - a borrow that a
-/// returned reference into `self` would rule out.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ViewSlot {
-    Help,
-    Index(usize),
-}
-
-/// The main launcher struct.
 pub struct Launcher {
     input: InputBuffer,
-    selected_index: usize,
     focus_handle: FocusHandle,
-    /// Scroll state for content views (shell, web), which render one
-    /// element rather than a row list.
-    scroll_handle: ScrollHandle,
-    /// Scroll and row-measurement state for list views. Persisted across
-    /// frames so `gpui::list` can cache row heights.
-    list_state: VariableListScrollHandle,
-    /// Item count `list_state` was last sized for.
-    list_count: usize,
-    /// Set when the query or view changes, so the next frame rewinds the
-    /// list to the top.
-    needs_list_reset: bool,
-    views: Vec<Box<dyn LauncherView>>,
-    help_view: HelpView,
+    /// Scroll state for custom bodies.
+    body_scroll: ScrollHandle,
+    list_scroll: VirtualListScrollHandle,
+    registry: Vec<ViewDescriptor>,
+    metas: Vec<ViewMeta>,
+    /// Built on first route, so views nobody opens never start their services.
+    views: Vec<Option<Box<dyn ViewHandle>>>,
+    subscriptions: Vec<Subscription>,
+    /// Input text `route` was computed from, so it is parsed once per edit.
+    routed_input: String,
+    route: Route,
+    items: Vec<Item>,
+    matches: Vec<Ranked>,
+    selected: usize,
+    /// Columns of the body drawn last, for grid navigation.
+    columns: usize,
+    ranker: Ranker,
+    /// Drops item replies that a newer query overtook.
+    generation: u64,
+    pending: Option<Task<()>>,
+    owner: EntityId,
 }
 
 impl Launcher {
-    /// Create a new launcher with optional initial input.
     pub fn new(initial_input: Option<String>, cx: &mut Context<Self>) -> Self {
-        let compositor = AppState::compositor(cx).clone();
-        let sysinfo = AppState::sysinfo(cx).clone();
-        let upower = AppState::upower(cx).clone();
-        let focus_handle = cx.focus_handle();
-        let scroll_handle = ScrollHandle::new();
+        let config = Config::global(cx).launcher.clone();
+        let registry = views::registry(&config.views);
+        let metas: Vec<ViewMeta> = registry.iter().map(|d| d.meta.clone()).collect();
+        let input = InputBuffer::new(initial_input.unwrap_or_default());
+        let routed_input = input.text().to_string();
+        let route = route::route(&routed_input, &metas);
 
-        // Subscribe to service updates for reactive rendering
-        watch(cx, compositor.subscribe(), |_, _, cx| {
-            cx.notify();
-        });
-
-        watch(cx, sysinfo.subscribe(), |_, _, cx| {
-            cx.notify();
-        });
-
-        watch(cx, upower.subscribe(), |_, _, cx| {
-            cx.notify();
-        });
-
-        // Keeps the services view live while a service starts, errors or is
-        // stopped from the view itself.
-        let status_signals: Vec<_> = AppState::managed_services(cx)
-            .into_iter()
-            .map(|service| service.status_signal())
-            .collect();
-        for signal in status_signals {
-            watch(cx, signal, |_, _, cx| {
-                cx.notify();
-            });
-        }
-
-        let launcher_config = Config::global(cx).launcher.clone();
-        let views = all_views(&launcher_config);
-        let help_view = HelpView::new(&launcher_config.modules.help, &views);
-
-        Launcher {
-            input: InputBuffer::new(initial_input.unwrap_or_default()),
-            selected_index: 0,
-            focus_handle,
-            scroll_handle,
-            // ponytail: measure_all builds every row once per query change
-            // so keyboard selection can scroll anywhere. Fine at ~50 apps;
-            // switch to uniform rows + VirtualList if the list gets large.
-            list_state: VariableListScrollHandle::new(0).measure_all(),
-            list_count: 0,
-            needs_list_reset: true,
-            views,
-            help_view,
-        }
+        let mut launcher = Launcher {
+            input,
+            focus_handle: cx.focus_handle(),
+            body_scroll: ScrollHandle::new(),
+            list_scroll: VirtualListScrollHandle::new(),
+            views: registry.iter().map(|_| None).collect(),
+            registry,
+            metas,
+            subscriptions: Vec::new(),
+            routed_input,
+            route,
+            items: Vec::new(),
+            matches: Vec::new(),
+            selected: 0,
+            columns: 1,
+            ranker: Ranker::default(),
+            generation: 0,
+            pending: None,
+            owner: cx.entity_id(),
+        };
+        launcher.requery(false, cx);
+        launcher
     }
 
-    /// Set the search query (used for IPC input).
-    pub fn set_input(&mut self, input: String) {
+    /// Replace the input (IPC `--input`).
+    pub fn set_input(&mut self, input: String, cx: &mut Context<Self>) {
         self.input.set_text(input);
-        self.selected_index = 0;
-        self.reset_scroll();
+        self.sync(cx);
     }
 
-    /// Reset scroll to top.
-    fn reset_scroll(&mut self) {
-        self.scroll_handle.set_offset(gpui::point(px(0.), px(0.)));
-        self.needs_list_reset = true;
+    /// Re-route after an edit. Cheap when the text did not change.
+    fn sync(&mut self, cx: &mut Context<Self>) {
+        if self.input.text() == self.routed_input {
+            return;
+        }
+        self.routed_input = self.input.text().to_string();
+        cx.notify();
+        let route = route::route(&self.routed_input, &self.metas);
+        if route == self.route {
+            return;
+        }
+        if route.view != self.route.view {
+            self.items.clear();
+            self.matches.clear();
+        }
+        self.route = route;
+        self.requery(false, cx);
     }
 
-    /// Ensure the selected item is scrolled into view.
+    fn current(&self) -> Option<&dyn ViewHandle> {
+        self.views.get(self.route.view)?.as_deref()
+    }
+
+    /// Ask the current view for items. `keep_selection` holds the cursor on
+    /// the same item when the data changed under an unchanged query.
+    pub(crate) fn requery(&mut self, keep_selection: bool, cx: &mut Context<Self>) {
+        let ix = self.route.view;
+        if self.views.get(ix).is_some_and(Option::is_none) {
+            let view = self.registry[ix].build(cx);
+            self.subscriptions.extend(view.connect(cx));
+            self.views[ix] = Some(view);
+        }
+        if !keep_selection {
+            self.selected = 0;
+            self.list_scroll.scroll_to_item(0, ScrollStrategy::Top);
+            self.body_scroll.set_offset(gpui::point(px(0.), px(0.)));
+        }
+
+        self.generation += 1;
+        let generation = self.generation;
+        let Some(view) = self.current() else { return };
+        match view.items(&self.route.query, cx) {
+            Items::Ready(items) => self.apply(items, keep_selection, cx),
+            Items::Pending(task) => {
+                self.pending = Some(cx.spawn(async move |this, cx| {
+                    let items = task.await;
+                    this.update(cx, |this, cx| {
+                        if this.generation == generation {
+                            this.apply(items, keep_selection, cx);
+                        }
+                    })
+                    .ok();
+                }));
+            }
+        }
+        cx.notify();
+    }
+
+    fn apply(&mut self, items: Vec<Item>, keep_selection: bool, cx: &mut Context<Self>) {
+        let previous = keep_selection
+            .then(|| self.selected_item().map(|item| item.id.clone()))
+            .flatten();
+        let matching = self
+            .current()
+            .map_or(Matching::Shell, |view| view.matching(cx));
+        self.matches = match matching {
+            Matching::Shell => self.ranker.rank(&self.route.query, &items),
+            Matching::View => (0..items.len())
+                .map(|index| Ranked {
+                    index,
+                    highlights: Vec::new(),
+                })
+                .collect(),
+        };
+        self.items = items;
+        if let Some(id) = previous
+            && let Some(pos) = self
+                .matches
+                .iter()
+                .position(|m| self.items[m.index].id == id)
+        {
+            self.selected = pos;
+        }
+        self.selected = self.selected.min(self.matches.len().saturating_sub(1));
+        self.pending = None;
+        cx.notify();
+    }
+
+    fn selected_item(&self) -> Option<&Item> {
+        let ranked = self.matches.get(self.selected)?;
+        self.items.get(ranked.index)
+    }
+
+    fn activate(&mut self, action: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(item) = self.selected_item().cloned() else {
+            return;
+        };
+        let Some(action) = item.actions.get(action) else {
+            return;
+        };
+        let Some(view) = self.current() else { return };
+        let outcome = view.activate(&item, &action.id, cx);
+        self.apply_outcome(outcome, window, cx);
+    }
+
+    fn apply_outcome(&mut self, outcome: Outcome, window: &mut Window, cx: &mut Context<Self>) {
+        match outcome {
+            Outcome::Close => close(window, cx),
+            Outcome::Stay => cx.notify(),
+            Outcome::SetQuery(text) => {
+                self.input.set_text(text);
+                self.sync(cx);
+            }
+        }
+    }
+
+    fn navigate(&mut self, key: NavKey, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(view) = self.current()
+            && let Some(outcome) = view.on_key(key, cx)
+        {
+            self.apply_outcome(outcome, window, cx);
+            return;
+        }
+
+        let count = self.matches.len();
+        let columns = self.columns.max(1);
+        match key {
+            NavKey::Enter => return self.activate(0, window, cx),
+            NavKey::Left if columns > 1 => self.selected = self.selected.saturating_sub(1),
+            NavKey::Right if columns > 1 => {
+                self.selected = (self.selected + 1).min(count.saturating_sub(1));
+            }
+            NavKey::Left => self.input.move_left(false),
+            NavKey::Right => self.input.move_right(false),
+            _ if count == 0 => {}
+            // A single column wraps; a grid stops at its edges.
+            NavKey::Up if columns == 1 => self.selected = (self.selected + count - 1) % count,
+            NavKey::Down if columns == 1 => self.selected = (self.selected + 1) % count,
+            NavKey::Up => self.selected = self.selected.saturating_sub(columns),
+            NavKey::Down => self.selected = (self.selected + columns).min(count - 1),
+        }
+        self.scroll_to_selected();
+        cx.notify();
+    }
+
+    fn page(&mut self, down: bool, cx: &mut Context<Self>) {
+        let count = self.matches.len();
+        if count == 0 {
+            return;
+        }
+        let step = ROWS_PER_PAGE * self.columns.max(1);
+        self.selected = if down {
+            (self.selected + step).min(count - 1)
+        } else {
+            self.selected.saturating_sub(step)
+        };
+        self.scroll_to_selected();
+        cx.notify();
+    }
+
     fn scroll_to_selected(&self) {
-        self.list_state.scroll_to_item(self.selected_index);
+        self.list_scroll
+            .scroll_to_item(self.selected / self.columns.max(1), ScrollStrategy::Nearest);
     }
 
-    /// Parse the search query to find which view should handle it.
-    ///
-    /// Returns the slot of the matched view plus that view's search term.
-    /// The term is owned so callers can hold it across a `&mut self`
-    /// borrow of the view itself.
-    fn parse_query(&self) -> (ViewSlot, String) {
-        let query = self.input.text().trim();
-
-        if query.is_empty() {
-            return (self.default_slot(), String::new());
-        }
-
-        // Check if query starts with any view's prefix
-        // We need to find the longest matching prefix first
-        let mut best_match: Option<(ViewSlot, usize)> = None;
-
-        for (ix, view) in self.views.iter().enumerate() {
-            let prefix = view.prefix();
-            if is_prefix(query, prefix) {
-                // Check if this is a better (longer) match
-                if best_match.is_none() || prefix.len() > best_match.unwrap().1 {
-                    best_match = Some((ViewSlot::Index(ix), prefix.len()));
-                }
-            }
-        }
-
-        // Also check help view
-        if is_prefix(query, self.help_view.prefix()) {
-            let prefix_len = self.help_view.prefix().len();
-            if best_match.is_none() || prefix_len > best_match.unwrap().1 {
-                best_match = Some((ViewSlot::Help, prefix_len));
-            }
-        }
-
-        if let Some((slot, prefix_len)) = best_match {
-            return (slot, query[prefix_len..].trim_start().to_string());
-        }
-
-        // Check if starts with a known prefix character but no matching prefix
-        // In this case, show help view
-        if let Some(first_char) = query.chars().next()
-            && (self
-                .views
-                .iter()
-                .any(|v| v.prefix().starts_with(first_char))
-                || self.help_view.prefix().starts_with(first_char))
-        {
-            // Unknown special prefix - show help
-            return (ViewSlot::Help, query.to_string());
-        }
-
-        // No prefix, use default view with full query as search
-        (self.default_slot(), query.to_string())
-    }
-
-    /// Slot of the default view, falling back to help when none is marked.
-    fn default_slot(&self) -> ViewSlot {
-        self.views
-            .iter()
-            .position(|v| v.is_default())
-            .map_or(ViewSlot::Help, ViewSlot::Index)
-    }
-
-    fn view(&self, slot: ViewSlot) -> &dyn LauncherView {
-        match slot {
-            ViewSlot::Help => &self.help_view,
-            ViewSlot::Index(ix) => self.views[ix].as_ref(),
-        }
-    }
-
-    fn view_mut(&mut self, slot: ViewSlot) -> &mut dyn LauncherView {
-        match slot {
-            ViewSlot::Help => &mut self.help_view,
-            ViewSlot::Index(ix) => self.views[ix].as_mut(),
-        }
-    }
-
-    /// Get the current active view.
-    fn current_view(&self) -> &dyn LauncherView {
-        self.view(self.parse_query().0)
-    }
-
-    /// Get the current view name for display.
-    fn current_view_name(&self) -> &str {
-        self.current_view().name()
-    }
-
-    /// Refresh the current view's matches and return its slot, search term
-    /// and match count.
-    ///
-    /// Every read of `match_count` / `render_item` downstream reuses this
-    /// one filter pass.
-    fn refresh_matches(&mut self, cx: &App) -> (ViewSlot, String, usize) {
-        let (slot, query) = self.parse_query();
-        let vx = ViewContext {
-            query: &query,
-            selected_index: self.selected_index,
-        };
-        let view = self.view_mut(slot);
-        view.update_matches(&vx, cx);
-        let count = view.match_count(&vx, cx);
-        (slot, query, count)
-    }
-
-    fn handle_input(&mut self, input: ViewInput, cx: &mut App) -> bool {
-        let (slot, query, item_count) = self.refresh_matches(cx);
-        let vx = ViewContext {
-            query: &query,
-            selected_index: self.selected_index,
-        };
-        let view = self.view(slot);
-
-        match view.handle_input(&input, &vx, cx) {
-            InputResult::Handled { query, close } => {
-                // Update search query based on current view prefix
-                let prefix = self.current_view().prefix().to_string();
-                if query.is_empty() {
-                    self.input.set_text(prefix);
-                } else {
-                    self.input.set_text(format!("{} {}", prefix, query));
-                }
-                self.selected_index = 0;
-                self.reset_scroll();
-                close
-            }
-            InputResult::Unhandled => {
-                // Default handling
-                match input {
-                    ViewInput::Char(c) => {
-                        self.input.insert_str(&c);
-                        self.selected_index = 0;
-                        self.reset_scroll();
-                    }
-                    ViewInput::Backspace => {
-                        self.input.backspace();
-                        self.selected_index = 0;
-                        self.reset_scroll();
-                    }
-                    ViewInput::Up => {
-                        if item_count > 0 {
-                            self.selected_index = if self.selected_index == 0 {
-                                item_count - 1
-                            } else {
-                                self.selected_index - 1
-                            };
-                            self.scroll_to_selected();
-                        }
-                    }
-                    ViewInput::Down => {
-                        if item_count > 0 {
-                            self.selected_index = (self.selected_index + 1) % item_count;
-                            self.scroll_to_selected();
-                        }
-                    }
-                    ViewInput::PageUp => {
-                        if item_count > 0 {
-                            self.selected_index =
-                                self.selected_index.saturating_sub(ITEMS_PER_PAGE);
-                            self.scroll_to_selected();
-                        }
-                    }
-                    ViewInput::PageDown => {
-                        if item_count > 0 {
-                            self.selected_index = (self.selected_index + ITEMS_PER_PAGE)
-                                .min(item_count.saturating_sub(1));
-                            self.scroll_to_selected();
-                        }
-                    }
-                    ViewInput::Enter => {
-                        return self.execute_selected(cx);
-                    }
-                }
-                false
-            }
-        }
-    }
-
-    fn delete_word_back(&mut self) {
-        self.input.delete_word_back();
-        self.selected_index = 0;
-        self.reset_scroll();
-    }
-
-    fn execute_selected(&mut self, cx: &mut App) -> bool {
-        let (slot, query) = self.parse_query();
-
-        // Check if we're in help view and selected a command
-        if slot == ViewSlot::Help
-            && let Some(prefix) = self.help_view.selected_prefix(self.selected_index)
-        {
-            let target = self
-                .views
-                .iter()
-                .find(|v| v.prefix() == prefix)
-                .map(|v| v.prefix().to_string());
-            if let Some(prefix) = target {
-                self.input.set_text(format!("{} ", prefix));
-                self.selected_index = 0;
-                self.reset_scroll();
-                return false;
-            }
-        }
-
-        let vx = ViewContext {
-            query: &query,
-            selected_index: self.selected_index,
-        };
-        self.view(slot).on_select(self.selected_index, &vx, cx)
+    fn edit(&mut self, cx: &mut Context<Self>, edit: impl FnOnce(&mut InputBuffer)) {
+        edit(&mut self.input);
+        self.sync(cx);
+        cx.notify();
     }
 
     fn placeholder(&self) -> String {
-        "Search apps or type @, $, !, ? for commands...".to_string()
-    }
-
-    /// Bare view prefixes for the footer - `@  $  !  ;ws  ;wp  ~  ;s  ?`.
-    /// Full names live in the `?` help view.
-    fn footer_prefix_hints(&self) -> String {
-        let mut prefixes: Vec<&str> = self
-            .views
-            .iter()
-            .map(|view| view.prefix().trim())
-            .filter(|prefix| !prefix.is_empty())
-            .collect();
-
-        let help = self.help_view.prefix().trim();
-        if !help.is_empty() {
-            prefixes.push(help);
+        let default = self.metas.iter().find(|meta| meta.default);
+        let help = self.metas.iter().find(|meta| meta.id == "help");
+        match (default, help) {
+            (Some(default), Some(help)) => format!(
+                "Search {} or type {} for commands...",
+                default.name.to_lowercase(),
+                help.prefix
+            ),
+            _ => "Search...".to_string(),
         }
-
-        prefixes.join("  ")
     }
+
+    /// Bare prefixes for the footer; full names live in help.
+    fn prefix_hints(&self) -> String {
+        self.metas
+            .iter()
+            .map(|meta| meta.prefix.trim())
+            .filter(|prefix| !prefix.is_empty())
+            .collect::<Vec<_>>()
+            .join("  ")
+    }
+
+    fn render_list_row(
+        &self,
+        row: usize,
+        columns: usize,
+        height: gpui::Pixels,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let start = row * columns;
+        let end = (start + columns).min(self.matches.len());
+        let view = self.current();
+        let cells = (start..end).map(|ix| {
+            let ranked = &self.matches[ix];
+            let item = &self.items[ranked.index];
+            let selected = ix == self.selected;
+            let content = view
+                .and_then(|view| view.render_row(item, selected, window, cx))
+                .unwrap_or_else(|| {
+                    row::default_row(item, &ranked.highlights, selected, self.owner, window, cx)
+                });
+            div()
+                .id(("launcher-row", ix))
+                .flex_1()
+                .min_w(px(0.))
+                .h_full()
+                .flex()
+                .flex_col()
+                .justify_center()
+                .overflow_hidden()
+                .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                    this.selected = ix;
+                    this.activate(0, window, cx);
+                }))
+                .child(content)
+        });
+        let fillers = (end - start..columns).map(|_| div().flex_1());
+
+        div()
+            .h(height)
+            .w_full()
+            .flex()
+            .when(columns > 1, |el| {
+                el.gap(Spacing::Medium.pixels())
+                    .px(Spacing::Medium.pixels())
+            })
+            .children(cells)
+            .children(fillers)
+            .into_any_element()
+    }
+}
+
+fn close(window: &mut Window, cx: &mut App) {
+    crate::windows::ShellWindows::set_launcher(cx, None);
+    window.remove_window();
 }
 
 impl Focusable for Launcher {
@@ -377,288 +362,229 @@ impl Focusable for Launcher {
 impl Render for Launcher {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
-
-        // Always keep the launcher focused
         if !self.focus_handle.is_focused(window) {
             self.focus_handle.focus(window, cx);
         }
 
-        let view_name = self.current_view_name().to_string();
-        let prefix_hints = self.footer_prefix_hints();
-        let placeholder = self.placeholder();
-
-        // One filter pass for the whole frame. Everything below reads its
-        // result instead of re-filtering per row.
-        let (slot, query, item_count) = self.refresh_matches(cx);
-        if self.selected_index >= item_count && item_count > 0 {
-            self.selected_index = item_count - 1;
-        }
-
-        // `gpui::list` needs to be told when the row set changes; it caches
-        // measurements per index otherwise.
-        if self.needs_list_reset || item_count != self.list_count {
-            self.list_state.reset(item_count);
-            self.list_count = item_count;
-            self.needs_list_reset = false;
-        }
-
-        let vx = ViewContext {
-            query: &query,
-            selected_index: self.selected_index,
+        let view_name = self.metas[self.route.view].name;
+        let (body, header, row_height, empty_text, hints) = match self.current() {
+            Some(view) => (
+                view.body(cx),
+                view.render_header(window, cx),
+                view.row_height(cx),
+                view.empty_text(cx),
+                view.footer_hints(self.selected_item(), cx),
+            ),
+            None => (Body::List, None, px(0.), None, None),
         };
-        let current_view = self.view(slot);
-        let footer_bar = current_view.render_footer_bar(&vx, cx);
-        let header = current_view.render_header(&vx, cx);
-        let footer = current_view.render_footer(&vx, cx);
-        let content = current_view.render_content(&vx, cx);
+        let hints = hints.unwrap_or_else(|| {
+            let mut hints: Vec<Hint> = self
+                .selected_item()
+                .map(|item| {
+                    item.actions
+                        .iter()
+                        .zip(["Enter", "Shift Enter"])
+                        .map(|(action, key)| (action.label.clone(), key.into()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            hints.push(("Close".into(), "Esc".into()));
+            hints
+        });
+
+        let body = match body {
+            Body::Custom(view) => {
+                self.columns = 1;
+                div()
+                    .id("view-scroll")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.body_scroll)
+                    .child(view)
+                    .into_any_element()
+            }
+            Body::List | Body::Grid { .. } if self.matches.is_empty() => div()
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_center()
+                .px(Spacing::XLarge.pixels())
+                .children(
+                    empty_text
+                        .map(|text| Label::new(text).size(TextSize::Small).color(Color::Muted)),
+                )
+                .into_any_element(),
+            Body::List | Body::Grid { .. } => {
+                let columns = match body {
+                    Body::Grid { columns } => columns.max(1),
+                    _ => 1,
+                };
+                self.columns = columns;
+                let rows = self.matches.len().div_ceil(columns);
+                // The list sizes itself from its own style, so it needs a
+                // parent with a definite height.
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .child(
+                        VirtualList::new(
+                            "launcher-list",
+                            rows,
+                            cx.processor(move |this, range: Range<usize>, window, cx| {
+                                range
+                                    .map(|row| {
+                                        this.render_list_row(row, columns, row_height, window, cx)
+                                    })
+                                    .collect::<Vec<_>>()
+                            }),
+                        )
+                        .track_scroll(self.list_scroll.clone())
+                        .size_full(),
+                    )
+                    .into_any_element()
+            }
+        };
 
         div()
             .id("launcher")
             .track_focus(&self.focus_handle)
             .key_context("Launcher")
             .on_action(cx.listener(|this, _: &Cancel, window, cx| {
+                // First Esc clears the input; the second closes.
                 if this.input.is_empty() {
-                    // Clear the static handle before removing window
-                    *LAUNCHER_WINDOW.lock().unwrap() = None;
-                    window.remove_window();
+                    close(window, cx);
                 } else {
-                    // First Esc clears input; second Esc closes.
-                    this.input.clear();
-                    this.selected_index = 0;
-                    this.reset_scroll();
-                    cx.notify();
+                    this.edit(cx, InputBuffer::clear);
                 }
             }))
             .on_action(cx.listener(|this, _: &Confirm, window, cx| {
-                if this.handle_input(ViewInput::Enter, cx) {
-                    // Clear the static handle before removing window
-                    *LAUNCHER_WINDOW.lock().unwrap() = None;
-                    window.remove_window();
+                this.navigate(NavKey::Enter, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SecondaryConfirm, window, cx| {
+                this.activate(1, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorUp, window, cx| {
+                this.navigate(NavKey::Up, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorDown, window, cx| {
+                this.navigate(NavKey::Down, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorLeft, window, cx| {
+                this.navigate(NavKey::Left, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorRight, window, cx| {
+                this.navigate(NavKey::Right, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &PageUp, _, cx| this.page(false, cx)))
+            .on_action(cx.listener(|this, _: &PageDown, _, cx| this.page(true, cx)))
+            .on_action(cx.listener(|this, _: &Backspace, _, cx| {
+                this.edit(cx, InputBuffer::backspace);
+            }))
+            .on_action(cx.listener(|this, _: &DeleteWordBack, _, cx| {
+                this.edit(cx, InputBuffer::delete_word_back);
+            }))
+            .on_action(cx.listener(|this, _: &WordLeft, _, cx| {
+                this.edit(cx, |input| input.move_word_left(false));
+            }))
+            .on_action(cx.listener(|this, _: &WordRight, _, cx| {
+                this.edit(cx, |input| input.move_word_right(false));
+            }))
+            .on_action(cx.listener(|this, _: &SelectWordLeft, _, cx| {
+                this.edit(cx, |input| input.move_word_left(true));
+            }))
+            .on_action(cx.listener(|this, _: &SelectWordRight, _, cx| {
+                this.edit(cx, |input| input.move_word_right(true));
+            }))
+            .on_action(cx.listener(|this, _: &SelectLeft, _, cx| {
+                this.edit(cx, |input| input.move_left(true));
+            }))
+            .on_action(cx.listener(|this, _: &SelectRight, _, cx| {
+                this.edit(cx, |input| input.move_right(true));
+            }))
+            .on_action(cx.listener(|this, _: &SelectAll, _, cx| {
+                this.edit(cx, InputBuffer::select_all);
+            }))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+                let keystroke = &event.keystroke;
+                if keystroke.modifiers.control || keystroke.modifiers.alt {
+                    return;
                 }
-                cx.notify();
+                let typed = keystroke.key_char.clone().or_else(|| {
+                    (keystroke.key.chars().count() == 1).then(|| keystroke.key.clone())
+                });
+                if let Some(text) = typed
+                    && !text.chars().any(char::is_control)
+                {
+                    this.edit(cx, |input| input.insert_str(&text));
+                }
             }))
-            .on_action(cx.listener(|this, _: &CursorUp, _window, cx| {
-                this.handle_input(ViewInput::Up, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorDown, _window, cx| {
-                this.handle_input(ViewInput::Down, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &PageUp, _window, cx| {
-                this.handle_input(ViewInput::PageUp, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &PageDown, _window, cx| {
-                this.handle_input(ViewInput::PageDown, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &Backspace, _window, cx| {
-                this.handle_input(ViewInput::Backspace, cx);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &DeleteWordBack, _window, cx| {
-                this.delete_word_back();
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorLeft, _window, cx| {
-                this.input.move_left(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &CursorRight, _window, cx| {
-                this.input.move_right(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &WordLeft, _window, cx| {
-                this.input.move_word_left(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &WordRight, _window, cx| {
-                this.input.move_word_right(false);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectWordLeft, _window, cx| {
-                this.input.move_word_left(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectWordRight, _window, cx| {
-                this.input.move_word_right(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectLeft, _window, cx| {
-                this.input.move_left(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectRight, _window, cx| {
-                this.input.move_right(true);
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectAll, _window, cx| {
-                this.input.select_all();
-                cx.notify();
-            }))
-            .on_key_down(
-                cx.listener(move |this, event: &gpui::KeyDownEvent, _window, cx| {
-                    if event.keystroke.modifiers.control || event.keystroke.modifiers.alt {
-                        return;
-                    }
-
-                    let input_str = event.keystroke.key_char.as_ref().cloned().or_else(|| {
-                        let key = event.keystroke.key.as_str();
-                        if key.chars().count() == 1 {
-                            Some(key.to_string())
-                        } else {
-                            None
-                        }
-                    });
-
-                    let Some(s) = input_str else {
-                        return;
-                    };
-                    if s.chars().any(|c| c.is_control()) {
-                        return;
-                    }
-
-                    this.handle_input(ViewInput::Char(s), cx);
-                    cx.notify();
-                }),
-            )
             .size_full()
             .child(
-                // Chrome lives in `ui::patterns`; the body is ours. List
-                // views go through `VariableList`, which only builds the
-                // rows gpui actually needs - layout cost in gpui is per
-                // element and independent of visibility, so building all N
-                // rows to show ~8 is the whole cost. Header and footer sit
-                // outside the list because it owns its own scroll.
-                LauncherFrame::new(render_input_line(&self.input, &placeholder, cx))
+                LauncherFrame::new(render_input_line(&self.input, &self.placeholder(), cx))
                     .badge(view_name)
-                    .hints(prefix_hints)
-                    .actions(footer_bar)
+                    .hints(self.prefix_hints())
+                    .actions(footer_hints(hints, cx))
                     .children(header)
-                    .child(if let Some(content) = content {
-                        div()
-                            .id("view-scroll")
-                            .flex_1()
-                            .overflow_y_scroll()
-                            .track_scroll(&self.scroll_handle)
-                            .child(content)
-                            .into_any_element()
-                    } else {
-                        // `gpui::list` sizes itself from its own style, not
-                        // from its rows, so it needs a parent with a
-                        // definite height to measure against - `flex_1` on
-                        // the list itself resolves to zero and it renders
-                        // no rows at all.
-                        div()
-                            .flex_1()
-                            .overflow_hidden()
-                            .child(
-                                VariableList::new(
-                                    self.list_state.clone(),
-                                    cx.processor(|this, ix: usize, _window, cx| {
-                                        let (slot, query) = this.parse_query();
-                                        let vx = ViewContext {
-                                            query: &query,
-                                            selected_index: this.selected_index,
-                                        };
-                                        this.view(slot).render_item(
-                                            ix,
-                                            ix == this.selected_index,
-                                            &vx,
-                                            cx,
-                                        )
-                                    }),
-                                )
-                                .h_full(),
-                            )
-                            .into_any_element()
-                    })
-                    .children(footer),
+                    .child(body),
             )
     }
 }
 
-/// Global state to track the launcher window.
-static LAUNCHER_WINDOW: std::sync::Mutex<Option<WindowHandle<Launcher>>> =
-    std::sync::Mutex::new(None);
-
-pub fn init(_cx: &mut App) {}
+pub fn init(cx: &mut App) {
+    ThumbnailCache::init(cx);
+}
 
 /// Toggle the launcher window with optional prefilled input.
 ///
-/// Behavior:
-/// - If launcher is closed: opens it (with optional input).
-/// - If launcher is open and `input` is `Some`: updates the input.
-/// - If launcher is open and `input` is `None`: closes it.
+/// - Closed: opens it, with `input` if given.
+/// - Open with `input`: replaces the input.
+/// - Open without `input`: closes it.
 pub fn toggle(input: Option<String>, cx: &mut App) {
-    let start = std::time::Instant::now();
-    tracing::debug!("launcher::toggle: start");
-
-    let mut guard = LAUNCHER_WINDOW.lock().unwrap();
-    tracing::debug!("launcher::toggle: acquired lock {:?}", start.elapsed());
-
-    if let Some(handle) = guard.take() {
-        // If input is provided, update existing launcher instead of closing
+    if let Some(handle) = crate::windows::ShellWindows::take_launcher(cx) {
         if let Some(input_text) = input {
             let update_result = handle.update(cx, |launcher, _, cx| {
-                launcher.set_input(input_text);
-                cx.notify();
+                launcher.set_input(input_text, cx);
             });
             if update_result.is_ok() {
-                *guard = Some(handle);
+                crate::windows::ShellWindows::set_launcher(cx, Some(handle));
                 return;
             }
         }
-        // No input or update failed, close the window
         let _ = handle.update(cx, |_, window, _| {
             window.remove_window();
         });
-        tracing::debug!("launcher::toggle: closed window {:?}", start.elapsed());
-    } else {
-        tracing::debug!("launcher::toggle: opening new window {:?}", start.elapsed());
-        let cfg = Config::global(cx).launcher.clone();
-        if let Ok(handle) = cx.open_window(
-            WindowOptions {
-                titlebar: None,
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point::new(px(0.), px(0.)),
-                    size: Size::new(px(cfg.width), px(cfg.height)),
-                })),
-                app_id: Some("gpuishell-launcher".to_string()),
-                window_background: WindowBackgroundAppearance::Transparent,
-                kind: WindowKind::LayerShell(LayerShellOptions {
-                    namespace: "launcher".to_string(),
-                    layer: Layer::Overlay,
-                    anchor: Anchor::TOP,
-                    exclusive_zone: None,
-                    margin: Some((
-                        px(cfg.margin_top),
-                        px(cfg.margin_right),
-                        px(cfg.margin_bottom),
-                        px(cfg.margin_left),
-                    )),
-                    keyboard_interactivity: KeyboardInteractivity::Exclusive,
-                    ..Default::default()
-                }),
-                focus: true,
-                ..Default::default()
-            },
-            move |_, cx| {
-                cx.new(|cx| {
-                    let new_start = std::time::Instant::now();
-                    let launcher = Launcher::new(input.clone(), cx);
-                    tracing::debug!(
-                        "launcher::toggle: Launcher::new took {:?}",
-                        new_start.elapsed()
-                    );
-                    launcher
-                })
-            },
-        ) {
-            *guard = Some(handle);
-            tracing::debug!("launcher::toggle: window opened {:?}", start.elapsed());
-        }
+        return;
     }
-    tracing::debug!("launcher::toggle: done {:?}", start.elapsed());
+
+    let cfg = Config::global(cx).launcher.clone();
+    if let Ok(handle) = cx.open_window(
+        WindowOptions {
+            titlebar: None,
+            window_bounds: Some(WindowBounds::Windowed(Bounds {
+                origin: Point::new(px(0.), px(0.)),
+                size: Size::new(px(cfg.width), px(cfg.height)),
+            })),
+            app_id: Some("gpuishell-launcher".to_string()),
+            window_background: WindowBackgroundAppearance::Transparent,
+            kind: WindowKind::LayerShell(LayerShellOptions {
+                namespace: "launcher".to_string(),
+                layer: Layer::Overlay,
+                anchor: Anchor::TOP,
+                exclusive_zone: None,
+                margin: Some((
+                    px(cfg.margin_top),
+                    px(cfg.margin_right),
+                    px(cfg.margin_bottom),
+                    px(cfg.margin_left),
+                )),
+                keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                ..Default::default()
+            }),
+            focus: true,
+            ..Default::default()
+        },
+        move |_, cx| cx.new(|cx| Launcher::new(input.clone(), cx)),
+    ) {
+        crate::windows::ShellWindows::set_launcher(cx, Some(handle));
+    }
 }

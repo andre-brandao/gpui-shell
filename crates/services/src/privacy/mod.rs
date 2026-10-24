@@ -8,6 +8,7 @@ use std::path::Path;
 use std::thread;
 
 use futures_signals::signal::{Mutable, MutableSignalCloned};
+use futures_util::StreamExt;
 use inotify::{EventMask, Inotify, WatchMask};
 use tracing::{debug, error, warn};
 
@@ -25,7 +26,7 @@ pub enum Media {
 }
 
 /// An application node accessing media via PipeWire.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationNode {
     /// PipeWire node ID.
     pub id: u32,
@@ -34,7 +35,7 @@ pub struct ApplicationNode {
 }
 
 /// Privacy-related data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PrivacyData {
     /// Active PipeWire media stream nodes.
     pub nodes: Vec<ApplicationNode>,
@@ -118,13 +119,20 @@ impl ManagedService for PrivacySubscriber {
 
 /// Start the PipeWire listener thread for media stream tracking.
 ///
-/// ponytail: `pipewire::MainLoopBox::run` has no cross-thread quit handle, so
-/// a stopped listener's thread lives until the process exits - it just stops
-/// publishing. Restarting privacy repeatedly leaks one idle thread per
-/// restart; wire up a `pw_loop` quit signal if that ever matters.
+/// The PipeWire loop is not async, so it keeps its own thread; a message on a
+/// loop-attached channel quits it when the run ends.
 fn start_pipewire_listener(data: Mutable<PrivacyData>, token: RunToken) {
+    let (quit_tx, quit_rx) = pipewire::channel::channel::<()>();
+    tokio::spawn({
+        let token = token.clone();
+        async move {
+            token.cancelled().await;
+            let _ = quit_tx.send(());
+        }
+    });
+
     thread::spawn(move || {
-        if let Err(e) = run_pipewire_listener(data, token.clone()) {
+        if let Err(e) = run_pipewire_listener(data, token.clone(), quit_rx) {
             error!("PipeWire listener error: {}", e);
             token.error(e.to_string());
         }
@@ -132,10 +140,18 @@ fn start_pipewire_listener(data: Mutable<PrivacyData>, token: RunToken) {
 }
 
 /// Run the PipeWire listener (blocking).
-fn run_pipewire_listener(data: Mutable<PrivacyData>, token: RunToken) -> anyhow::Result<()> {
-    use pipewire::{context::ContextBox, main_loop::MainLoopBox};
+fn run_pipewire_listener(
+    data: Mutable<PrivacyData>,
+    token: RunToken,
+    quit: pipewire::channel::Receiver<()>,
+) -> anyhow::Result<()> {
+    use pipewire::{context::ContextBox, main_loop::MainLoopRc};
 
-    let mainloop = MainLoopBox::new(None)?;
+    let mainloop = MainLoopRc::new(None)?;
+    let _quit = quit.attach(mainloop.loop_(), {
+        let mainloop = mainloop.clone();
+        move |()| mainloop.quit()
+    });
     let context = ContextBox::new(mainloop.loop_(), None)?;
     let core = context.connect(None)?;
     let registry = core.get_registry()?;
@@ -185,28 +201,26 @@ fn run_pipewire_listener(data: Mutable<PrivacyData>, token: RunToken) -> anyhow:
     Ok(())
 }
 
-/// Start the webcam watcher thread.
+/// Start the webcam watcher task.
 fn start_webcam_watcher(data: Mutable<PrivacyData>, token: RunToken) {
-    thread::spawn(move || {
-        if let Err(e) = run_webcam_watcher(data, token.clone()) {
+    tokio::spawn(async move {
+        if let Some(Err(e)) = token.run_until_cancelled(run_webcam_watcher(data)).await {
             warn!("Webcam watcher error: {}", e);
             token.error(e.to_string());
         }
     });
 }
 
-/// Run the webcam watcher (blocking).
-///
-/// ponytail: `read_events_blocking` only returns on a device event, so a
-/// stopped watcher exits at the next webcam open/close rather than at once.
-fn run_webcam_watcher(data: Mutable<PrivacyData>, token: RunToken) -> anyhow::Result<()> {
+/// Run the webcam watcher. The inotify fd sits on the tokio reactor, so a
+/// stop drops the watch at once instead of at the next device event.
+async fn run_webcam_watcher(data: Mutable<PrivacyData>) -> anyhow::Result<()> {
     // Check if webcam device exists
     if !Path::new(WEBCAM_DEVICE_PATH).exists() {
         warn!("Webcam device not found: {}", WEBCAM_DEVICE_PATH);
         return Ok(());
     }
 
-    let mut inotify = Inotify::init()?;
+    let inotify = Inotify::init()?;
 
     inotify.watches().add(
         WEBCAM_DEVICE_PATH,
@@ -217,27 +231,24 @@ fn run_webcam_watcher(data: Mutable<PrivacyData>, token: RunToken) -> anyhow::Re
             | WatchMask::ATTRIB,
     )?;
 
-    let mut buffer = [0; 1024];
+    let mut events = inotify.into_event_stream([0; 1024])?;
 
-    while token.alive() {
-        let events = inotify.read_events_blocking(&mut buffer)?;
+    while let Some(event) = events.next().await {
+        let event = event?;
+        debug!("Webcam event: {:?}", event.mask);
 
-        for event in events {
-            debug!("Webcam event: {:?}", event.mask);
-
-            if event.mask.contains(EventMask::OPEN) {
-                data.lock_mut().webcam_access += 1;
-                debug!("Webcam opened: {}", data.lock_ref().webcam_access);
-            } else if event.mask.contains(EventMask::CLOSE_WRITE)
-                || event.mask.contains(EventMask::CLOSE_NOWRITE)
-            {
-                let mut guard = data.lock_mut();
-                guard.webcam_access = i32::max(guard.webcam_access - 1, 0);
-                debug!("Webcam closed: {}", guard.webcam_access);
-            } else if event.mask.contains(EventMask::DELETE_SELF) {
-                warn!("Webcam device was deleted");
-                return Ok(());
-            }
+        if event.mask.contains(EventMask::OPEN) {
+            data.lock_mut().webcam_access += 1;
+            debug!("Webcam opened: {}", data.lock_ref().webcam_access);
+        } else if event.mask.contains(EventMask::CLOSE_WRITE)
+            || event.mask.contains(EventMask::CLOSE_NOWRITE)
+        {
+            let mut guard = data.lock_mut();
+            guard.webcam_access = i32::max(guard.webcam_access - 1, 0);
+            debug!("Webcam closed: {}", guard.webcam_access);
+        } else if event.mask.contains(EventMask::DELETE_SELF) {
+            warn!("Webcam device was deleted");
+            return Ok(());
         }
     }
 

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Tray module configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrayConfig {
     pub icon_size: f32,

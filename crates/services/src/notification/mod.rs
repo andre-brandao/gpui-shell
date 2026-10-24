@@ -6,13 +6,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
-use futures_signals::signal::{Mutable, MutableSignalCloned};
-use tracing::warn;
+use futures_signals::signal::Mutable;
+use tokio::sync::watch;
+use tracing::{debug, warn};
 use zbus::{
     Connection,
     fdo::{DBusProxy, RequestNameFlags, RequestNameReply},
     interface,
-    names::WellKnownName,
+    message::Header,
+    names::{BusName, UniqueName, WellKnownName},
     object_server::SignalEmitter,
     proxy,
     zvariant::OwnedValue,
@@ -26,10 +28,16 @@ const NAME: WellKnownName =
     WellKnownName::from_static_str_unchecked("org.freedesktop.Notifications");
 const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 const DEFAULT_TIMEOUT_MS: i32 = 5000;
+const DEFAULT_ACTION_KEY: &str = "default";
 const MAX_NOTIFICATION_HISTORY: usize = 200;
 
+/// Held while claiming or releasing the bus name and object path, so a stop
+/// followed quickly by a start cannot interleave and let the stop's late
+/// release tear down the new server.
+static REGISTRATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// A single desktop notification.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Notification {
     pub id: u32,
     pub app_name: String,
@@ -43,12 +51,34 @@ pub struct Notification {
     pub timestamp_ms: i64,
     pub actions: Vec<(String, String)>,
     pub read: bool,
+    /// `desktop-entry` hint, without `.desktop`.
+    pub desktop_entry: Option<String>,
+    /// Pid of the D-Bus client that sent it (the portal's for sandboxed apps).
+    pub sender_pid: Option<u32>,
+}
+
+impl Notification {
+    pub fn has_default_action(&self) -> bool {
+        self.actions
+            .iter()
+            .any(|(key, _)| key == DEFAULT_ACTION_KEY)
+    }
+
+    /// App ids or window classes the sender's windows likely carry.
+    pub fn app_ids(&self) -> Vec<String> {
+        self.desktop_entry
+            .iter()
+            .chain(Some(&self.app_name).filter(|name| !name.is_empty()))
+            .cloned()
+            .collect()
+    }
 }
 
 /// Notification center state.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NotificationData {
-    pub notifications: Vec<Notification>,
+    /// Shared so a write hands each subscriber pointers, not copies.
+    pub notifications: Vec<Arc<Notification>>,
     pub popup_ids: Vec<u32>,
     pub dnd: bool,
     pub unread_count: usize,
@@ -59,7 +89,7 @@ impl NotificationData {
         self.unread_count = self.notifications.iter().filter(|n| !n.read).count();
     }
 
-    fn latest_popup(&self) -> Option<Notification> {
+    fn latest_popup(&self) -> Option<Arc<Notification>> {
         let id = self.popup_ids.first().copied()?;
         self.notifications.iter().find(|n| n.id == id).cloned()
     }
@@ -91,13 +121,26 @@ pub enum NotificationCommand {
     SetDnd(bool),
     MarkAllRead,
     InvokeAction(u32, String),
+    /// A click on the notification: invoke its default action, then dismiss.
+    Activate(u32),
+    /// Pause popup expiry (pointer over the popups).
+    HoldPopups(bool),
 }
 
 /// Event-driven notification service.
 #[derive(Debug, Clone, Default)]
 pub struct NotificationSubscriber {
-    data: Mutable<NotificationData>,
-    lifecycle: Lifecycle,
+    core: crate::ServiceCore<NotificationData, NotificationCommand>,
+    /// Expiry timers wait while set.
+    popups_held: Arc<watch::Sender<bool>>,
+}
+
+impl std::ops::Deref for NotificationSubscriber {
+    type Target = crate::ServiceCore<NotificationData, NotificationCommand>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
 }
 
 impl NotificationSubscriber {
@@ -107,19 +150,11 @@ impl NotificationSubscriber {
         Self::default()
     }
 
-    pub fn subscribe(&self) -> MutableSignalCloned<NotificationData> {
-        self.data.signal_cloned()
-    }
-
-    pub fn get(&self) -> NotificationData {
-        self.data.get_cloned()
-    }
-
-    pub fn latest_popup(&self) -> Option<Notification> {
+    pub fn latest_popup(&self) -> Option<Arc<Notification>> {
         self.data.lock_ref().latest_popup()
     }
 
-    pub fn popup_notifications(&self, limit: usize) -> Vec<Notification> {
+    pub fn popup_notifications(&self, limit: usize) -> Vec<Arc<Notification>> {
         let data = self.data.lock_ref();
         data.popup_ids
             .iter()
@@ -151,7 +186,7 @@ impl NotificationSubscriber {
         let mut data = self.data.lock_mut();
         data.notifications.retain(|n| n.id != id);
         data.popup_ids.retain(|n| *n != id);
-        data.notifications.insert(0, notification);
+        data.notifications.insert(0, Arc::new(notification));
         // Do-not-disturb still applies: it lands in the center, unread.
         if !data.dnd {
             data.popup_ids.insert(0, id);
@@ -176,28 +211,11 @@ impl NotificationSubscriber {
         }
     }
 
-    pub async fn dispatch(&self, command: NotificationCommand) -> anyhow::Result<()> {
+    /// Apply a command. State-only commands take effect immediately, and so
+    /// does everything while the daemon is down - the history is ours either
+    /// way. Commands that have to tell a client go through the queue.
+    pub fn dispatch(&self, command: NotificationCommand) {
         match command {
-            NotificationCommand::Dismiss(id) => {
-                self.dismiss_by_id(id).await?;
-            }
-            NotificationCommand::DismissLatest => {
-                if let Some(id) = self.data.lock_ref().notifications.first().map(|n| n.id) {
-                    self.dismiss_by_id(id).await?;
-                }
-            }
-            NotificationCommand::DismissAll => {
-                let ids: Vec<u32> = self
-                    .data
-                    .lock_ref()
-                    .notifications
-                    .iter()
-                    .map(|n| n.id)
-                    .collect();
-                for id in ids {
-                    self.dismiss_by_id(id).await?;
-                }
-            }
             NotificationCommand::SetDnd(enabled) => {
                 let mut data = self.data.lock_mut();
                 data.dnd = enabled;
@@ -207,17 +225,64 @@ impl NotificationSubscriber {
             }
             NotificationCommand::MarkAllRead => {
                 let mut data = self.data.lock_mut();
-                for item in &mut data.notifications {
-                    item.read = true;
+                for item in data.notifications.iter_mut().filter(|n| !n.read) {
+                    Arc::make_mut(item).read = true;
                 }
                 data.recompute_unread();
             }
-            NotificationCommand::InvokeAction(id, action_key) => {
-                self.emit_action_invoked(id, &action_key).await;
-                self.dismiss_by_id(id).await?;
+            NotificationCommand::HoldPopups(held) => {
+                self.popups_held.send_replace(held);
             }
+            command if !self.lifecycle.is_up() => {
+                for id in self.target_ids(&command) {
+                    remove_notification(&self.data, id);
+                }
+            }
+            command => self.jobs.send(command),
         }
+    }
 
+    /// The notifications a dismissing command acts on.
+    fn target_ids(&self, command: &NotificationCommand) -> Vec<u32> {
+        let data = self.data.lock_ref();
+        match command {
+            NotificationCommand::Dismiss(id)
+            | NotificationCommand::InvokeAction(id, _)
+            | NotificationCommand::Activate(id) => vec![*id],
+            NotificationCommand::DismissLatest => data
+                .notifications
+                .first()
+                .map(|n| n.id)
+                .into_iter()
+                .collect(),
+            NotificationCommand::DismissAll => data.notifications.iter().map(|n| n.id).collect(),
+            NotificationCommand::SetDnd(_)
+            | NotificationCommand::MarkAllRead
+            | NotificationCommand::HoldPopups(_) => Vec::new(),
+        }
+    }
+
+    async fn execute(&self, command: NotificationCommand) -> anyhow::Result<()> {
+        match &command {
+            NotificationCommand::InvokeAction(id, action_key) => {
+                self.emit_action_invoked(*id, action_key).await;
+            }
+            NotificationCommand::Activate(id) => {
+                let has_default = self
+                    .data
+                    .lock_ref()
+                    .notifications
+                    .iter()
+                    .any(|n| n.id == *id && n.has_default_action());
+                if has_default {
+                    self.emit_action_invoked(*id, DEFAULT_ACTION_KEY).await;
+                }
+            }
+            _ => {}
+        }
+        for id in self.target_ids(&command) {
+            self.dismiss_by_id(id).await?;
+        }
         Ok(())
     }
 
@@ -290,8 +355,20 @@ impl ManagedService for NotificationSubscriber {
     fn start(&self) {
         let token = self.lifecycle.begin();
         let data = self.data.clone();
+        let popups_held = self.popups_held.clone();
+
+        let subscriber = self.clone();
+        self.jobs.run(token.clone(), move |command| {
+            let subscriber = subscriber.clone();
+            async move { subscriber.execute(command).await }
+        });
 
         tokio::spawn(async move {
+            let _registration = REGISTRATION.lock().await;
+            if !token.alive() {
+                return;
+            }
+
             let conn = match crate::bus::session().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -307,7 +384,7 @@ impl ManagedService for NotificationSubscriber {
                 .remove::<NotificationServer, _>(OBJECT_PATH)
                 .await;
 
-            let server = NotificationServer::new(data, conn.clone());
+            let server = NotificationServer::new(data, conn.clone(), popups_held);
             if let Err(e) = conn.object_server().at(OBJECT_PATH, server).await {
                 warn!("Failed to serve the notification interface: {e}");
                 token.error(e.to_string());
@@ -340,7 +417,13 @@ impl ManagedService for NotificationSubscriber {
     fn stop(&self) {
         self.lifecycle.stop();
 
+        let lifecycle = self.lifecycle.clone();
         tokio::spawn(async move {
+            let _registration = REGISTRATION.lock().await;
+            // Started again before this ran: the new run owns the name now.
+            if !lifecycle.is_stopped() {
+                return;
+            }
             let Ok(conn) = crate::bus::session().await else {
                 return;
             };
@@ -362,17 +445,34 @@ struct NotificationServer {
     next_id: u32,
     next_timer_generation: u64,
     timer_generations: Arc<Mutex<HashMap<u32, u64>>>,
+    popups_held: Arc<watch::Sender<bool>>,
 }
 
 impl NotificationServer {
-    fn new(data: Mutable<NotificationData>, conn: Connection) -> Self {
+    fn new(
+        data: Mutable<NotificationData>,
+        conn: Connection,
+        popups_held: Arc<watch::Sender<bool>>,
+    ) -> Self {
+        let next_id = first_free_id(&data.lock_ref());
         Self {
             data,
             conn,
-            next_id: 1,
+            next_id,
             next_timer_generation: 1,
             timer_generations: Arc::new(Mutex::new(HashMap::new())),
+            popups_held,
         }
+    }
+
+    async fn sender_pid(&self, sender: &UniqueName<'_>) -> Option<u32> {
+        DBusProxy::new(&self.conn)
+            .await
+            .ok()?
+            .get_connection_unix_process_id(BusName::Unique(sender.clone()))
+            .await
+            .inspect_err(|e| debug!("No pid for notification sender {sender}: {e}"))
+            .ok()
     }
 }
 
@@ -417,7 +517,13 @@ impl NotificationServer {
         actions: Vec<String>,
         hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
+        #[zbus(header)] header: Header<'_>,
     ) -> u32 {
+        let sender_pid = match header.sender() {
+            Some(sender) => self.sender_pid(sender).await,
+            None => None,
+        };
+
         let id = {
             let existing = self
                 .data
@@ -465,11 +571,16 @@ impl NotificationServer {
         let app_icon_path = app_icon_path.or_else(|| {
             hint_string(&hints, &["desktop-entry"]).and_then(|entry| lookup_icon(&entry))
         });
-        let timeout_ms = if expire_timeout < 0 {
+        // The spec: critical notifications don't expire on their own.
+        let timeout_ms = if urgency == 2 {
+            0
+        } else if expire_timeout < 0 {
             DEFAULT_TIMEOUT_MS
         } else {
             expire_timeout
         };
+        let desktop_entry = hint_string(&hints, &["desktop-entry"])
+            .map(|entry| entry.strip_suffix(".desktop").unwrap_or(&entry).to_string());
         let parsed_actions = actions
             .chunks(2)
             .filter_map(|chunk| match chunk {
@@ -491,13 +602,15 @@ impl NotificationServer {
             timestamp_ms: Utc::now().timestamp_millis(),
             actions: parsed_actions,
             read: false,
+            desktop_entry,
+            sender_pid,
         };
 
         {
             let mut data = self.data.lock_mut();
             data.notifications.retain(|n| n.id != id);
             data.popup_ids.retain(|n| *n != id);
-            data.notifications.insert(0, notification);
+            data.notifications.insert(0, Arc::new(notification));
             if data.notifications.len() > MAX_NOTIFICATION_HISTORY {
                 data.notifications.truncate(MAX_NOTIFICATION_HISTORY);
             }
@@ -517,8 +630,11 @@ impl NotificationServer {
             let conn = self.conn.clone();
             let data = self.data.clone();
             let timer_generations = self.timer_generations.clone();
+            let popups_held = self.popups_held.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(timeout_ms as u64)).await;
+                // Err only once the subscriber is gone; expire anyway.
+                let _ = popups_held.subscribe().wait_for(|held| !held).await;
 
                 let should_close = timer_generations
                     .lock()
@@ -581,6 +697,21 @@ impl NotificationServer {
         id: u32,
         action_key: &str,
     ) -> zbus::Result<()>;
+}
+
+/// The id a new daemon run starts counting from.
+///
+/// History outlives a restart, and `Notify` replaces any entry with the id
+/// it hands out, so counting from 1 again would quietly delete old entries.
+/// Local slot ids live at the top of the range and are skipped.
+fn first_free_id(data: &NotificationData) -> u32 {
+    let lowest_slot = LocalSlot::ConfigError.id().min(LocalSlot::ThemeError.id());
+    data.notifications
+        .iter()
+        .map(|n| n.id)
+        .filter(|id| *id < lowest_slot)
+        .max()
+        .map_or(1, |id| id.saturating_add(1))
 }
 
 fn remove_notification(data: &Mutable<NotificationData>, id: u32) -> bool {
@@ -699,11 +830,11 @@ mod tests {
             .data
             .lock_mut()
             .notifications
-            .push(Notification {
+            .push(Arc::new(Notification {
                 id: 7,
                 summary: "from an app on the bus".to_string(),
                 ..Notification::default()
-            });
+            }));
 
         notifications.clear_local(LocalSlot::ConfigError);
         // The second call has nothing left to do, and must not take the
@@ -773,5 +904,25 @@ mod tests {
             normalize_path("file:///tmp/My%20%C3%A9.png"),
             PathBuf::from("/tmp/My é.png"),
         );
+    }
+
+    /// A restarted daemon must not hand out ids still in the history: `Notify`
+    /// replaces whatever holds the id, which deleted old entries.
+    #[test]
+    fn a_restart_keeps_counting_past_the_history() {
+        let notifications = NotificationSubscriber::new();
+        assert_eq!(first_free_id(&notifications.get()), 1);
+
+        notifications.post_local(LocalSlot::ConfigError, "bad".into(), String::new());
+        {
+            let mut data = notifications.data.lock_mut();
+            for id in [3, 7] {
+                data.notifications.push(Arc::new(Notification {
+                    id,
+                    ..Notification::default()
+                }));
+            }
+        }
+        assert_eq!(first_free_id(&notifications.get()), 8);
     }
 }

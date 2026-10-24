@@ -3,6 +3,6 @@
 use serde::{Deserialize, Serialize};
 
 /// Settings module configuration.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SettingsConfig {}

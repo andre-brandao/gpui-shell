@@ -82,6 +82,12 @@ Full documentation is available at **https://andre-brandao.github.io/gpui-shell/
 - [Installation](https://andre-brandao.github.io/gpui-shell/guides/installation/)
 - [Configuration](https://andre-brandao.github.io/gpui-shell/reference/configuration/)
 
+## Architecture
+
+[![GPUi Shell architecture](docs/public/architecture.svg)](docs/public/architecture.svg)
+
+How the pieces fit together: [architecture](docs/src/content/docs/developer/architecture.md).
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the plan to 1.0, and the

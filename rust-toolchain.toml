@@ -1,4 +1,5 @@
 [toolchain]
-channel = "nightly"
+# Matches gpui's own pin; nothing here needs nightly.
+channel = "1.95.0"
 profile = "minimal"
 components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]

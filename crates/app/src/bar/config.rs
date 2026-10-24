@@ -40,7 +40,7 @@ impl BarPosition {
 }
 
 /// Status bar configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BarConfig {
     /// Main axis thickness in px (height for horizontal, width for vertical).
@@ -66,7 +66,7 @@ pub struct BarConfig {
 }
 
 /// Bar module configurations.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModulesConfig {
     pub clock: ClockConfig,

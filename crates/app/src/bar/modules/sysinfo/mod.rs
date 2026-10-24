@@ -2,8 +2,8 @@
 //!
 //! Clicking the widget opens a detailed system information panel.
 
-use crate::panel::{PanelConfig, toggle_panel};
-use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Size, Window, prelude::*, px};
+use crate::windows::{PanelConfig, PanelSize, ShellWindows};
+use gpui::{AnyElement, App, ClickEvent, Context, Pixels, Point, Window, prelude::*, px};
 use services::SysInfoData;
 use ui::{ActiveTheme, ButtonCommon, ButtonLike, ButtonStyle, Clickable, IconName};
 
@@ -12,9 +12,9 @@ pub use config::SysInfoConfig;
 
 use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
-use crate::panel::panel_placement_from_event;
 use crate::state::AppState;
 use crate::state::watch;
+use crate::windows::panel_placement_from_event;
 
 mod panel;
 pub use panel::SysInfoPanel;
@@ -52,18 +52,20 @@ impl SysInfo {
     fn toggle_panel(&mut self, at: Point<Pixels>, window: &Window, cx: &mut App) {
         let subscriber = self.subscriber.clone();
         let config = Config::global(cx);
-        let panel_size = Size::new(px(350.0), px(450.0));
-        let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
-        let config = PanelConfig {
+        let size = PanelSize::FitHeight {
             width: 350.0,
-            height: 450.0,
+            max_height: 600.0,
+        };
+        let (anchor, margin) =
+            panel_placement_from_event(config.bar.position, at, window, cx, size.initial());
+        let config = PanelConfig {
+            size,
             anchor,
             margin,
             namespace: "sysinfo-panel".to_string(),
         };
 
-        toggle_panel("sysinfo", config, cx, move |cx| {
+        ShellWindows::toggle_panel(cx, window, "sysinfo", config, move |cx| {
             SysInfoPanel::new(subscriber, cx)
         });
     }

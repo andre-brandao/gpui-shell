@@ -155,7 +155,11 @@ impl RenderOnce for LauncherFrame {
 }
 
 /// Render `(action, key)` pairs as the footer's right-hand hints - `Open ⏎ Close Esc`.
-pub fn footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> AnyElement {
+pub fn footer_hints<A, K>(actions: impl IntoIterator<Item = (A, K)>, cx: &App) -> AnyElement
+where
+    A: Into<SharedString>,
+    K: Into<SharedString>,
+{
     let colors = cx.theme().colors();
     let muted = colors.text_muted;
     let key_bg = colors.element_background;
@@ -171,7 +175,7 @@ pub fn footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> Any
                 .flex()
                 .items_center()
                 .gap(px(Spacing::Medium.value() - 2.0))
-                .child(action)
+                .child(action.into())
                 .child(
                     div()
                         .px(px(Spacing::Medium.value() - 2.0))
@@ -179,7 +183,7 @@ pub fn footer_hints(actions: Vec<(&'static str, &'static str)>, cx: &App) -> Any
                         .rounded(px(Radius::Small.value() - 1.0))
                         .bg(key_bg)
                         .text_size(TextSize::XSmall.rems())
-                        .child(key),
+                        .child(key.into()),
                 )
         }))
         .into_any_element()

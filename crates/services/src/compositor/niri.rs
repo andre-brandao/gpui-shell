@@ -195,7 +195,7 @@ fn run_listener(data: Mutable<CompositorState>) -> Result<()> {
 
         // Map to our generic state and update the Mutable
         let state = map_state(&internal_state);
-        data.set(state);
+        data.set_neq(state);
     }
 
     info!("Niri event stream ended");
@@ -267,16 +267,18 @@ fn map_state(niri: &EventStreamState) -> CompositorState {
             }),
             windows: 0,
             is_special: false,
+            has_urgent: w.is_urgent,
         })
         .collect();
 
-    // Calculate window counts per workspace
+    // Window counts per workspace; older niri reports urgency on windows only.
     for win in niri.windows.windows.values() {
         if let Some(ws_id) = win.workspace_id
             && let Some(ws) = niri.workspaces.workspaces.get(&ws_id)
             && let Some(generic_ws) = workspaces.iter_mut().find(|w| w.id == ws.id as i32)
         {
             generic_ws.windows += 1;
+            generic_ws.has_urgent |= win.is_urgent;
         }
     }
 
@@ -339,6 +341,8 @@ fn map_state(niri: &EventStreamState) -> CompositorState {
             workspace_id: w.workspace_id.unwrap_or(0) as i32,
             is_focused: w.is_focused,
             is_minimized: false,
+            is_urgent: w.is_urgent,
+            pid: w.pid.and_then(|pid| u32::try_from(pid).ok()),
             geometry: None,
         })
         .collect();

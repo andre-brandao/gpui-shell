@@ -10,7 +10,6 @@ mod config;
 
 pub use config::{OsdConfig, OsdPosition};
 
-use std::sync::Mutex;
 use std::time::Duration;
 
 use futures_signals::signal::SignalExt;
@@ -121,11 +120,8 @@ impl Render for OsdView {
     }
 }
 
-/// Global OSD state.
-static OSD_STATE: Mutex<Option<OsdWindowState>> = Mutex::new(None);
-static OSD_POSITION: Mutex<OsdPosition> = Mutex::new(OsdPosition::Right);
-
-struct OsdWindowState {
+#[derive(Clone)]
+pub(crate) struct OsdWindowState {
     handle: AnyWindowHandle,
     view: Entity<OsdView>,
 }
@@ -158,11 +154,10 @@ fn window_options(position: OsdPosition) -> WindowOptions {
 
 /// Show or update the OSD with new content, resetting the dismiss timer.
 fn show_osd(kind: OsdKind, cx: &mut App) {
-    let position = *OSD_POSITION.lock().unwrap();
-    let mut guard = OSD_STATE.lock().unwrap();
+    let position = Config::global(cx).osd.position;
 
     // If OSD window already exists, update it
-    if let Some(state) = guard.as_ref() {
+    if let Some(state) = crate::windows::ShellWindows::osd(cx) {
         let view = state.view.clone();
         let handle = state.handle;
         let ok = cx
@@ -188,18 +183,21 @@ fn show_osd(kind: OsdKind, cx: &mut App) {
 
     if let Ok(handle) = result {
         let view = handle.update(cx, |_, _, cx| cx.entity().clone()).unwrap();
-        *guard = Some(OsdWindowState {
-            handle: handle.into(),
-            view,
-        });
+        crate::windows::ShellWindows::set_osd(
+            cx,
+            Some(OsdWindowState {
+                handle: handle.into(),
+                view,
+            }),
+        );
         schedule_dismiss(cx);
     }
 }
 
 /// Close the OSD window.
 fn close_osd(cx: &mut App) {
-    let mut guard = OSD_STATE.lock().unwrap();
-    if let Some(state) = guard.take() {
+    if let Some(state) = crate::windows::ShellWindows::osd(cx) {
+        crate::windows::ShellWindows::set_osd(cx, None);
         let _ = cx.update_window(state.handle, |_, window, _cx| {
             window.remove_window();
         });
@@ -232,9 +230,6 @@ fn schedule_dismiss(cx: &mut App) {
 pub fn init(cx: &mut App) {
     let audio_service = AppState::audio(cx).clone();
     let brightness_service = AppState::brightness(cx).clone();
-    let position = Config::global(cx).osd.position;
-    *OSD_POSITION.lock().unwrap() = position;
-
     // Track initial values to only show OSD on changes (not on startup)
     let initial_audio = audio_service.get();
     let initial_brightness = brightness_service.get();

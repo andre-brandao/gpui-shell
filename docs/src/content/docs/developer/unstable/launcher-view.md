@@ -3,17 +3,15 @@ title: Adding a launcher view
 description: Write a launcher view against the current, unstable Rust API.
 ---
 
-> **Temporary guide.** This describes the `LauncherView` trait as it is
-> today. It will change: [#TBD](https://github.com/andre-brandao/gpui-shell/issues)
-> tracks stabilizing it ahead of a plugin system, and the v0.4 launcher work
-> gives it `&mut self`, a real context and async matching. Until then, views
-> live in-tree and are written in Rust.
+> **Unstable.** The `LauncherView` trait can still change before 1.0, and
+> views live in-tree and are written in Rust. The data path (items in,
+> activations out) is the part a future plugin API will build on.
 
 We'll build a `Links` view: type `;l`, filter a list of saved links, press
 Enter to open one.
 
 ```toml
-[launcher.modules.links]
+[launcher.views.links]
 prefix = ";l"
 links = [
   { name = "GPUi Shell", url = "https://github.com/andre-brandao/gpui-shell" },
@@ -23,26 +21,32 @@ links = [
 
 ## How a view works
 
-The launcher owns the input, the window and the selection. A view is
-picked by its prefix, and the text after the prefix is its `query`. Each
-frame the launcher:
+The launcher owns the window, the input, the selection and the rows. A view
+is a GPUI entity, picked by its prefix; the text after the prefix is its
+query.
 
-1. calls `update_matches` once, where the view filters and stores the result;
-2. calls `match_count` and `render_item` for each visible row, which read
-   that stored result;
-3. calls `on_select` with the selected index on Enter.
+1. When the query changes, the launcher calls `items(query)` once. The view
+   returns plain `Item`s: id, title, subtitle, icon, keywords, actions.
+2. The launcher fuzzy-ranks them, highlights the matched letters and draws
+   only the rows on screen.
+3. Enter, a click, or Shift+Enter calls `activate(item, action)`, which
+   returns `Close`, `Stay` or `SetQuery(..)`.
 
-Never filter inside `render_item` or `match_count`. They run once per row.
+A view never filters per row, wires a click, or touches the input. When its
+own data changes (a service updated, a scan finished), it emits
+`ViewEvent::ItemsChanged` and the launcher asks again, keeping the cursor on
+the same item. `cx.notify()` on the view redraws the launcher.
 
-Views that aren't a list (shell, web) override `render_content` instead and
-return one element for the whole body.
+Views are built the first time their prefix is typed, so a view that
+subscribes to a service in its constructor starts it only when someone opens
+the view.
 
 ## 1. Create the view
 
-Each view is a directory in `crates/app/src/launcher/modules/`.
+Each view is a directory in `crates/app/src/launcher/views/`.
 
 ```rust
-// crates/app/src/launcher/modules/links/config.rs
+// crates/app/src/launcher/views/links/config.rs
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +57,7 @@ pub struct Link {
     pub url: String,
 }
 
-/// `[launcher.modules.links]`
+/// `[launcher.views.links]`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LinksConfig {
@@ -74,133 +78,102 @@ impl Default for LinksConfig {
 ```
 
 ```rust
-// crates/app/src/launcher/modules/links/mod.rs
+// crates/app/src/launcher/views/links/mod.rs
 //! Links view for opening saved URLs.
 
 pub mod config;
 
-use gpui::{AnyElement, App, div, prelude::*};
-use ui::{
-    Clickable, Color, IconName, Label, LabelCommon, ListItem, ListItemSpacing, TextSize, Toggleable,
-};
+use std::process::Command;
+
+use gpui::{Context, EventEmitter};
+use ui::IconName;
 
 use self::config::{Link, LinksConfig};
-use crate::launcher::view::{LauncherView, ViewContext};
+use crate::launcher::item::{Item, ItemIcon};
+use crate::launcher::view::{Items, LauncherView, Outcome, ViewDescriptor, ViewEvent, ViewMeta};
+
+pub fn descriptor(config: &LinksConfig) -> ViewDescriptor {
+    let links = config.links.clone();
+    ViewDescriptor::new(
+        ViewMeta {
+            id: "links",
+            prefix: config.prefix.clone().into(),
+            name: "Links",
+            icon: IconName::Link,
+            description: "Open a saved link",
+            default: false,
+            in_help: true,
+        },
+        move |_cx| LinksView { links: links.clone() },
+    )
+}
 
 pub struct LinksView {
-    prefix: String,
     links: Vec<Link>,
-    /// Links matching the current query, refreshed by `update_matches`.
-    matches: Vec<Link>,
 }
 
-impl LinksView {
-    pub fn new(config: &LinksConfig) -> Self {
-        Self {
-            prefix: config.prefix.clone(),
-            links: config.links.clone(),
-            matches: Vec::new(),
-        }
-    }
-}
-
-fn open(url: &str) {
-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-}
+impl EventEmitter<ViewEvent> for LinksView {}
 
 impl LauncherView for LinksView {
-    fn prefix(&self) -> &str {
-        &self.prefix
+    fn items(&mut self, _query: &str, _cx: &mut Context<Self>) -> Items {
+        Items::Ready(
+            self.links
+                .iter()
+                .map(|link| {
+                    Item::new(link.url.clone(), link.name.clone())
+                        .subtitle(link.url.clone())
+                        .icon(ItemIcon::Icon(IconName::Link.into()))
+                        .action("open", "Open")
+                })
+                .collect(),
+        )
     }
 
-    fn name(&self) -> &'static str {
-        "Links"
-    }
-
-    fn icon(&self) -> IconName {
-        IconName::Link
-    }
-
-    fn description(&self) -> &'static str {
-        "Open a saved link"
-    }
-
-    fn update_matches(&mut self, vx: &ViewContext, _cx: &App) {
-        let query = vx.query.to_lowercase();
-        self.matches = self
-            .links
-            .iter()
-            .filter(|link| link.name.to_lowercase().contains(&query))
-            .cloned()
-            .collect();
-    }
-
-    fn match_count(&self, _vx: &ViewContext, _cx: &App) -> usize {
-        self.matches.len()
-    }
-
-    fn render_item(
-        &self,
-        index: usize,
-        selected: bool,
-        _vx: &ViewContext,
-        _cx: &App,
-    ) -> AnyElement {
-        let Some(link) = self.matches.get(index) else {
-            return div().into_any_element();
-        };
-        let url = link.url.clone();
-
-        ListItem::new(format!("link-{index}"))
-            .spacing(ListItemSpacing::Sparse)
-            .toggle_state(selected)
-            .on_click(move |_, _, _| open(&url))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(Label::new(link.name.clone()).size(TextSize::Default))
-                    .child(
-                        Label::new(link.url.clone())
-                            .size(TextSize::Small)
-                            .color(Color::Muted),
-                    ),
-            )
-            .into_any_element()
-    }
-
-    /// Enter. Returning true closes the launcher.
-    fn on_select(&self, index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
-        match self.matches.get(index) {
-            Some(link) => {
-                open(&link.url);
-                true
-            }
-            None => false,
-        }
+    fn activate(&mut self, item: &Item, _action: &str, _cx: &mut Context<Self>) -> Outcome {
+        let mut open = Command::new("xdg-open");
+        open.arg(item.id.as_ref());
+        let _ = services::spawn_reaped(open, "xdg-open");
+        Outcome::Close
     }
 }
 ```
 
-Two things the current trait makes awkward, both fixed by the v0.4 rework:
+That's the whole view. Matching, highlighting, clicks, key hints (`Open
+Enter`, built from the item's actions) and the empty list are the
+launcher's job.
 
-- **Clicks don't go through `on_select`.** The row's `on_click` has to repeat
-  the action, as above.
-- **Methods other than `update_matches` take `&self`.** A view that needs to
-  change its own state on input (a toggle, a sub-page) needs a `RefCell` or
-  similar today.
+## Going further
 
-Other optional methods: `render_header` and `render_footer` around the list,
-`render_footer_bar` for key hints, `handle_input` to intercept keys,
-`is_default` for the no-prefix view, and `show_in_help`.
+Everything below is an optional method on `LauncherView`.
+
+| Want | Use |
+| --- | --- |
+| Filter yourself, keep your order (a shell command) | `matching() -> Matching::View` |
+| Slow source (files, history, network) | return `Items::Pending(task)`; the old items stay until it resolves |
+| A second action on Shift+Enter | a second `.action(..)` on the item |
+| Your own row or card | `render_row`, plus `row_height` if it isn't the default |
+| A grid of cards (wallpapers) | `body() -> Body::Grid { columns }`; arrows move in 2D |
+| No list at all, fully interactive | `body() -> Body::Custom(cx.entity().into())` and `impl Render` |
+| Toggles or a summary above the list | `render_header`, with `cx.listener` for clicks |
+| Text when there are no items | `empty_text` |
+| Claim Enter or an arrow key (a custom body) | `on_key` |
+| Custom footer hints | `footer_hints` |
+
+The rule for `render_row`: draw the row, don't wire its click. The launcher
+wraps every row in one clickable element that calls `activate`, so click and
+Enter always do the same thing. For images, `launcher::row::thumbnail_image`
+returns a cached, downscaled thumbnail and notifies the view when it lands.
+
+The calculator (`views/calculator`) is the smallest custom body and web
+search (`views/web`) a fuller one; the wallpaper view (`views/wallpaper`) is
+the reference for a grid.
 
 ## 2. Register it
 
-1. **`launcher/modules/mod.rs`**: `pub mod links;`,
-   `pub use links::LinksView;` and
-   `Box::new(LinksView::new(&config.modules.links))` in `all_views`.
-2. **`launcher/config.rs`**: add `pub links: LinksConfig` to
-   `ModulesConfig`, which makes `[launcher.modules.links]` load.
+1. **`launcher/views/mod.rs`**: `pub mod links;` and
+   `links::descriptor(&config.links)` in `registry`.
+2. **`launcher/config.rs`**: add `pub links: LinksConfig` to `ViewsConfig`,
+   which makes `[launcher.views.links]` load.
 
 Prefixes must be unique. Check `?` in the launcher for the ones taken.
 

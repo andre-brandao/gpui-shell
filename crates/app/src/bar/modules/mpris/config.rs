@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// MPRIS module configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MprisConfig {
     pub show_cover: bool,

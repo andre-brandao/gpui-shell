@@ -5,7 +5,6 @@ use crate::config::ActiveConfig;
 use ui::ActiveTheme;
 use ui::patterns::BarChip;
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BarWidgetShell {
     None,

@@ -9,7 +9,6 @@ use services::applications::match_app_id;
 /// app (possibly pinned too, in which case it's merged, not duplicated),
 /// or a running app not found in the catalog (grouped by its raw app_id).
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub struct DockItem {
     /// Stable identity for this item: a pinned app's desktop file name, or
     /// the resolved app's desktop file name, or the raw window app_id as a
@@ -24,7 +23,6 @@ pub struct DockItem {
 }
 
 impl DockItem {
-    #[allow(dead_code)]
     pub fn is_running(&self) -> bool {
         !self.windows.is_empty()
     }
@@ -34,7 +32,6 @@ impl DockItem {
 /// file name (e.g. `"firefox.desktop"`), falling back to the app's display
 /// name if the path has no file name for some reason (shouldn't happen in
 /// practice - `desktop_file` always comes from a real directory scan).
-#[allow(dead_code)]
 pub fn desktop_file_id(app: &services::Application) -> String {
     app.desktop_file
         .file_name()
@@ -46,7 +43,6 @@ pub fn desktop_file_id(app: &services::Application) -> String {
 /// Build the dock's item list: pinned entries first (in configured order),
 /// then any running window whose resolved (or raw) identity isn't already
 /// present, in first-seen order.
-#[allow(dead_code)]
 pub fn build_dock_items(
     windows: &[services::Window],
     apps: &[services::Application],
@@ -116,9 +112,7 @@ mod tests {
             title: format!("{app_id} window"),
             monitor: "eDP-1".to_string(),
             workspace_id: 1,
-            is_focused: false,
-            is_minimized: false,
-            geometry: None,
+            ..Default::default()
         }
     }
 

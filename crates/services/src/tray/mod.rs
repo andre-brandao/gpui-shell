@@ -8,15 +8,15 @@ mod dbus;
 pub use dbus::{MenuLayout, MenuLayoutProps};
 
 use std::sync::Arc;
-use std::thread;
 
+use anyhow::Context;
 use dbus::{
     DBusMenuProxy, StatusNotifierItemProxy, StatusNotifierWatcher, StatusNotifierWatcherProxy,
 };
-use futures_signals::signal::{Mutable, MutableSignalCloned};
+use futures_signals::signal::Mutable;
 use futures_util::StreamExt;
 use futures_util::stream::select_all;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use zbus::proxy::CacheProperties;
 
 use crate::lifecycle::{Lifecycle, ManagedService, RunToken};
@@ -28,7 +28,7 @@ const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const ICON_PROPERTIES: [&str; 2] = ["IconPixmap", "IconName"];
 
 /// Icon data for a tray item.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TrayIcon {
     /// Icon name for lookup via freedesktop icon theme.
     Name(String),
@@ -41,7 +41,7 @@ pub enum TrayIcon {
 }
 
 /// A system tray item.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TrayItem {
     /// Unique identifier (D-Bus service name).
     pub name: String,
@@ -61,7 +61,7 @@ pub struct TrayItem {
 }
 
 /// System tray data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrayData {
     /// List of tray items.
     pub items: Vec<TrayItem>,
@@ -102,8 +102,15 @@ pub enum TrayCommand {
 /// Event-driven system tray subscriber.
 #[derive(Debug, Clone, Default)]
 pub struct TraySubscriber {
-    data: Mutable<TrayData>,
-    lifecycle: Lifecycle,
+    core: crate::ServiceCore<TrayData, TrayCommand>,
+}
+
+impl std::ops::Deref for TraySubscriber {
+    type Target = crate::ServiceCore<TrayData, TrayCommand>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
 }
 
 impl TraySubscriber {
@@ -113,30 +120,55 @@ impl TraySubscriber {
         Self::default()
     }
 
-    /// Get a signal that emits when tray state changes.
-    pub fn subscribe(&self) -> MutableSignalCloned<TrayData> {
-        self.data.signal_cloned()
+    /// D-Bus destination and menu path of an item with a menu.
+    ///
+    /// Copied out so no lock on `data` is held across an await: the listener
+    /// takes the write lock, and a reader parked behind it on the UI thread
+    /// would never let this future finish.
+    fn menu_address(&self, item_name: &str) -> Option<(String, String)> {
+        let data = self.data.lock_ref();
+        let item = data.find(item_name)?;
+        Some((item.dest.clone(), item.menu_path.clone()))
     }
 
-    /// Get the current tray data snapshot.
-    pub fn get(&self) -> TrayData {
-        self.data.get_cloned()
+    fn has_menu(&self, item_name: &str) -> bool {
+        self.data
+            .lock_ref()
+            .find(item_name)
+            .is_some_and(|item| !item.menu_path.is_empty() && item.menu_path != "/")
     }
 
-    /// Execute a tray command.
-    pub async fn dispatch(&self, command: TrayCommand) -> anyhow::Result<()> {
+    async fn menu_proxy(
+        &self,
+        conn: &zbus::Connection,
+        item_name: &str,
+    ) -> anyhow::Result<Option<DBusMenuProxy<'static>>> {
+        let Some((dest, menu_path)) = self.menu_address(item_name) else {
+            return Ok(None);
+        };
+        let proxy = DBusMenuProxy::builder(conn)
+            .destination(dest)?
+            .path(menu_path)?
+            .build()
+            .await?;
+        Ok(Some(proxy))
+    }
+
+    async fn refresh_menu(&self, menu_proxy: &DBusMenuProxy<'_>, item_name: &str) {
+        if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
+            let mut data = self.data.lock_mut();
+            if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name) {
+                item.menu = Some(Arc::new(new_layout));
+            }
+        }
+    }
+
+    async fn execute(&self, command: TrayCommand) -> anyhow::Result<()> {
         let conn = crate::bus::session().await?;
 
         match command {
             TrayCommand::MenuItemClicked { item_name, menu_id } => {
-                let data = self.data.lock_ref();
-                if let Some(item) = data.items.iter().find(|i| i.name == item_name) {
-                    let menu_proxy = DBusMenuProxy::builder(&conn)
-                        .destination(item.dest.clone())?
-                        .path(item.menu_path.clone())?
-                        .build()
-                        .await?;
-
+                if let Some(menu_proxy) = self.menu_proxy(&conn, &item_name).await? {
                     debug!("Clicking menu item {} in {}", menu_id, item_name);
 
                     let value = zbus::zvariant::Value::I32(0).try_to_owned()?;
@@ -146,57 +178,36 @@ impl TraySubscriber {
                         .await?;
 
                     // Refresh menu layout after click
-                    drop(data);
-                    if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
-                        let mut data = self.data.lock_mut();
-                        if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name) {
-                            item.menu = Some(Arc::new(new_layout));
-                        }
-                    }
+                    self.refresh_menu(&menu_proxy, &item_name).await;
                 }
             }
             TrayCommand::Activate { item_name } => {
-                if let Ok(proxy) = item_proxy(&conn, &item_name).await {
-                    debug!("Activating tray item {}", item_name);
-                    let _ = proxy.activate(0, 0).await;
-                }
+                debug!("Activating tray item {}", item_name);
+                item_proxy(&conn, &item_name).await?.activate(0, 0).await?;
             }
             TrayCommand::SecondaryActivate { item_name } => {
-                if let Ok(proxy) = item_proxy(&conn, &item_name).await {
-                    debug!("Secondary-activating tray item {}", item_name);
-                    let _ = proxy.secondary_activate(0, 0).await;
-                }
+                debug!("Secondary-activating tray item {}", item_name);
+                item_proxy(&conn, &item_name)
+                    .await?
+                    .secondary_activate(0, 0)
+                    .await?;
             }
             TrayCommand::ContextMenu { item_name } => {
-                if let Ok(proxy) = item_proxy(&conn, &item_name).await {
-                    debug!("Context menu for tray item {}", item_name);
-                    let _ = proxy.context_menu(0, 0).await;
-                }
+                debug!("Context menu for tray item {}", item_name);
+                item_proxy(&conn, &item_name)
+                    .await?
+                    .context_menu(0, 0)
+                    .await?;
             }
             TrayCommand::AboutToShow { item_name, menu_id } => {
-                let data = self.data.lock_ref();
-                if let Some(item) = data.items.iter().find(|i| i.name == item_name)
-                    && !item.menu_path.is_empty()
-                    && item.menu_path != "/"
-                {
-                    let menu_proxy = DBusMenuProxy::builder(&conn)
-                        .destination(item.dest.clone())?
-                        .path(item.menu_path.clone())?
-                        .build()
-                        .await?;
-
+                if !self.has_menu(&item_name) {
+                    return Ok(());
+                }
+                if let Some(menu_proxy) = self.menu_proxy(&conn, &item_name).await? {
                     debug!("about_to_show({}) for {}", menu_id, item_name);
                     let needs_update = menu_proxy.about_to_show(menu_id).await.unwrap_or(false);
-
                     if needs_update {
-                        drop(data);
-                        if let Ok((_, new_layout)) = menu_proxy.get_layout(0, -1, &[]).await {
-                            let mut data = self.data.lock_mut();
-                            if let Some(item) = data.items.iter_mut().find(|i| i.name == item_name)
-                            {
-                                item.menu = Some(Arc::new(new_layout));
-                            }
-                        }
+                        self.refresh_menu(&menu_proxy, &item_name).await;
                     }
                 }
             }
@@ -426,30 +437,33 @@ impl ManagedService for TraySubscriber {
         let token = self.lifecycle.begin();
         let data = self.data.clone();
 
-        tokio::spawn(async move {
-            let conn = match StatusNotifierWatcher::start_server().await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    error!("Failed to start the StatusNotifierWatcher server: {}", e);
-                    token.error(e.to_string());
-                    return;
-                }
-            };
-
-            match fetch_tray_data(&conn).await {
-                Ok(fetched) => {
-                    info!("Tray service started with {} items", fetched.items.len());
-                    data.set(fetched);
-                    token.active();
-                }
-                Err(e) => {
-                    error!("Failed to fetch initial tray data: {}", e);
-                    token.error(e.to_string());
-                }
-            }
-
-            start_listener(data, token, conn);
+        let subscriber = self.clone();
+        self.jobs.run(token.clone(), move |command| {
+            let subscriber = subscriber.clone();
+            async move { subscriber.execute(command).await }
         });
+
+        token.supervise(self.name(), move |token| run(data.clone(), token));
+    }
+}
+
+/// One attempt: serve the watcher, snapshot, then follow item changes. Ends
+/// only with an error, which the supervisor answers with a fresh attempt.
+async fn run(data: Mutable<TrayData>, token: RunToken) -> anyhow::Result<()> {
+    let server = StatusNotifierWatcher::start_server()
+        .await
+        .context("starting the StatusNotifierWatcher server")?;
+
+    loop {
+        let fetched = fetch_tray_data(&server.connection)
+            .await
+            .context("fetching tray items")?;
+        info!("Tray service started with {} items", fetched.items.len());
+        data.set_neq(fetched);
+        token.active();
+
+        run_listener(&data, &server.connection).await?;
+        debug!("Tray topology changed, rebuilding item streams");
     }
 }
 
@@ -470,39 +484,8 @@ fn menu_layout_bytes(layout: &MenuLayout) -> usize {
         + layout.2.iter().map(menu_layout_bytes).sum::<usize>()
 }
 
-/// Start the D-Bus listener in a dedicated thread.
-fn start_listener(data: Mutable<TrayData>, token: RunToken, conn: zbus::Connection) {
-    thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!("Failed to create Tokio runtime for Tray listener: {}", e);
-                token.error(e.to_string());
-                return;
-            }
-        };
-
-        rt.block_on(async move {
-            while token.alive() {
-                if let Err(e) = run_listener(&data, &conn, &token).await {
-                    error!("Tray listener error: {}", e);
-                    token.error(e.to_string());
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                }
-            }
-        });
-    });
-}
-
 /// Run the tray event listener.
-async fn run_listener(
-    data: &Mutable<TrayData>,
-    conn: &zbus::Connection,
-    token: &RunToken,
-) -> anyhow::Result<()> {
+async fn run_listener(data: &Mutable<TrayData>, conn: &zbus::Connection) -> anyhow::Result<()> {
     let watcher = StatusNotifierWatcherProxy::new(conn).await?;
 
     // Stream for item registered
@@ -521,15 +504,15 @@ async fn run_listener(
 
                     if let Ok(item) = create_tray_item(&conn, &name).await {
                         let mut guard = data.lock_mut();
-                        // Update or add
                         if let Some(existing) = guard.items.iter_mut().find(|i| i.name == name) {
                             *existing = item;
                         } else {
                             guard.items.push(item);
                         }
+                        return Some(true);
                     }
                 }
-                Some(())
+                Some(false)
             }
         })
         .boxed();
@@ -546,8 +529,9 @@ async fn run_listener(
                     let name = args.service.to_string();
                     debug!("Tray item unregistered: {}", name);
                     data.lock_mut().items.retain(|item| item.name != name);
+                    return Some(true);
                 }
-                Some(())
+                Some(false)
             }
         })
         .boxed();
@@ -576,7 +560,7 @@ async fn run_listener(
                             let proxy = icon_proxy.clone();
                             async move {
                                 refresh_icon(&proxy, &name, &data).await;
-                                Some(())
+                                Some(false)
                             }
                         })
                         .boxed(),
@@ -603,7 +587,7 @@ async fn run_listener(
                                 if changes_icon(&change) {
                                     refresh_icon(&proxy, &name, &data).await;
                                 }
-                                Some(())
+                                Some(false)
                             }
                         })
                         .boxed(),
@@ -640,7 +624,7 @@ async fn run_listener(
                                         item.menu = Some(Arc::new(layout));
                                     }
                                 }
-                                Some(())
+                                Some(false)
                             }
                         })
                         .boxed(),
@@ -658,8 +642,11 @@ async fn run_listener(
         events.push(stream);
     }
 
-    // Process events until stream ends (which shouldn't happen normally)
-    while token.alive() && (events.next().await).is_some() {}
+    while let Some(topology_changed) = events.next().await {
+        if topology_changed {
+            return Ok(());
+        }
+    }
 
-    Ok(())
+    anyhow::bail!("tray event streams ended")
 }

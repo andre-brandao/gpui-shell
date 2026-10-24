@@ -17,6 +17,8 @@ pub struct Workspace {
     pub windows: u16,
     /// Whether this is a special/scratchpad workspace.
     pub is_special: bool,
+    /// Whether a window on this workspace asked for attention.
+    pub has_urgent: bool,
 }
 
 /// A monitor/output managed by the compositor.
@@ -71,6 +73,10 @@ pub struct Window {
     /// Whether this window is minimized (always `false` on backends with
     /// no minimize concept, e.g. Niri).
     pub is_minimized: bool,
+    /// Whether this window asked for attention.
+    pub is_urgent: bool,
+    /// Process id of the window's client, when the backend reports it.
+    pub pid: Option<u32>,
     /// Window position and size, when the backend can report it. `None` on
     /// backends with no fixed on-screen geometry (e.g. Niri's scrollable
     /// tiling layout has no absolute window position).
@@ -88,7 +94,7 @@ pub struct WindowGeometry {
 }
 
 /// Complete compositor state snapshot.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CompositorState {
     /// All workspaces.
     pub workspaces: Vec<Workspace>,
@@ -140,6 +146,19 @@ impl CompositorState {
     pub fn monitor_by_id(&self, id: i128) -> Option<&Monitor> {
         self.monitors.iter().find(|m| m.id == id)
     }
+
+    /// The window a process owns, else the first one whose app id is one of
+    /// `app_ids` (compared ignoring case).
+    pub fn app_window(&self, pid: Option<u32>, app_ids: &[String]) -> Option<&Window> {
+        pid.and_then(|pid| self.windows.iter().find(|w| w.pid == Some(pid)))
+            .or_else(|| {
+                self.windows.iter().find(|w| {
+                    app_ids
+                        .iter()
+                        .any(|app| !w.app_id.is_empty() && app.eq_ignore_ascii_case(&w.app_id))
+                })
+            })
+    }
 }
 
 /// Supported compositor backends.
@@ -181,4 +200,40 @@ pub enum CompositorCommand {
     FocusWindow(String),
     /// Custom dispatcher command (dispatcher name, arguments).
     Custom(String, String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(id: &str, app_id: &str, pid: Option<u32>) -> Window {
+        Window {
+            id: id.to_string(),
+            app_id: app_id.to_string(),
+            pid,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn app_window_prefers_the_sender_pid_then_the_app_id() {
+        let state = CompositorState {
+            windows: vec![
+                window("a", "org.telegram.desktop", Some(10)),
+                window("b", "firefox", Some(20)),
+            ],
+            ..Default::default()
+        };
+        let apps = vec!["Firefox".to_string()];
+
+        assert_eq!(
+            state.app_window(Some(10), &apps).map(|w| w.id.as_str()),
+            Some("a")
+        );
+        assert_eq!(
+            state.app_window(Some(99), &apps).map(|w| w.id.as_str()),
+            Some("b")
+        );
+        assert_eq!(state.app_window(None, &[]), None);
+    }
 }

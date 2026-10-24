@@ -1,7 +1,7 @@
 //! Base16 palette → [`ThemeColors`] derivation.
 
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use gpui::Hsla;
 use serde::{Deserialize, Serialize};
@@ -226,75 +226,71 @@ impl Base16Palette {
         Theme::from_palette(name, self)
     }
 
-    /// Generate a Base16 palette from a wallpaper using matugen.
+    /// The dark and light palettes matugen derives from a wallpaper, from
+    /// one run. Blocks for the length of that run.
     pub fn generate_from_wallpaper(
         wallpaper_path: impl AsRef<Path>,
-        mode: &str,
         scheme_type: &str,
-        source_color_index: usize,
-    ) -> anyhow::Result<Self> {
+    ) -> anyhow::Result<WallpaperPalettes> {
         let path = wallpaper_path.as_ref();
 
+        // --dry-run: skip the user's matugen templates, reload hooks and
+        // wallpaper setter. A closed stdin stops it prompting for a color.
         let output = Command::new("matugen")
             .args([
                 "image",
                 &path.to_string_lossy(),
-                "--mode",
-                mode,
+                "--dry-run",
                 "--type",
                 scheme_type,
                 "--base16-backend",
                 "wal",
                 "--source-color-index",
-                &source_color_index.to_string(),
+                "0",
                 "--json",
                 "hex",
             ])
+            .stdin(Stdio::null())
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to run matugen: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Matugen failed: {stderr}"));
+            let first = stderr.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+            return Err(anyhow::anyhow!("Matugen failed: {first}"));
         }
 
-        let json_str = String::from_utf8_lossy(&output.stdout);
-        let json: serde_json::Value = serde_json::from_str(&json_str)
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout)
             .map_err(|e| anyhow::anyhow!("Failed to parse matugen output: {e}"))?;
 
         // Matugen nests colors as base16.baseXX.{dark,light}.color
         let base16 = json
             .get("base16")
             .ok_or_else(|| anyhow::anyhow!("Missing base16 colors in matugen output"))?;
-
-        let get_color = |base_key: &str| -> &str {
-            base16
-                .get(base_key)
-                .and_then(|b| b.get(mode))
-                .and_then(|m| m.get("color"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("#000000")
+        let palette = |mode: &str| -> anyhow::Result<Self> {
+            let colors: [&str; 16] = std::array::from_fn(|slot| {
+                base16
+                    .get(format!("base{slot:02x}"))
+                    .and_then(|b| b.get(mode))
+                    .and_then(|m| m.get("color"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("#000000")
+            });
+            Self::from_hex(&colors)
         };
 
-        Self::from_hex(&[
-            get_color("base00"),
-            get_color("base01"),
-            get_color("base02"),
-            get_color("base03"),
-            get_color("base04"),
-            get_color("base05"),
-            get_color("base06"),
-            get_color("base07"),
-            get_color("base08"),
-            get_color("base09"),
-            get_color("base0a"),
-            get_color("base0b"),
-            get_color("base0c"),
-            get_color("base0d"),
-            get_color("base0e"),
-            get_color("base0f"),
-        ])
+        Ok(WallpaperPalettes {
+            dark: palette("dark")?,
+            light: palette("light")?,
+        })
     }
+}
+
+/// Both modes of a wallpaper's generated theme.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WallpaperPalettes {
+    pub dark: Base16Palette,
+    pub light: Base16Palette,
 }
 
 fn status_triplet(fg: Hsla) -> (Hsla, Hsla, Hsla) {

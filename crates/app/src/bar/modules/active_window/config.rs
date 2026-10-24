@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Active window module configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ActiveWindowConfig {
     pub max_length: usize,

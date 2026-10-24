@@ -10,7 +10,7 @@
 //!
 //! Clicking opens the Control Center panel.
 
-use gpui::{AnyElement, Context, Pixels, Point, Size, Window, prelude::*, px};
+use gpui::{AnyElement, Context, Pixels, Point, Window, prelude::*, px};
 use services::{
     ActiveConnectionInfo, AudioData, BluetoothData, BluetoothState, NetworkData, PrivacyData,
     UPowerData,
@@ -25,10 +25,10 @@ pub use config::SettingsConfig;
 use super::{BarWidget, style};
 use crate::config::{ActiveConfig, Config};
 use crate::control_center::{
-    CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED, CONTROL_CENTER_PANEL_WIDTH, ControlCenter,
+    CONTROL_CENTER_PANEL_MAX_HEIGHT, CONTROL_CENTER_PANEL_WIDTH, ControlCenter,
 };
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
 use crate::state::{AppState, watch};
+use crate::windows::{PanelConfig, PanelSize, ShellWindows, panel_placement_from_event};
 
 use crate::icons;
 
@@ -103,21 +103,20 @@ impl Settings {
     /// Toggle the control center panel.
     fn toggle_panel(&self, at: Point<Pixels>, window: &Window, cx: &mut gpui::App) {
         let config = Config::global(cx);
-        let panel_size = Size::new(
-            px(CONTROL_CENTER_PANEL_WIDTH),
-            px(CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED),
-        );
-        let (anchor, margin) =
-            panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
-        let config = PanelConfig {
+        let size = PanelSize::FitHeight {
             width: CONTROL_CENTER_PANEL_WIDTH,
-            height: CONTROL_CENTER_PANEL_HEIGHT_COLLAPSED,
+            max_height: CONTROL_CENTER_PANEL_MAX_HEIGHT,
+        };
+        let (anchor, margin) =
+            panel_placement_from_event(config.bar.position, at, window, cx, size.initial());
+        let config = PanelConfig {
+            size,
             anchor,
             margin,
             namespace: "control-center".to_string(),
         };
 
-        toggle_panel("control-center", config, cx, move |cx| {
+        ShellWindows::toggle_panel(cx, window, "control-center", config, move |cx| {
             ControlCenter::new(cx)
         });
     }

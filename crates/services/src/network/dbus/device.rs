@@ -66,4 +66,8 @@ pub trait Device {
     /// StateReason property.
     #[zbus(property)]
     fn state_reason(&self) -> zbus::Result<(u32, u32)>;
+
+    /// StateChanged signal: new state, old state, `NMDeviceStateReason`.
+    #[zbus(signal, name = "StateChanged")]
+    fn state_transition(&self, new_state: u32, old_state: u32, reason: u32) -> zbus::Result<()>;
 }

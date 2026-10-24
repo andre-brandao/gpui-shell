@@ -35,12 +35,8 @@ impl Workspaces {
 
     /// Handle clicking on a workspace to focus it.
     fn focus_workspace(&self, workspace_id: i32) {
-        if let Err(e) = self
-            .compositor
-            .dispatch(CompositorCommand::FocusWorkspace(workspace_id))
-        {
-            tracing::error!("Failed to focus workspace {}: {}", workspace_id, e);
-        }
+        self.compositor
+            .dispatch(CompositorCommand::FocusWorkspace(workspace_id));
     }
 
     /// Resolve the compositor monitor name for the display this widget's
@@ -61,18 +57,14 @@ impl Workspaces {
     /// with (`crate::state::display_id_for_window`), and compare its uuid
     /// against the same hash computed from each compositor monitor's name.
     fn current_monitor_name(&self, window: &Window, cx: &gpui::App) -> Option<String> {
-        let display_id = crate::state::display_id_for_window(window)?;
+        let display_id = crate::state::display_id_for_window(window, cx)?;
         crate::state::monitor_for_display(Some(display_id), &self.state, cx).map(|m| m.name.clone())
     }
 
     /// Handle scrolling to switch workspaces.
     fn scroll_workspace(&self, direction: i32) {
-        if let Err(e) = self
-            .compositor
-            .dispatch(CompositorCommand::ScrollWorkspace(direction))
-        {
-            tracing::error!("Failed to scroll workspace: {}", e);
-        }
+        self.compositor
+            .dispatch(CompositorCommand::ScrollWorkspace(direction));
     }
 
     fn workspace_label(
@@ -126,10 +118,11 @@ impl Workspaces {
         let workspace_id = ws.id;
         let is_active = active_workspace_id == Some(ws.id);
         let has_windows = ws.windows > 0;
+        let is_urgent = ws.has_urgent && !is_active;
         let label = Self::workspace_label(ws, is_vertical, config.show_numbers, config.show_icons);
 
         // Not a `ButtonLike`: the pill carries three background states
-        // (active / has windows / empty) and `ButtonStyle` has no per-state
+        // (active / has windows / empty) plus an urgent border, and `ButtonStyle` has no per-state
         // palette to express them.
         h_flex()
             .id(format!("workspace-{}", ws.id))
@@ -155,6 +148,9 @@ impl Workspaces {
             } else {
                 gpui::transparent_black()
             })
+            .when(is_urgent, |s| {
+                s.border_1().border_color(theme.colors.status.error)
+            })
             .hover(move |s| {
                 if is_active {
                     s.bg(theme.colors.accent)
@@ -168,6 +164,8 @@ impl Workspaces {
             .when(!label.is_empty(), |this| {
                 let color = if is_active {
                     theme.colors.background
+                } else if is_urgent {
+                    theme.colors.status.error
                 } else if has_windows {
                     theme.colors.text
                 } else {

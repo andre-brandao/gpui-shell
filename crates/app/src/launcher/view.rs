@@ -1,156 +1,254 @@
-//! Launcher view trait and shared utilities.
+//! The launcher view API.
 //!
-//! This module defines the interface for launcher views and provides
-//! helper functions for rendering common UI patterns.
-//!
-//! Views come in two flavours:
-//!
-//! - **List views** (e.g. apps, workspaces, help) — implement `render_item()` to render
-//!   individual selectable rows. The launcher iterates `match_count()` times.
-//!
-//! - **Content views** (e.g. shell, web) — override `render_content()` to
-//!   return a single element for their entire body. When this returns `Some`,
-//!   the launcher skips the item loop.
+//! A view is a GPUI entity. Most views hand the launcher [`Item`]s and let it
+//! rank, draw and activate them; richer ones draw their own rows or cards, or
+//! take over the whole body with [`Body::Custom`].
 
-use gpui::{AnyElement, App};
-use ui::IconName;
-use ui::patterns::footer_hints;
+use gpui::{
+    AnyElement, AnyView, App, AppContext, Context, Entity, EventEmitter, Pixels, SharedString,
+    Subscription, Task, Window, px,
+};
+use ui::{ActiveTheme, IconName, Spacing, TextSize};
 
-/// Input event passed to views for handling.
-#[derive(Clone, Debug)]
-pub enum ViewInput {
-    /// Character typed.
-    Char(String),
-    /// Backspace pressed.
-    Backspace,
-    /// Up arrow pressed.
+use super::Launcher;
+use super::item::Item;
+
+/// gpui's default line height, as a multiple of the font size.
+const LINE_HEIGHT: f32 = 1.618;
+
+/// How the launcher knows a view: everything help, routing and the footer
+/// need before the view is ever built.
+#[derive(Clone)]
+pub struct ViewMeta {
+    pub id: &'static str,
+    pub prefix: SharedString,
+    pub name: &'static str,
+    pub icon: IconName,
+    pub description: &'static str,
+    /// Owns queries without a prefix.
+    pub default: bool,
+    pub in_help: bool,
+}
+
+/// Who filters and orders the items.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Matching {
+    /// The launcher fuzzy-ranks items against the query.
+    Shell,
+    /// The view already did; keep its order.
+    View,
+}
+
+pub enum Items {
+    Ready(Vec<Item>),
+    /// Slow sources resolve off the frame; the old items stay until then.
+    Pending(Task<Vec<Item>>),
+}
+
+pub enum Body {
+    List,
+    Grid {
+        columns: usize,
+    },
+    /// The view draws the whole body itself; it gets no items.
+    Custom(AnyView),
+}
+
+/// What happens after an item is activated.
+pub enum Outcome {
+    Close,
+    Stay,
+    /// Replace the whole input, prefix included.
+    SetQuery(String),
+}
+
+/// Navigation keys a view may claim before the launcher moves the selection.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum NavKey {
     Up,
-    /// Down arrow pressed.
     Down,
-    /// Page up pressed.
-    PageUp,
-    /// Page down pressed.
-    PageDown,
-    /// Enter pressed.
+    Left,
+    Right,
     Enter,
 }
 
-/// Result of handling input.
-pub enum InputResult {
-    /// Input was handled, optionally update the query and/or close.
-    Handled {
-        /// New query value (view-local part, without prefix).
-        query: String,
-        /// Whether to close the launcher.
-        close: bool,
-    },
-    /// Input was not handled, use default behavior.
-    Unhandled,
+pub enum ViewEvent {
+    /// The view's data changed under the same query; ask for items again.
+    ItemsChanged,
 }
 
-/// Context passed to views for rendering and actions.
-pub struct ViewContext<'a> {
-    pub query: &'a str,
-    pub selected_index: usize,
-}
+pub type Hint = (SharedString, SharedString);
 
-/// A launcher view that provides custom rendering and input handling.
-///
-/// Views are responsible for:
-/// - Declaring their prefix pattern (e.g., "@", "$", "!", ";ws")
-/// - Rendering their content
-/// - Handling selection and input
-/// - Executing their own actions directly
-pub trait LauncherView: Send + Sync {
-    /// The prefix pattern that activates this view.
-    ///
-    /// Examples:
-    /// - "@" for apps
-    /// - "$" for shell commands
-    /// - "!" for web search
-    /// - "?" for help
-    /// - ";ws" for workspaces
-    fn prefix(&self) -> &str;
-
-    /// Display name for the view.
-    fn name(&self) -> &'static str;
-
-    /// Icon for the view.
-    fn icon(&self) -> IconName;
-
-    /// Description shown in help.
-    fn description(&self) -> &'static str;
-
-    /// Whether this view is the default when no prefix is given.
-    fn is_default(&self) -> bool {
-        false
+pub trait LauncherView: EventEmitter<ViewEvent> + Sized + 'static {
+    fn matching(&self) -> Matching {
+        Matching::Shell
     }
 
-    /// Whether this view should appear in the help menu.
-    fn show_in_help(&self) -> bool {
-        true
+    /// Items for `query`. Called when the query changes and after
+    /// [`ViewEvent::ItemsChanged`], never per frame.
+    fn items(&mut self, query: &str, cx: &mut Context<Self>) -> Items;
+
+    /// Run `action` on `item`. Clicks, Enter and Shift+Enter all land here.
+    fn activate(&mut self, item: &Item, action: &str, cx: &mut Context<Self>) -> Outcome;
+
+    fn body(&mut self, _cx: &mut Context<Self>) -> Body {
+        Body::List
     }
 
-    /// Recompute the view's match list against the current query.
-    ///
-    /// The launcher calls this exactly once per frame, and again whenever
-    /// it needs a fresh count outside of rendering. Everything after it -
-    /// [`Self::match_count`], [`Self::render_item`], [`Self::on_select`] -
-    /// must read the stored result rather than filtering again: those are
-    /// called once *per row*, so filtering inside them is quadratic in the
-    /// number of matches.
-    ///
-    /// Content views that have no list leave this as a no-op.
-    fn update_matches(&mut self, _vx: &ViewContext, _cx: &App) {}
+    /// Height of every row (or grid row), so only visible rows are built.
+    fn row_height(&self, cx: &App) -> Pixels {
+        list_row_height(cx, &[TextSize::Default, TextSize::Small], px(28.))
+    }
 
-    /// How many selectable items the view currently has.
-    ///
-    /// Reads the result of the last [`Self::update_matches`].
-    fn match_count(&self, vx: &ViewContext, cx: &App) -> usize;
-
-    /// Render a single list item at `index`. `selected` is true if the
-    /// launcher's selection cursor is on this item.
-    ///
-    /// Called only for the rows gpui actually needs, and reads the result
-    /// of the last [`Self::update_matches`].
-    fn render_item(&self, index: usize, selected: bool, vx: &ViewContext, cx: &App) -> AnyElement;
-
-    /// Optional header rendered above the item list.
-    fn render_header(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+    /// Draw a row or card instead of the launcher's default. The launcher
+    /// still owns its click.
+    fn render_row(
+        &self,
+        _item: &Item,
+        _selected: bool,
+        _window: &Window,
+        _cx: &App,
+    ) -> Option<AnyElement> {
         None
     }
 
-    /// Optional section rendered below the item list.
-    fn render_footer(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+    fn render_header(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         None
     }
 
-    /// Full-content rendering for non-list views. When this returns `Some`,
-    /// `render_item()` is not called and the returned element is used as
-    /// the view body instead.
-    fn render_content(&self, _vx: &ViewContext, _cx: &App) -> Option<AnyElement> {
+    /// Shown in place of the list when there are no items.
+    fn empty_text(&self) -> Option<SharedString> {
         None
     }
 
-    /// Handle input. Return InputResult::Handled to consume the input.
-    fn handle_input(&self, _input: &ViewInput, _vx: &ViewContext, _cx: &mut App) -> InputResult {
-        InputResult::Unhandled
+    /// Claim a navigation key. `None` leaves it to the launcher.
+    fn on_key(&mut self, _key: NavKey, _cx: &mut Context<Self>) -> Option<Outcome> {
+        None
     }
 
-    /// Handle item selection (Enter pressed or clicked).
-    /// Return true to close the launcher.
-    fn on_select(&self, _index: usize, _vx: &ViewContext, _cx: &mut App) -> bool {
-        false
-    }
-
-    /// Content for the footer's action side. Most views want key hints via
-    /// [`footer_hints`], but any element goes.
-    fn render_footer_bar(&self, _vx: &ViewContext, cx: &App) -> AnyElement {
-        footer_hints(vec![("Open", "Enter"), ("Close", "Esc")], cx)
+    /// Footer hints. `None` derives them from the selected item's actions.
+    fn footer_hints(&self, _selected: Option<&Item>) -> Option<Vec<Hint>> {
+        None
     }
 }
 
-/// Returns true if the query starts with a view prefix.
-pub fn is_prefix(query: &str, prefix: &str) -> bool {
-    query.starts_with(prefix)
+/// Height of a sparse `ListItem` stacking `lines` of text beside a slot at
+/// least `min_content` tall.
+pub fn list_row_height(cx: &App, lines: &[TextSize], min_content: Pixels) -> Pixels {
+    let rem = cx.theme().font_size;
+    let text: Pixels = lines
+        .iter()
+        .map(|size| size.rems().to_pixels(rem) * LINE_HEIGHT)
+        .fold(px(0.), |a, b| a + b)
+        + px(lines.len().saturating_sub(1) as f32);
+    // Two px of slack so rounding never clips the last line.
+    text.max(min_content) + Spacing::XSmall.pixels() * 2. + px(2.)
+}
+
+/// A built view behind a trait object, so the launcher can hold views of
+/// different types.
+pub(super) trait ViewHandle {
+    fn matching(&self, cx: &App) -> Matching;
+    fn items(&self, query: &str, cx: &mut App) -> Items;
+    fn activate(&self, item: &Item, action: &str, cx: &mut App) -> Outcome;
+    fn body(&self, cx: &mut App) -> Body;
+    fn row_height(&self, cx: &App) -> Pixels;
+    fn render_row(
+        &self,
+        item: &Item,
+        selected: bool,
+        window: &Window,
+        cx: &App,
+    ) -> Option<AnyElement>;
+    fn render_header(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
+    fn empty_text(&self, cx: &App) -> Option<SharedString>;
+    fn on_key(&self, key: NavKey, cx: &mut App) -> Option<Outcome>;
+    fn footer_hints(&self, selected: Option<&Item>, cx: &App) -> Option<Vec<Hint>>;
+    /// Redraw the launcher when the view notifies; requery on `ItemsChanged`.
+    fn connect(&self, cx: &mut Context<Launcher>) -> [Subscription; 2];
+}
+
+impl<V: LauncherView> ViewHandle for Entity<V> {
+    fn matching(&self, cx: &App) -> Matching {
+        self.read(cx).matching()
+    }
+
+    fn items(&self, query: &str, cx: &mut App) -> Items {
+        self.update(cx, |view, cx| view.items(query, cx))
+    }
+
+    fn activate(&self, item: &Item, action: &str, cx: &mut App) -> Outcome {
+        self.update(cx, |view, cx| view.activate(item, action, cx))
+    }
+
+    fn body(&self, cx: &mut App) -> Body {
+        self.update(cx, |view, cx| view.body(cx))
+    }
+
+    fn row_height(&self, cx: &App) -> Pixels {
+        self.read(cx).row_height(cx)
+    }
+
+    fn render_row(
+        &self,
+        item: &Item,
+        selected: bool,
+        window: &Window,
+        cx: &App,
+    ) -> Option<AnyElement> {
+        self.read(cx).render_row(item, selected, window, cx)
+    }
+
+    fn render_header(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+        self.update(cx, |view, cx| view.render_header(window, cx))
+    }
+
+    fn empty_text(&self, cx: &App) -> Option<SharedString> {
+        self.read(cx).empty_text()
+    }
+
+    fn on_key(&self, key: NavKey, cx: &mut App) -> Option<Outcome> {
+        self.update(cx, |view, cx| view.on_key(key, cx))
+    }
+
+    fn footer_hints(&self, selected: Option<&Item>, cx: &App) -> Option<Vec<Hint>> {
+        self.read(cx).footer_hints(selected)
+    }
+
+    fn connect(&self, cx: &mut Context<Launcher>) -> [Subscription; 2] {
+        [
+            cx.observe(self, |_, _, cx| cx.notify()),
+            cx.subscribe(self, |launcher, _, event, cx| match event {
+                ViewEvent::ItemsChanged => launcher.requery(true, cx),
+            }),
+        ]
+    }
+}
+
+type BuildView = dyn Fn(&mut App) -> Box<dyn ViewHandle>;
+
+/// A view the launcher can build on first use.
+pub struct ViewDescriptor {
+    pub meta: ViewMeta,
+    build: Box<BuildView>,
+}
+
+impl ViewDescriptor {
+    pub fn new<V: LauncherView>(
+        meta: ViewMeta,
+        build: impl Fn(&mut Context<V>) -> V + 'static,
+    ) -> Self {
+        Self {
+            meta,
+            build: Box::new(move |cx| Box::new(cx.new(&build))),
+        }
+    }
+
+    pub(super) fn build(&self, cx: &mut App) -> Box<dyn ViewHandle> {
+        (self.build)(cx)
+    }
 }

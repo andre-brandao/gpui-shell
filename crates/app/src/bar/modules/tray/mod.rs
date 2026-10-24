@@ -3,10 +3,10 @@
 mod config;
 pub use config::TrayConfig;
 
-use crate::panel::{PanelConfig, panel_placement_from_event, toggle_panel};
+use crate::windows::{PanelConfig, PanelSize, ShellWindows, panel_placement_from_event};
 use gpui::{
     AnyElement, App, ClickEvent, Context, ElementId, Pixels, Point, Render, RenderImage,
-    SharedString, Size, Window, div, img, prelude::*, px,
+    SharedString, Window, div, img, prelude::*, px,
 };
 use image::{Frame, RgbaImage};
 use services::{MenuLayout, MenuLayoutProps, TrayCommand, TrayData, TrayIcon, TrayItem};
@@ -141,42 +141,41 @@ impl Tray {
             let panel_id = format!("systray-{}", item.name);
             let subscriber = self.subscriber.clone();
             let item_name = item.name.clone();
+            // Apps may build the menu only on AboutToShow; the panel picks up
+            // the new layout through its subscription.
+            subscriber.dispatch(TrayCommand::AboutToShow {
+                item_name: item_name.clone(),
+                menu_id: 0,
+            });
             let config = Config::global(cx);
-            let panel_size = Size::new(px(250.0), px(400.0));
+            let size = PanelSize::FitHeight {
+                width: 260.0,
+                max_height: 520.0,
+            };
             let (anchor, margin) =
-                panel_placement_from_event(config.bar.position, at, window, cx, panel_size);
+                panel_placement_from_event(config.bar.position, at, window, cx, size.initial());
 
             let config = PanelConfig {
-                width: 250.0,
-                height: 400.0,
+                size,
                 anchor,
                 margin,
                 namespace: "systray-menu".to_string(),
             };
 
-            toggle_panel(&panel_id, config, cx, move |cx| {
+            ShellWindows::toggle_panel(cx, window, &panel_id, config, move |cx| {
                 TrayMenuPanel::new(menu, item_name, subscriber, cx)
             });
         } else {
             // No menu — activate the item directly (e.g. show window)
-            let subscriber = self.subscriber.clone();
-            let item_name = item.name.clone();
-            cx.spawn(async move |_| {
-                let _ = subscriber
-                    .dispatch(TrayCommand::Activate { item_name })
-                    .await;
-            })
-            .detach();
+            self.subscriber.dispatch(TrayCommand::Activate {
+                item_name: item.name.clone(),
+            });
         }
     }
 
-    /// Dispatch a tray command asynchronously.
-    fn dispatch_command(&self, command: TrayCommand, cx: &mut App) {
-        let subscriber = self.subscriber.clone();
-        cx.spawn(async move |_| {
-            let _ = subscriber.dispatch(command).await;
-        })
-        .detach();
+    /// Queue a tray command.
+    fn dispatch_command(&self, command: TrayCommand) {
+        self.subscriber.dispatch(command);
     }
 
     fn render_tray_item(
@@ -222,7 +221,7 @@ impl Tray {
         .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
             this.on_item_click(&item, event.position(), window, cx);
         }))
-        .on_aux_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
+        .on_aux_click(cx.listener(move |this, event: &ClickEvent, _window, _cx| {
             let command = if event.is_middle_click() {
                 TrayCommand::SecondaryActivate {
                     item_name: aux_item_name.clone(),
@@ -234,7 +233,7 @@ impl Tray {
             } else {
                 return;
             };
-            this.dispatch_command(command, cx);
+            this.dispatch_command(command);
         }))
         .child(icon_element)
         .into_any_element()
@@ -330,15 +329,11 @@ impl TrayMenuPanel {
     }
 
     /// Handle clicking on a menu item.
-    fn activate_menu_item(&self, menu_id: i32, window: &mut Window, cx: &mut Context<Self>) {
-        let subscriber = self.subscriber.clone();
-        let item_name = self.item_name.clone();
-        cx.spawn(async move |_, _| {
-            let _ = subscriber
-                .dispatch(TrayCommand::MenuItemClicked { item_name, menu_id })
-                .await;
-        })
-        .detach();
+    fn activate_menu_item(&self, menu_id: i32, window: &mut Window) {
+        self.subscriber.dispatch(TrayCommand::MenuItemClicked {
+            item_name: self.item_name.clone(),
+            menu_id,
+        });
 
         // Close the menu panel
         window.remove_window();
@@ -351,14 +346,10 @@ impl TrayMenuPanel {
             self.expanded_submenus.remove(pos);
         } else {
             // Notify the app to populate the submenu before expanding
-            let subscriber = self.subscriber.clone();
-            let item_name = self.item_name.clone();
-            cx.spawn(async move |_, _| {
-                let _ = subscriber
-                    .dispatch(TrayCommand::AboutToShow { item_name, menu_id })
-                    .await;
-            })
-            .detach();
+            self.subscriber.dispatch(TrayCommand::AboutToShow {
+                item_name: self.item_name.clone(),
+                menu_id,
+            });
             self.expanded_submenus.push(menu_id);
         }
         cx.notify();
@@ -394,7 +385,9 @@ impl TrayMenuPanel {
 
             // Handle separator
             if props.type_.as_deref() == Some("separator")
-                || (label.is_empty() && children.is_empty())
+                || (label.is_empty()
+                    && children.is_empty()
+                    && props.children_display.as_deref() != Some("submenu"))
             {
                 elements.push(render_menu_separator().into_any_element());
                 continue;
@@ -402,7 +395,9 @@ impl TrayMenuPanel {
 
             let menu_id = *id;
             let is_enabled = props.enabled.unwrap_or(true);
-            let has_submenu = !children.is_empty();
+            // A lazily filled submenu has no children yet, only the flag.
+            let has_submenu =
+                !children.is_empty() || props.children_display.as_deref() == Some("submenu");
             let is_expanded = has_submenu && self.is_submenu_expanded(menu_id);
 
             elements.push(
@@ -476,7 +471,7 @@ fn render_menu_item(
         if has_submenu {
             this.toggle_submenu(menu_id, cx);
         } else {
-            this.activate_menu_item(menu_id, window, cx);
+            this.activate_menu_item(menu_id, window);
         }
     }))
     .when_some(toggle_indicator, |el, (icon, is_checked)| {

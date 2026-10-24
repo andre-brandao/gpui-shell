@@ -6,6 +6,8 @@ actions!(
     [
         Cancel,
         Confirm,
+        // Runs a launcher item's second action
+        SecondaryConfirm,
         // Launcher list navigation
         CursorUp,
         CursorDown,
@@ -32,6 +34,7 @@ pub fn register(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, Some("Launcher")),
         KeyBinding::new("enter", Confirm, Some("Launcher")),
+        KeyBinding::new("shift-enter", SecondaryConfirm, Some("Launcher")),
         KeyBinding::new("up", CursorUp, Some("Launcher")),
         KeyBinding::new("down", CursorDown, Some("Launcher")),
         KeyBinding::new("pageup", PageUp, Some("Launcher")),
@@ -60,25 +63,25 @@ pub fn register(cx: &mut App) {
         KeyBinding::new("ctrl-l", CursorRight, Some("Launcher")),
     ]);
 
-    // Control Center (WiFi password prompt editing).
+    // Control Center WiFi password prompt.
     cx.bind_keys([
-        KeyBinding::new("escape", Cancel, Some("ControlCenter")),
-        KeyBinding::new("enter", Confirm, Some("ControlCenter")),
-        KeyBinding::new("backspace", Backspace, Some("ControlCenter")),
-        KeyBinding::new("ctrl-backspace", DeleteWordBack, Some("ControlCenter")),
-        KeyBinding::new("left", CursorLeft, Some("ControlCenter")),
-        KeyBinding::new("right", CursorRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-left", WordLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-right", WordRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-shift-left", SelectWordLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-shift-right", SelectWordRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-b", WordLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-w", WordRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-a", SelectAll, Some("ControlCenter")),
-        KeyBinding::new("shift-left", SelectLeft, Some("ControlCenter")),
-        KeyBinding::new("shift-right", SelectRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-f", CursorRight, Some("ControlCenter")),
-        KeyBinding::new("ctrl-h", CursorLeft, Some("ControlCenter")),
-        KeyBinding::new("ctrl-l", CursorRight, Some("ControlCenter")),
+        KeyBinding::new("escape", Cancel, Some("WifiPassword")),
+        KeyBinding::new("enter", Confirm, Some("WifiPassword")),
+        KeyBinding::new("backspace", Backspace, Some("WifiPassword")),
+        KeyBinding::new("ctrl-backspace", DeleteWordBack, Some("WifiPassword")),
+        KeyBinding::new("left", CursorLeft, Some("WifiPassword")),
+        KeyBinding::new("right", CursorRight, Some("WifiPassword")),
+        KeyBinding::new("ctrl-left", WordLeft, Some("WifiPassword")),
+        KeyBinding::new("ctrl-right", WordRight, Some("WifiPassword")),
+        KeyBinding::new("ctrl-shift-left", SelectWordLeft, Some("WifiPassword")),
+        KeyBinding::new("ctrl-shift-right", SelectWordRight, Some("WifiPassword")),
+        KeyBinding::new("ctrl-b", WordLeft, Some("WifiPassword")),
+        KeyBinding::new("ctrl-w", WordRight, Some("WifiPassword")),
+        KeyBinding::new("ctrl-a", SelectAll, Some("WifiPassword")),
+        KeyBinding::new("shift-left", SelectLeft, Some("WifiPassword")),
+        KeyBinding::new("shift-right", SelectRight, Some("WifiPassword")),
+        KeyBinding::new("ctrl-f", CursorRight, Some("WifiPassword")),
+        KeyBinding::new("ctrl-h", CursorLeft, Some("WifiPassword")),
+        KeyBinding::new("ctrl-l", CursorRight, Some("WifiPassword")),
     ]);
 }

@@ -31,21 +31,11 @@ impl MprisPanel {
         Self { subscriber, data }
     }
 
-    fn run_command(
-        cx: &mut App,
-        subscriber: MprisSubscriber,
-        service_name: String,
-        command: PlayerCommand,
-    ) {
-        cx.spawn(async move |_| {
-            let _ = subscriber
-                .dispatch(MprisCommand {
-                    service_name,
-                    command,
-                })
-                .await;
-        })
-        .detach();
+    fn run_command(subscriber: MprisSubscriber, service_name: String, command: PlayerCommand) {
+        subscriber.dispatch(MprisCommand {
+            service_name,
+            command,
+        });
     }
 
     fn status_text(state: PlaybackStatus) -> &'static str {
@@ -262,9 +252,8 @@ impl MprisPanel {
                                 el.child(Self::render_control_button(
                                     format!("mpris-prev-{}", service_name),
                                     IconName::SkipBack,
-                                    move |cx| {
+                                    move |_| {
                                         Self::run_command(
-                                            cx,
                                             prev_sub.clone(),
                                             prev_service.clone(),
                                             PlayerCommand::Prev,
@@ -274,9 +263,8 @@ impl MprisPanel {
                                 .child(Self::render_control_button(
                                     format!("mpris-play-{}", pp_service),
                                     play_icon,
-                                    move |cx| {
+                                    move |_| {
                                         Self::run_command(
-                                            cx,
                                             pp_sub.clone(),
                                             pp_service.clone(),
                                             PlayerCommand::PlayPause,
@@ -287,9 +275,8 @@ impl MprisPanel {
                                     Self::render_control_button(
                                         format!("mpris-next-{}", next_service),
                                         IconName::SkipForward,
-                                        move |cx| {
+                                        move |_| {
                                             Self::run_command(
-                                                cx,
                                                 next_sub.clone(),
                                                 next_service.clone(),
                                                 PlayerCommand::Next,
@@ -302,9 +289,8 @@ impl MprisPanel {
                                 el.child(Self::render_control_button(
                                     format!("mpris-dec-{}", dec_service),
                                     IconName::Dash,
-                                    move |cx| {
+                                    move |_| {
                                         Self::run_command(
-                                            cx,
                                             dec_sub.clone(),
                                             dec_service.clone(),
                                             PlayerCommand::Volume(volume_value - 5.0),
@@ -315,9 +301,8 @@ impl MprisPanel {
                                     Self::render_control_button(
                                         format!("mpris-inc-{}", inc_service),
                                         IconName::Plus,
-                                        move |cx| {
+                                        move |_| {
                                             Self::run_command(
-                                                cx,
                                                 inc_sub.clone(),
                                                 inc_service.clone(),
                                                 PlayerCommand::Volume(volume_value + 5.0),
@@ -364,17 +349,20 @@ impl Render for MprisPanel {
                     )
                     .when(is_empty, |el| {
                         el.child(
-                            h_flex().flex_1().justify_center().child(
-                                Label::new("No MPRIS players detected")
-                                    .size(TextSize::Small)
-                                    .color(Color::Muted),
-                            ),
+                            h_flex()
+                                .py(Spacing::XLarge.pixels())
+                                .justify_center()
+                                .child(
+                                    Label::new("No MPRIS players detected")
+                                        .size(TextSize::Small)
+                                        .color(Color::Muted),
+                                ),
                         )
                     })
                     .when(!is_empty, |el| {
                         el.child(
                             v_flex()
-                                .flex_1()
+                                .flex_grow_1()
                                 .overflow_hidden()
                                 .gap(Spacing::Medium.pixels())
                                 .children(players.into_iter().map(|player| {

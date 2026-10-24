@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Battery module configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BatteryConfig {
     pub show_icon: bool,

@@ -15,6 +15,7 @@ use anyhow::Result;
 use futures_signals::signal::{Mutable, MutableSignalCloned};
 use tracing::info;
 
+use crate::jobs::JobQueue;
 use crate::lifecycle::{Lifecycle, ManagedService, ServiceMode};
 pub use types::{
     ActiveWindow, CompositorBackend, CompositorCommand, CompositorState, Monitor, Window,
@@ -33,6 +34,7 @@ pub struct CompositorSubscriber {
     data: Mutable<CompositorState>,
     backend: CompositorBackend,
     lifecycle: Lifecycle,
+    jobs: JobQueue<CompositorCommand>,
 }
 
 impl CompositorSubscriber {
@@ -64,12 +66,22 @@ impl CompositorSubscriber {
         }
 
         let lifecycle = Lifecycle::new(ServiceMode::Eager);
-        lifecycle.begin().active();
+        let token = lifecycle.begin();
+
+        // Every backend's IPC is a blocking socket round trip (two on Mango
+        // for a workspace switch), so commands run on the blocking pool,
+        // one at a time and in order, never on the caller's (UI) thread.
+        let jobs = JobQueue::new("Compositor");
+        jobs.run(token.clone(), move |command| async move {
+            tokio::task::spawn_blocking(move || execute(backend, command)).await?
+        });
+        token.active();
 
         Ok(Self {
             data,
             backend,
             lifecycle,
+            jobs,
         })
     }
 
@@ -88,13 +100,9 @@ impl CompositorSubscriber {
         self.backend
     }
 
-    /// Execute a compositor command.
-    pub fn dispatch(&self, command: CompositorCommand) -> Result<()> {
-        match self.backend {
-            CompositorBackend::Hyprland => hyprland::execute_command(command),
-            CompositorBackend::Niri => niri::execute_command(command),
-            CompositorBackend::Mango => mango::execute_command(command),
-        }
+    /// Queue a compositor command. Failures are logged.
+    pub fn dispatch(&self, command: CompositorCommand) {
+        self.jobs.send(command);
     }
 
     /// Force a full state refresh.
@@ -107,7 +115,7 @@ impl CompositorSubscriber {
             CompositorBackend::Niri => niri::fetch_full_state()?,
             CompositorBackend::Mango => mango::fetch_full_state()?,
         };
-        self.data.set(new_state);
+        self.data.set_neq(new_state);
         Ok(())
     }
 }
@@ -161,6 +169,15 @@ impl ManagedService for CompositorSubscriber {
 
     fn controllable(&self) -> bool {
         false
+    }
+}
+
+/// Run one command against the backend (blocking IPC).
+fn execute(backend: CompositorBackend, command: CompositorCommand) -> Result<()> {
+    match backend {
+        CompositorBackend::Hyprland => hyprland::execute_command(command),
+        CompositorBackend::Niri => niri::execute_command(command),
+        CompositorBackend::Mango => mango::execute_command(command),
     }
 }
 
