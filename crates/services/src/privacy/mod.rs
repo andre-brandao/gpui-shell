@@ -4,6 +4,7 @@
 //! via PipeWire and webcam device usage via inotify.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::rc::Rc;
@@ -122,11 +123,41 @@ impl ManagedService for PrivacySubscriber {
     }
 }
 
+/// A sink monitor sets `stream.capture.sink`: it records the speakers, not the microphone.
+fn captured_media(media_class: &str, capture_sink: Option<&str>) -> Option<Media> {
+    match media_class {
+        "Stream/Input/Video" => Some(Media::Video),
+        "Stream/Input/Audio" if !matches!(capture_sink, Some("true" | "1")) => Some(Media::Audio),
+        _ => None,
+    }
+}
+
+/// Add or drop a node only on a change: each write wakes every subscriber.
+fn track_node(data: &Mutable<PrivacyData>, id: u32, media: Option<Media>) {
+    let tracked = data.lock_ref().nodes.iter().any(|n| n.id == id);
+    match media {
+        Some(media) if !tracked => {
+            debug!("New media node: id={id}, media={media:?}");
+            data.lock_mut().nodes.push(ApplicationNode { id, media });
+        }
+        None if tracked => {
+            debug!("Removed tracked media node: {id}");
+            data.lock_mut().nodes.retain(|n| n.id != id);
+        }
+        _ => {}
+    }
+}
+
 /// One PipeWire session (blocking). The loop is not async: a message on a
 /// loop-attached channel quits it when the run ends, and a core error (the
 /// daemon went away) quits it to fail the attempt.
 fn run_pipewire_listener(data: &Mutable<PrivacyData>, token: &RunToken) -> anyhow::Result<()> {
-    use pipewire::{context::ContextBox, core::PW_ID_CORE, main_loop::MainLoopRc};
+    use pipewire::{
+        context::ContextRc,
+        core::PW_ID_CORE,
+        main_loop::MainLoopRc,
+        node::{Node, NodeChangeMask, NodeListener},
+    };
 
     let mainloop = MainLoopRc::new(None)?;
     let (quit_tx, quit_rx) = pipewire::channel::channel::<()>();
@@ -148,8 +179,8 @@ fn run_pipewire_listener(data: &Mutable<PrivacyData>, token: &RunToken) -> anyho
         }
     });
 
-    let context = ContextBox::new(mainloop.loop_(), None)?;
-    let core = context.connect(None)?;
+    let context = ContextRc::new(&mainloop, None)?;
+    let core = context.connect_rc(None)?;
     let failure = Rc::new(RefCell::new(None::<String>));
     let _core_listener = core
         .add_listener_local()
@@ -164,11 +195,16 @@ fn run_pipewire_listener(data: &Mutable<PrivacyData>, token: &RunToken) -> anyho
             }
         })
         .register();
-    let registry = core.get_registry()?;
+    let registry = core.get_registry_rc()?;
 
     // The registry replays every live node on connect.
     token.write(data, |data| data.nodes.clear());
 
+    // The registry omits `stream.capture.sink`, so each capture node stays bound to read it.
+    // The listener comes first in the tuple: it must drop before its proxy.
+    let bound: Rc<RefCell<HashMap<u32, (NodeListener, Node)>>> = Rc::default();
+    let bound_remove = bound.clone();
+    let registry_bind = registry.clone();
     let data_add = data.clone();
     let data_remove = data.clone();
     let token_add = token.clone();
@@ -180,33 +216,44 @@ fn run_pipewire_listener(data: &Mutable<PrivacyData>, token: &RunToken) -> anyho
             if !token_add.alive() {
                 return;
             }
-            if let Some(props) = global.props
-                && let Some(media_class) = props.get("media.class")
-            {
-                let is_video = media_class == "Stream/Input/Video";
-                let is_audio = media_class == "Stream/Input/Audio";
-
-                if is_video || is_audio {
-                    debug!("New media node: id={}, class={}", global.id, media_class);
-                    let node = ApplicationNode {
-                        id: global.id,
-                        media: if is_video { Media::Video } else { Media::Audio },
-                    };
-                    data_add.lock_mut().nodes.push(node);
-                }
+            let Some(class) = global.props.and_then(|props| props.get("media.class")) else {
+                return;
+            };
+            if !matches!(class, "Stream/Input/Video" | "Stream/Input/Audio") {
+                return;
             }
+            let node: Node = match registry_bind.bind(global) {
+                Ok(node) => node,
+                Err(e) => {
+                    warn!("Could not bind media node {}: {}", global.id, e);
+                    track_node(&data_add, global.id, captured_media(class, None));
+                    return;
+                }
+            };
+            let id = global.id;
+            let data = data_add.clone();
+            let token = token_add.clone();
+            let listener = node
+                .add_listener_local()
+                .info(move |info| {
+                    // Props are only valid when the mask says so.
+                    if !token.alive() || !info.change_mask().contains(NodeChangeMask::PROPS) {
+                        return;
+                    }
+                    let media = info.props().and_then(|props| {
+                        captured_media(props.get("media.class")?, props.get("stream.capture.sink"))
+                    });
+                    track_node(&data, id, media);
+                })
+                .register();
+            bound.borrow_mut().insert(id, (listener, node));
         })
         .global_remove(move |id| {
             if !token_remove.alive() {
                 return;
             }
-            let mut guard = data_remove.lock_mut();
-            let before_len = guard.nodes.len();
-            guard.nodes.retain(|n| n.id != id);
-            // Only log if we actually removed a tracked media node
-            if guard.nodes.len() < before_len {
-                debug!("Removed tracked media node: {}", id);
-            }
+            bound_remove.borrow_mut().remove(&id);
+            track_node(&data_remove, id, None);
         })
         .register();
 
@@ -296,4 +343,45 @@ fn is_device_in_use(target: &str) -> i32 {
     }
 
     used_by
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sink_monitor_is_not_the_microphone() {
+        assert_eq!(
+            captured_media("Stream/Input/Audio", None),
+            Some(Media::Audio)
+        );
+        assert_eq!(captured_media("Stream/Input/Audio", Some("true")), None);
+        assert_eq!(captured_media("Stream/Input/Audio", Some("1")), None);
+        assert_eq!(
+            captured_media("Stream/Input/Video", None),
+            Some(Media::Video)
+        );
+        assert_eq!(captured_media("Stream/Output/Audio", None), None);
+    }
+
+    #[test]
+    fn a_repeated_node_event_does_not_write() {
+        use futures_signals::signal::SignalExt;
+        use futures_util::FutureExt;
+
+        let data = Mutable::new(PrivacyData::default());
+        let mut changes = data.signal_ref(|_| ()).to_stream();
+        let mut wrote = || changes.next().now_or_never().is_some();
+        assert!(wrote());
+
+        track_node(&data, 7, Some(Media::Audio));
+        assert!(wrote());
+        track_node(&data, 7, Some(Media::Audio));
+        assert!(!wrote());
+        track_node(&data, 7, None);
+        assert!(wrote());
+        track_node(&data, 7, None);
+        assert!(!wrote());
+        assert!(data.lock_ref().nodes.is_empty());
+    }
 }
