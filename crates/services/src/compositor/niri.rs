@@ -16,10 +16,10 @@ use anyhow::{Context, Result, anyhow};
 use futures_signals::signal::Mutable;
 use itertools::Itertools;
 use niri_ipc::{
-    Action, Event, Reply, Request, WorkspaceReferenceArg,
+    Action, Event, Reply, Request, Response, WorkspaceReferenceArg,
     state::{EventStreamState, EventStreamStatePart},
 };
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::lifecycle::RunToken;
 
@@ -97,66 +97,129 @@ impl Bootstrap {
     pub(super) fn snapshot(&self) -> CompositorState {
         map_state(&self.state)
     }
+
+    fn publish(&self, data: &Mutable<CompositorState>) {
+        publish_state(&self.state, data);
+    }
 }
 
-/// Fetch the full compositor state for an explicit refresh.
-pub fn fetch_full_state() -> Result<CompositorState> {
-    Ok(bootstrap()?.snapshot())
+fn publish_state(state: &EventStreamState, data: &Mutable<CompositorState>) {
+    let mut snapshot = map_state(state);
+    let mut current = data.lock_mut();
+    if state.keyboard_layouts.keyboard_layouts.is_none() {
+        snapshot
+            .keyboard_layout
+            .clone_from(&current.keyboard_layout);
+    }
+    if *current != snapshot {
+        *current = snapshot;
+    }
+}
+
+/// Refresh initialized domains without discarding optional runtime state.
+pub fn refresh(data: &Mutable<CompositorState>) -> Result<()> {
+    bootstrap()?.publish(data);
+    Ok(())
 }
 
 pub(super) fn bootstrap() -> Result<Bootstrap> {
     bootstrap_stream(connect()?, Duration::from_secs(5))
 }
 
+// Only windows and workspaces gate readiness; keyboard layouts may arrive later.
 fn bootstrap_stream(mut stream: UnixStream, timeout: Duration) -> Result<Bootstrap> {
     let deadline = Instant::now() + timeout;
-    stream.set_read_timeout(Some(timeout))?;
-    let request = serde_json::to_string(&Request::EventStream)? + "\n";
-    stream.write_all(request.as_bytes())?;
-    stream.flush()?;
+    stream.set_write_timeout(Some(timeout))?;
+    stream.write_all(b"\"EventStream\"\n")?;
+    stream.shutdown(std::net::Shutdown::Write)?;
 
     let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    let reply: Reply = serde_json::from_str(&line).context("Failed to parse handshake")?;
-    reply.map_err(|e| anyhow!("Niri refused EventStream: {e}"))?;
-    reader.get_ref().shutdown(std::net::Shutdown::Write)?;
+    let reply: Reply = serde_json::from_slice(&read_before(&mut reader, deadline)?)
+        .context("Failed to parse Niri handshake")?;
+    if !matches!(
+        reply.map_err(|e| anyhow!("Niri refused EventStream: {e}"))?,
+        Response::Handled
+    ) {
+        anyhow::bail!("Unexpected Niri EventStream response");
+    }
 
     let mut state = EventStreamState::default();
-    let (mut workspaces, mut overview) = (false, false);
+    let (mut workspaces, mut windows) = (false, false);
+    loop {
+        let event: Event = serde_json::from_slice(&read_before(&mut reader, deadline)?)
+            .context("Invalid Niri initial event (incompatible IPC schema)")?;
+        let snapshot_received = match &event {
+            Event::WorkspaceUrgencyChanged { .. }
+            | Event::WorkspaceActivated { .. }
+            | Event::WorkspaceActiveWindowChanged { .. } => workspaces,
+            Event::WindowOpenedOrChanged { .. }
+            | Event::WindowClosed { .. }
+            | Event::WindowFocusChanged { .. }
+            | Event::WindowFocusTimestampChanged { .. }
+            | Event::WindowUrgencyChanged { .. }
+            | Event::WindowLayoutsChanged { .. } => windows,
+            _ => true,
+        };
+        if !snapshot_received {
+            anyhow::bail!("Niri sent an update before its initial snapshot");
+        }
+        workspaces |= matches!(&event, Event::WorkspacesChanged { .. });
+        windows |= matches!(&event, Event::WindowsChanged { .. });
+        apply_event(&mut state, event)?;
+        if workspaces && windows {
+            reader.get_ref().set_read_timeout(None)?;
+            reader.get_ref().set_write_timeout(None)?;
+            return Ok(Bootstrap { reader, state });
+        }
+    }
+}
+
+// read_line's timeout restarts on each read, so a partial-line trickle can evade it.
+fn read_before(reader: &mut BufReader<UnixStream>, deadline: Instant) -> Result<Vec<u8>> {
+    let mut line = Vec::new();
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             anyhow::bail!("Timed out waiting for Niri initial state");
         }
         reader.get_ref().set_read_timeout(Some(remaining))?;
-        line.clear();
-        match reader.read_line(&mut line) {
-            Ok(0) => anyhow::bail!("Niri event stream closed before initial state"),
-            Ok(_) => {
-                if let Ok(event) = serde_json::from_str::<Event>(&line) {
-                    workspaces |= matches!(&event, Event::WorkspacesChanged { .. });
-                    overview |= matches!(&event, Event::OverviewOpenedOrClosed { .. });
-                    state.apply(event);
-                    // Niri 25.05 through 26.04 emit the window snapshot and
-                    // optional keyboard snapshot before the overview event.
-                    if workspaces && overview {
-                        reader.get_ref().set_read_timeout(None)?;
-                        return Ok(Bootstrap { reader, state });
-                    }
-                }
-            }
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) =>
-            {
-                anyhow::bail!("Timed out waiting for Niri initial state");
-            }
-            Err(e) => return Err(e.into()),
+        let bytes = reader.fill_buf().context("Reading Niri initial state")?;
+        if bytes.is_empty() {
+            anyhow::bail!("Niri event stream closed before initial state");
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!("Timed out waiting for Niri initial state");
+        }
+        let end = bytes.iter().position(|byte| *byte == b'\n');
+        let consumed = end.map_or(bytes.len(), |end| end + 1);
+        line.extend_from_slice(&bytes[..consumed]);
+        reader.consume(consumed);
+        if end.is_some() {
+            return Ok(line);
         }
     }
+}
+
+// Reject invalid references before niri-ipc's state tracker can panic.
+fn apply_event(state: &mut EventStreamState, event: Event) -> Result<()> {
+    let valid = match &event {
+        Event::WorkspaceActivated { id, .. } => state.workspaces.workspaces.contains_key(id),
+        Event::WorkspaceActiveWindowChanged { workspace_id, .. } => {
+            state.workspaces.workspaces.contains_key(workspace_id)
+        }
+        Event::WindowClosed { id } => state.windows.windows.contains_key(id),
+        Event::WindowLayoutsChanged { changes } => changes
+            .iter()
+            .all(|(id, _)| state.windows.windows.contains_key(id)),
+        Event::KeyboardLayoutSwitched { .. } => state.keyboard_layouts.keyboard_layouts.is_some(),
+        Event::CastStopped { stream_id } => state.casts.casts.contains_key(stream_id),
+        _ => true,
+    };
+    if !valid {
+        anyhow::bail!("Niri event references missing state");
+    }
+    state.apply(event);
+    Ok(())
 }
 
 /// Keep the bootstrap connection, including any buffered events, for the listener.
@@ -168,7 +231,7 @@ pub(super) fn start_listener(data: Mutable<CompositorState>, token: RunToken, fi
             None => bootstrap()?,
         };
         if token.alive() {
-            data.set_neq(stream.snapshot());
+            stream.publish(&data);
         }
         run_listener(&data, token, stream)
     });
@@ -191,19 +254,14 @@ fn run_listener(
         if reader.read_line(&mut line)? == 0 {
             anyhow::bail!("Niri event stream closed");
         }
-        let event: Event = match serde_json::from_str(&line) {
-            Ok(event) => event,
-            Err(error) => {
-                debug!(
-                    "Failed to parse Niri event (IPC version mismatch): {:?}",
-                    error
-                );
-                continue;
-            }
-        };
-        state.apply(event);
+        if !line.ends_with('\n') {
+            anyhow::bail!("Niri event stream closed with an incomplete record");
+        }
+        let event: Event =
+            serde_json::from_str(&line).context("Invalid Niri event (incompatible IPC schema)")?;
+        apply_event(&mut state, event)?;
         if token.alive() {
-            data.set_neq(map_state(&state));
+            publish_state(&state, data);
         }
     }
 }
@@ -392,13 +450,70 @@ mod tests {
             .unwrap();
     }
 
+    fn fixture(events: String) -> (UnixStream, mpsc::Sender<()>, thread::JoinHandle<()>) {
+        let (client, mut server) = UnixStream::pair().unwrap();
+        let (done, wait) = mpsc::channel();
+        let thread = thread::spawn(move || {
+            send_reply(&mut server, &events);
+            let _ = wait.recv();
+        });
+        (client, done, thread)
+    }
+
+    fn bootstrap_fixture(events: String) -> Result<Bootstrap> {
+        let (client, done, thread) = fixture(events);
+        let result = bootstrap_stream(client, Duration::from_secs(2));
+        done.send(()).unwrap();
+        thread.join().unwrap();
+        result
+    }
+
     #[test]
-    fn bootstrap_preserves_buffered_events_and_order_on_one_unix_connection() {
+    fn snapshots_complete_in_either_order_without_overview_or_config_loaded() {
+        for events in [
+            format!("{WORKSPACES}{WINDOWS}"),
+            format!("{WINDOWS}{WORKSPACES}"),
+        ] {
+            let boot = bootstrap_fixture(events).unwrap();
+            assert_eq!(boot.snapshot().windows.len(), 1);
+            assert_eq!(boot.snapshot().workspaces.len(), 1);
+            assert_eq!(boot.snapshot().keyboard_layout, "Unknown");
+        }
+    }
+
+    #[test]
+    fn bootstrap_finishes_during_continuous_window_events() {
+        let (client, mut server) = UnixStream::pair().unwrap();
+        let thread = thread::spawn(move || {
+            send_reply(&mut server, &format!("{WORKSPACES}{WINDOWS}"));
+            while server.write_all(FOCUS_ONE.as_bytes()).is_ok() {}
+        });
+        let boot = bootstrap_stream(client, Duration::from_secs(2)).unwrap();
+        assert!(boot.snapshot().active_window.is_some());
+        drop(boot);
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn each_required_snapshot_is_required_despite_continuous_activity() {
+        for partial in [WORKSPACES, WINDOWS] {
+            let (client, mut server) = UnixStream::pair().unwrap();
+            let thread = thread::spawn(move || {
+                send_reply(&mut server, partial);
+                while server.write_all(OVERVIEW.as_bytes()).is_ok() {}
+            });
+            assert!(bootstrap_stream(client, Duration::from_millis(100)).is_err());
+            thread.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn bootstrap_preserves_buffered_events_exactly_once_on_one_unix_connection() {
         let dir = std::env::temp_dir().join(format!("gpui-niri-test-{}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
         let path = dir.join("niri.sock");
         let listener = UnixListener::bind(&path).unwrap();
-        let (done_tx, done_rx) = mpsc::channel();
+        let (done, wait) = mpsc::channel();
         let server = thread::spawn(move || {
             let (mut socket, _) = listener.accept().unwrap();
             let reopen = WINDOWS
@@ -411,149 +526,222 @@ mod tests {
                 .replace("before", "after");
             send_reply(
                 &mut socket,
-                &format!(
-                    "{WORKSPACES}{WINDOWS}{KEYBOARD}{OVERVIEW}{CLOSE_ONE}{reopen}{FOCUS_NONE}"
-                ),
+                &format!("{WORKSPACES}{WINDOWS}{KEYBOARD}{CLOSE_ONE}{reopen}{FOCUS_NONE}"),
             );
-            done_rx.recv().unwrap();
+            let _ = wait.recv();
         });
-        let socket = UnixStream::connect(&path).unwrap();
-        let boot = bootstrap_stream(socket, Duration::from_secs(2)).unwrap();
-        let initial = boot.snapshot();
-        assert!(initial.active_window.is_some());
-        assert_eq!(initial.keyboard_layout, "English");
+        let boot =
+            bootstrap_stream(UnixStream::connect(&path).unwrap(), Duration::from_secs(2)).unwrap();
+        assert_eq!(boot.snapshot().keyboard_layout, "Unknown");
+        let data = Mutable::new(boot.snapshot());
         let lifecycle = Lifecycle::new(ServiceMode::Eager);
-        let token = lifecycle.begin();
-        let data = Mutable::new(initial);
-        done_tx.send(()).unwrap();
-        assert!(run_listener(&data, &token, boot).is_err());
-        assert!(data.lock_ref().active_window.is_none());
-        assert_eq!(data.lock_ref().windows.len(), 1);
-        assert_eq!(data.lock_ref().windows[0].id, "2");
-        assert_eq!(data.lock_ref().windows[0].title, "after");
+        done.send(()).unwrap();
+        let error = run_listener(&data, &lifecycle.begin(), boot).unwrap_err();
+        assert!(error.to_string().contains("closed"));
+        let state = data.lock_ref();
+        assert_eq!(state.windows.len(), 1);
+        assert_eq!(state.windows[0].id, "2");
+        assert_eq!(state.windows[0].title, "after");
+        assert!(state.active_window.is_none());
+        assert_eq!(state.keyboard_layout, "English");
         server.join().unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn bootstrap_finishes_during_continuous_events_without_config_loaded() {
-        let (client, mut server) = UnixStream::pair().unwrap();
-        let thread = thread::spawn(move || {
-            send_reply(&mut server, &format!("{WORKSPACES}{WINDOWS}{OVERVIEW}"));
-            for _ in 0..200 {
-                if server.write_all(FOCUS_ONE.as_bytes()).is_err() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(10));
-            }
-        });
-        let boot = bootstrap_stream(client, Duration::from_secs(1)).unwrap();
-        assert!(boot.snapshot().active_window.is_some());
-        drop(boot);
-        thread.join().unwrap();
+    fn incremental_events_before_their_domain_snapshot_fail_safely() {
+        assert!(bootstrap_fixture(format!("{WORKSPACES}{FOCUS_ONE}{WINDOWS}")).is_err());
+        assert!(
+            bootstrap_fixture(format!(
+                "{WINDOWS}{{\"WorkspaceActivated\":{{\"id\":1,\"focused\":true}}}}\n{WORKSPACES}"
+            ))
+            .is_err()
+        );
     }
 
     #[test]
-    fn bootstrap_waits_for_each_required_snapshot_even_if_order_changes() {
-        let (client, mut server) = UnixStream::pair().unwrap();
-        let (done_tx, done_rx) = mpsc::channel();
-        let thread = thread::spawn(move || {
-            send_reply(
-                &mut server,
-                &format!("{KEYBOARD}{OVERVIEW}{WINDOWS}{WORKSPACES}"),
-            );
-            done_rx.recv().unwrap();
-        });
-        let boot = bootstrap_stream(client, Duration::from_secs(1)).unwrap();
-        let state = boot.snapshot();
-        assert_eq!(state.workspaces.len(), 1);
-        assert_eq!(state.windows.len(), 1);
-        assert_eq!(state.keyboard_layout, "English");
-        done_tx.send(()).unwrap();
-        thread.join().unwrap();
-    }
-
-    #[test]
-    fn bootstrap_times_out_if_snapshot_never_completes_during_events() {
-        let (client, mut server) = UnixStream::pair().unwrap();
-        let thread = thread::spawn(move || {
-            send_reply(&mut server, &format!("{WORKSPACES}{WINDOWS}"));
-            for _ in 0..100 {
-                if server.write_all(FOCUS_ONE.as_bytes()).is_err() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(10));
-            }
-        });
-        assert!(bootstrap_stream(client, Duration::from_millis(200)).is_err());
-        thread.join().unwrap();
+    fn malformed_and_incompatible_snapshots_fail_instead_of_publishing_partial_state() {
+        let old = "{\"WindowsChanged\":{\"windows\":[{\"id\":1,\"is_focused\":true,\"is_floating\":false,\"is_urgent\":false}]}}\n";
+        for malformed in ["not JSON\n", "{\"WindowsChanged\":{}}\n", old] {
+            assert!(bootstrap_fixture(format!("{WORKSPACES}{malformed}{OVERVIEW}")).is_err());
+        }
     }
 
     #[test]
     fn populated_window_schema_compatibility() {
-        // Niri 25.08 has layout; 25.11 and 26.04 also have focus_timestamp.
-        for windows in [
-            WINDOWS.to_string(),
-            WINDOWS.replace("\"layout\":", "\"focus_timestamp\":null,\"layout\":"),
+        for (version, windows) in [
+            ("25.08", WINDOWS.to_string()),
+            (
+                "25.11",
+                WINDOWS.replace("\"layout\":", "\"focus_timestamp\":null,\"layout\":"),
+            ),
+            (
+                "26.04",
+                WINDOWS.replace("\"layout\":", "\"focus_timestamp\":null,\"layout\":"),
+            ),
         ] {
-            let (client, mut server) = UnixStream::pair().unwrap();
-            let (done_tx, done_rx) = mpsc::channel();
-            let thread = thread::spawn(move || {
-                send_reply(&mut server, &format!("{WORKSPACES}{windows}{OVERVIEW}"));
-                done_rx.recv().unwrap();
-            });
             assert_eq!(
-                bootstrap_stream(client, Duration::from_secs(1))
+                bootstrap_fixture(format!("{WORKSPACES}{windows}"))
                     .unwrap()
                     .snapshot()
                     .windows
                     .len(),
-                1
+                1,
+                "{version}"
             );
-            done_tx.send(()).unwrap();
+        }
+    }
+
+    #[test]
+    fn disconnect_and_truncated_json_during_bootstrap_fail() {
+        for partial in ["", WORKSPACES, "{\"WindowsChanged\":"] {
+            let (client, mut server) = UnixStream::pair().unwrap();
+            let thread = thread::spawn(move || send_reply(&mut server, partial));
+            assert!(bootstrap_stream(client, Duration::from_secs(2)).is_err());
             thread.join().unwrap();
         }
-        // The 25.05 window schema has no layout and was already incompatible
-        // with the niri-ipc 26.4 Window type used by this project.
-        let old = "{\"WindowsChanged\":{\"windows\":[{\"id\":1,\"is_focused\":true,\"is_floating\":false,\"is_urgent\":false}]}}";
-        assert!(serde_json::from_str::<Event>(old).is_err());
+    }
 
-        // Preserve startup on the older schema, although the existing IPC
-        // dependency cannot deserialize its populated window snapshot.
+    #[test]
+    fn read_before_handles_json_split_across_buffer_fills() {
         let (client, mut server) = UnixStream::pair().unwrap();
-        let (done_tx, done_rx) = mpsc::channel();
-        let thread = thread::spawn(move || {
-            send_reply(&mut server, &format!("{WORKSPACES}{old}\n{OVERVIEW}"));
-            done_rx.recv().unwrap();
-        });
-        let state = bootstrap_stream(client, Duration::from_secs(2))
-            .unwrap()
-            .snapshot();
-        assert_eq!(state.workspaces.len(), 1);
-        assert!(state.windows.is_empty());
-        done_tx.send(()).unwrap();
+        server.write_all(WORKSPACES.as_bytes()).unwrap();
+        let mut reader = BufReader::with_capacity(1, client);
+        let line = read_before(&mut reader, Instant::now() + Duration::from_secs(2)).unwrap();
+        assert_eq!(line, WORKSPACES.as_bytes());
+    }
+
+    #[test]
+    fn deadline_applies_even_to_buffered_bytes() {
+        let (client, mut server) = UnixStream::pair().unwrap();
+        server.write_all(WORKSPACES.as_bytes()).unwrap();
+        let mut reader = BufReader::new(client);
+        assert!(!reader.fill_buf().unwrap().is_empty());
+        assert!(read_before(&mut reader, Instant::now()).is_err());
+        assert_eq!(reader.buffer(), WORKSPACES.as_bytes());
+    }
+
+    #[test]
+    fn silence_and_continuous_partial_json_cannot_extend_deadline() {
+        let (client, _server) = UnixStream::pair().unwrap();
+        assert!(
+            read_before(
+                &mut BufReader::new(client),
+                Instant::now() + Duration::from_millis(30)
+            )
+            .is_err()
+        );
+
+        let (client, mut server) = UnixStream::pair().unwrap();
+        let thread = thread::spawn(move || while server.write_all(b" ").is_ok() {});
+        let mut reader = BufReader::new(client);
+        assert!(read_before(&mut reader, Instant::now() + Duration::from_millis(100)).is_err());
+        drop(reader);
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn invalid_handshake_is_not_accepted() {
+        for reply in [
+            "{\"Ok\":{\"Version\":\"26.04\"}}\n",
+            "{\"Err\":\"refused\"}\n",
+            "broken\n",
+        ] {
+            let (client, mut server) = UnixStream::pair().unwrap();
+            let thread = thread::spawn(move || {
+                let mut request = String::new();
+                BufReader::new(server.try_clone().unwrap())
+                    .read_line(&mut request)
+                    .unwrap();
+                server.write_all(reply.as_bytes()).unwrap();
+            });
+            assert!(bootstrap_stream(client, Duration::from_secs(2)).is_err());
+            thread.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn reconnect_replaces_old_state_and_processes_new_events() {
+        let first = bootstrap_fixture(format!("{WORKSPACES}{WINDOWS}")).unwrap();
+        let data = Mutable::new(first.snapshot());
+        let lifecycle = Lifecycle::new(ServiceMode::Eager);
+        let token = lifecycle.begin();
+        assert!(run_listener(&data, &token, first).is_err());
+        let next_windows = WINDOWS.replace("before", "reconnected");
+        let (socket, done, thread) = fixture(format!("{WORKSPACES}{next_windows}{FOCUS_NONE}"));
+        let next = bootstrap_stream(socket, Duration::from_secs(2)).unwrap();
+        next.publish(&data);
+        done.send(()).unwrap();
+        assert!(run_listener(&data, &token, next).is_err());
+        assert_eq!(data.lock_ref().windows[0].title, "reconnected");
+        assert!(data.lock_ref().active_window.is_none());
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn invalid_delta_references_return_errors_without_panicking() {
+        for event in [
+            CLOSE_ONE,
+            "{\"WorkspaceActivated\":{\"id\":1,\"focused\":true}}\n",
+            "{\"KeyboardLayoutSwitched\":{\"idx\":0}}\n",
+        ] {
+            let event = serde_json::from_str(event).unwrap();
+            assert!(apply_event(&mut EventStreamState::default(), event).is_err());
+        }
+    }
+
+    #[test]
+    fn refresh_and_reconnect_preserve_layout_until_its_snapshot_arrives() {
+        let first = bootstrap_fixture(format!("{KEYBOARD}{WORKSPACES}{WINDOWS}")).unwrap();
+        let data = Mutable::new(first.snapshot());
+        let refreshed = bootstrap_fixture(format!("{WORKSPACES}{WINDOWS}")).unwrap();
+        refreshed.publish(&data);
+        assert_eq!(data.lock_ref().keyboard_layout, "English");
+
+        let keyboard = KEYBOARD.replace("English", "German");
+        let (socket, done, thread) =
+            fixture(format!("{WORKSPACES}{WINDOWS}{FOCUS_NONE}{keyboard}"));
+        let next = bootstrap_stream(socket, Duration::from_secs(2)).unwrap();
+        next.publish(&data);
+        let mut pending = next.state;
+        apply_event(&mut pending, serde_json::from_str(FOCUS_NONE).unwrap()).unwrap();
+        publish_state(&pending, &data);
+        assert_eq!(data.lock_ref().keyboard_layout, "English");
+        let next = Bootstrap {
+            reader: next.reader,
+            state: pending,
+        };
+        let lifecycle = Lifecycle::new(ServiceMode::Eager);
+        done.send(()).unwrap();
+        assert!(run_listener(&data, &lifecycle.begin(), next).is_err());
+        assert_eq!(data.lock_ref().keyboard_layout, "German");
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn unterminated_runtime_record_is_not_published() {
+        let (socket, done, thread) =
+            fixture(format!("{WORKSPACES}{WINDOWS}{}", FOCUS_NONE.trim_end()));
+        let boot = bootstrap_stream(socket, Duration::from_secs(2)).unwrap();
+        let data = Mutable::new(boot.snapshot());
+        let lifecycle = Lifecycle::new(ServiceMode::Eager);
+        done.send(()).unwrap();
+        let error = run_listener(&data, &lifecycle.begin(), boot).unwrap_err();
+        assert!(error.to_string().contains("incomplete record"));
+        assert!(data.lock_ref().active_window.is_some());
         thread.join().unwrap();
     }
 
     #[test]
     fn unchanged_events_do_not_notify_subscribers() {
-        let (client, mut server) = UnixStream::pair().unwrap();
-        let (done_tx, done_rx) = mpsc::channel();
-        let thread = thread::spawn(move || {
-            send_reply(
-                &mut server,
-                &format!("{WORKSPACES}{WINDOWS}{OVERVIEW}{OVERVIEW}"),
-            );
-            done_rx.recv().unwrap();
-        });
+        let (client, done, thread) = fixture(format!("{WORKSPACES}{WINDOWS}{OVERVIEW}"));
         let boot = bootstrap_stream(client, Duration::from_secs(2)).unwrap();
         let data = Mutable::new(boot.snapshot());
         let mut signal = Box::pin(data.signal_cloned().to_stream());
         assert!(signal.next().now_or_never().is_some());
         let lifecycle = Lifecycle::new(ServiceMode::Eager);
-        let token = lifecycle.begin();
-        done_tx.send(()).unwrap();
-        assert!(run_listener(&data, &token, boot).is_err());
+        done.send(()).unwrap();
+        assert!(run_listener(&data, &lifecycle.begin(), boot).is_err());
         assert!(signal.next().now_or_never().is_none());
         thread.join().unwrap();
     }

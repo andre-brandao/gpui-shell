@@ -118,7 +118,7 @@ impl CompositorSubscriber {
     pub fn refresh(&self) -> Result<()> {
         let new_state = match self.backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
-            CompositorBackend::Niri => niri::fetch_full_state()?,
+            CompositorBackend::Niri => return niri::refresh(&self.data),
             CompositorBackend::Mango => mango::fetch_full_state()?,
         };
         self.data.set_neq(new_state);
