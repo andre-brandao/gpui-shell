@@ -147,9 +147,15 @@ impl Tray {
         Some(image)
     }
 
-    /// Handle left-clicking on a tray item.
-    /// Opens menu panel if the item has a menu, otherwise calls Activate.
-    fn on_item_click(&self, item: &TrayItem, at: Point<Pixels>, window: &Window, cx: &mut App) {
+    /// Opens the menu panel if the item has a menu, otherwise sends `fallback`.
+    fn on_item_click(
+        &self,
+        item: &TrayItem,
+        at: Point<Pixels>,
+        fallback: TrayCommand,
+        window: &Window,
+        cx: &mut App,
+    ) {
         if let Some(menu) = item.menu.clone() {
             let panel_id = format!("systray-{}", item.name);
             let subscriber = self.subscriber.clone();
@@ -179,10 +185,7 @@ impl Tray {
                 TrayMenuPanel::new(menu, item_name, subscriber, cx)
             });
         } else {
-            // No menu — activate the item directly (e.g. show window)
-            self.subscriber.dispatch(TrayCommand::Activate {
-                item_name: item.name.clone(),
-            });
+            self.subscriber.dispatch(fallback);
         }
     }
 
@@ -198,7 +201,7 @@ impl Tray {
         item_size: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let aux_item_name = item.name.clone();
+        let aux_item = item.clone();
 
         let pixmap = match &item.icon {
             Some(TrayIcon::Pixmap {
@@ -232,21 +235,21 @@ impl Tray {
         .width(px(item_size))
         .padding(px(0.0), padding_y)
         .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
-            this.on_item_click(&item, event.position(), window, cx);
-        }))
-        .on_aux_click(cx.listener(move |this, event: &ClickEvent, _window, _cx| {
-            let command = if event.is_middle_click() {
-                TrayCommand::SecondaryActivate {
-                    item_name: aux_item_name.clone(),
-                }
-            } else if event.is_right_click() {
-                TrayCommand::ContextMenu {
-                    item_name: aux_item_name.clone(),
-                }
-            } else {
-                return;
+            let fallback = TrayCommand::Activate {
+                item_name: item.name.clone(),
             };
-            this.dispatch_command(command);
+            this.on_item_click(&item, event.position(), fallback, window, cx);
+        }))
+        .on_aux_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+            let item_name = aux_item.name.clone();
+            if event.is_middle_click() {
+                this.dispatch_command(TrayCommand::SecondaryActivate { item_name });
+            } else if event.is_right_click() {
+                // The app's own ContextMenu opens as a toplevel on Wayland; only
+                // use it when there is no DBusMenu to draw ourselves.
+                let fallback = TrayCommand::ContextMenu { item_name };
+                this.on_item_click(&aux_item, event.position(), fallback, window, cx);
+            }
         }))
         .child(icon_element)
         .into_any_element()
