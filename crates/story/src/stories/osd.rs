@@ -95,7 +95,9 @@ impl Render for OsdStory {
                         )
                         .into_any_element(),
                 )
-                .description("Value on top, fill still grows from the bottom; 100% fits on one line."),
+                .description(
+                    "Value on top, fill still grows from the bottom; 100% fits on one line.",
+                ),
             ],
         ))
     }
