@@ -24,6 +24,7 @@ pub mod label;
 pub mod list;
 pub mod menu;
 pub mod modal;
+pub mod motion;
 pub mod navigable;
 pub(crate) mod overlay;
 pub mod pagination;
@@ -81,6 +82,7 @@ pub use label::{
 pub use list::{EndSlotVisibility, List, ListItem, ListItemSpacing};
 pub use menu::{Menu, MenuItem};
 pub use modal::{Modal, modal_overlay};
+pub use motion::{Enter, Motion, MotionExt, SpringConfigExt, mix};
 pub use navigable::{Navigable, NavigableEntry};
 pub use pagination::Pagination;
 pub use popover::{Popover, anchored_popover};

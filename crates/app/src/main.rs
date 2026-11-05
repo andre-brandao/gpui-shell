@@ -35,7 +35,13 @@ async fn main() {
 
     // Initialize tracing with RUST_LOG env var support
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(
+            // gpui logs "window not found" for each event that reaches a closed surface.
+            EnvFilter::builder().parse_lossy(format!(
+                "error,gpui::window=off,{}",
+                std::env::var("RUST_LOG").unwrap_or_default()
+            )),
+        )
         .init();
 
     // Parse command-line arguments

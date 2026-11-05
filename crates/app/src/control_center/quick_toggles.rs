@@ -225,7 +225,9 @@ fn render_expandable_module(
         .bg(ink.background)
         .overflow_hidden()
         .child(
+            // gpui repaints a hover change at once only on elements with an id.
             div()
+                .id("toggle")
                 .flex_1()
                 .flex()
                 .items_center()
@@ -263,6 +265,7 @@ fn render_expandable_module(
         )
         .child(
             div()
+                .id("expand")
                 .w(px(26.))
                 .h(px(32.))
                 .flex()

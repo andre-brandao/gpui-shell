@@ -1,17 +1,31 @@
 //! On-screen display: the pill that flashes up on a volume or brightness change.
 
-use gpui::{App, Hsla, IntoElement, RenderOnce, Window, div, prelude::*, relative, rems};
+use gpui::{
+    AnimationExt, App, ElementId, Hsla, IntoElement, RenderOnce, Window, div, prelude::*, relative,
+    rems,
+};
 
 use super::surface_radius;
-use crate::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize};
+use crate::{
+    ActiveTheme, Color, Icon, IconName, IconSize, Motion, Radius, Spacing, SpringConfigExt,
+    TextSize,
+};
 
 /// Thickness of the level track.
 const TRACK: Spacing = Spacing::Small;
 /// Room for the widest value (`100%`), so the pill does not twitch between
 /// 9% and 100%.
 const VALUE_WIDTH: f32 = 2.8;
+/// Settling tolerance for the level spring, in percent. Finer than a pixel
+/// of track; coarser than gpui's default, which would run the frame loop
+/// long after the eye has stopped seeing movement.
+const LEVEL_EPSILON: f32 = 0.05;
 
 /// A level readout: icon, filled track, percentage.
+///
+/// The level springs to each new value - the fill and the number move
+/// together - under [`key`](Self::key), so a change of what is shown
+/// (volume to brightness) starts fresh instead of sliding between the two.
 #[derive(IntoElement)]
 #[must_use = "OsdIndicator does nothing unless rendered"]
 pub struct OsdIndicator {
@@ -21,6 +35,7 @@ pub struct OsdIndicator {
     fill: Option<Hsla>,
     icon_color: Option<Hsla>,
     background: Option<Hsla>,
+    key: ElementId,
 }
 
 impl OsdIndicator {
@@ -32,7 +47,14 @@ impl OsdIndicator {
             fill: None,
             icon_color: None,
             background: None,
+            key: ElementId::from("osd-level"),
         }
+    }
+
+    /// What the level is a level of; the spring's identity.
+    pub fn key(mut self, key: impl Into<ElementId>) -> Self {
+        self.key = key.into();
+        self
     }
 
     /// Surface fill in place of the theme's, e.g. at a configured opacity.
@@ -68,35 +90,10 @@ impl RenderOnce for OsdIndicator {
         let track_bg = colors.elevated_surface_background;
         let text = colors.text;
         let vertical = self.vertical;
-        let filled = (self.level as f32 / 100.0).min(1.0);
 
         let icon = Icon::new(self.icon)
             .size(IconSize::Large)
             .color(Color::Custom(icon_color));
-
-        let value = div()
-            .text_size(TextSize::Small.rems())
-            .text_color(text)
-            .child(format!("{}%", self.level));
-
-        let track = div()
-            .flex_1()
-            .bg(track_bg)
-            .rounded(Radius::Full.pixels())
-            .overflow_hidden()
-            .map(|el| {
-                let bar = div().bg(fill).rounded(Radius::Full.pixels());
-                if vertical {
-                    // Grows upward, so the fill has to sit at the bottom of the track.
-                    el.w(TRACK.pixels())
-                        .flex()
-                        .flex_col()
-                        .justify_end()
-                        .child(bar.w_full().h(relative(filled)))
-                } else {
-                    el.h(TRACK.pixels()).child(bar.h_full().w(relative(filled)))
-                }
-            });
 
         div()
             .size_full()
@@ -110,17 +107,60 @@ impl RenderOnce for OsdIndicator {
             .rounded(surface_radius())
             .map(|el| {
                 if vertical {
-                    el.flex_col()
-                        .py(Spacing::Large.pixels())
-                        .child(value)
-                        .child(track)
-                        .child(icon)
+                    el.flex_col().py(Spacing::Large.pixels())
                 } else {
                     el.px(Spacing::Large.pixels())
-                        .child(icon)
-                        .child(track)
-                        .child(div().w(rems(VALUE_WIDTH)).text_right().child(value))
                 }
             })
+            .with_spring(
+                self.key,
+                Motion::SNAPPY
+                    .to(self.level as f32)
+                    .with_epsilon(LEVEL_EPSILON),
+                move |el, level: f32| {
+                    // Readout and fill come off the one sprung value, so the
+                    // number counts while the bar moves.
+                    let shown = level.round().max(0.0) as u32;
+                    let filled = (level / 100.0).clamp(0.0, 1.0);
+
+                    let value = div()
+                        .text_size(TextSize::Small.rems())
+                        .text_color(text)
+                        // Nowrap: a flex column lays text out at min-content, which splits
+                        // "100%" over two lines.
+                        .whitespace_nowrap()
+                        .child(format!("{shown}%"));
+
+                    let track = div()
+                        .flex_1()
+                        .bg(track_bg)
+                        .rounded(Radius::Full.pixels())
+                        .overflow_hidden()
+                        .map(|el| {
+                            let bar = div().bg(fill).rounded(Radius::Full.pixels());
+                            if vertical {
+                                // Grows upward, so the fill has to sit at the
+                                // bottom of the track.
+                                el.w(TRACK.pixels())
+                                    .flex()
+                                    .flex_col()
+                                    .justify_end()
+                                    .child(bar.w_full().h(relative(filled)))
+                            } else {
+                                el.h(TRACK.pixels()).child(bar.h_full().w(relative(filled)))
+                            }
+                        });
+
+                    if vertical {
+                        el.child(div().w_full().text_center().child(value))
+                            .child(track)
+                            .child(icon)
+                    } else {
+                        el.child(icon)
+                            .child(track)
+                            .child(div().w(rems(VALUE_WIDTH)).text_right().child(value))
+                    }
+                },
+            )
     }
 }

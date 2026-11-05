@@ -75,9 +75,12 @@ pub(crate) fn overlay_shell(
         .absolute()
         .inset_0()
         .size_full()
+        // A dismiss click must not also reach the trigger under it and reopen the overlay.
+        .occlude()
         .when_some(backdrop, |this, color| this.bg(color))
         .on_mouse_down(MouseButton::Left, move |_event, window, cx| {
             click_dismiss(window, cx);
+            cx.stop_propagation();
         })
         .on_key_down(move |event, window, cx| {
             if event.keystroke.key == "escape" {

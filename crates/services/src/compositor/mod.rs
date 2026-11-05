@@ -50,10 +50,13 @@ impl CompositorSubscriber {
         info!("Detected compositor backend: {}", backend.name());
 
         // Fetch initial state
-        let initial_state = match backend {
-            CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
-            CompositorBackend::Niri => niri::fetch_full_state()?,
-            CompositorBackend::Mango => mango::fetch_full_state()?,
+        let (initial_state, niri_stream) = match backend {
+            CompositorBackend::Hyprland => (hyprland::fetch_full_state()?, None),
+            CompositorBackend::Niri => {
+                let stream = niri::bootstrap()?;
+                (stream.snapshot(), Some(stream))
+            }
+            CompositorBackend::Mango => (mango::fetch_full_state()?, None),
         };
 
         let data = Mutable::new(initial_state);
@@ -63,7 +66,11 @@ impl CompositorSubscriber {
         // Blocking socket listeners, each on its own thread and retried on EOF.
         match backend {
             CompositorBackend::Hyprland => hyprland::start_listener(data.clone(), token.clone()),
-            CompositorBackend::Niri => niri::start_listener(data.clone(), token.clone()),
+            CompositorBackend::Niri => {
+                if let Some(stream) = niri_stream {
+                    niri::start_listener(data.clone(), token.clone(), stream);
+                }
+            }
             CompositorBackend::Mango => mango::start_listener(data.clone(), token.clone()),
         }
 
@@ -111,7 +118,7 @@ impl CompositorSubscriber {
     pub fn refresh(&self) -> Result<()> {
         let new_state = match self.backend {
             CompositorBackend::Hyprland => hyprland::fetch_full_state()?,
-            CompositorBackend::Niri => niri::fetch_full_state()?,
+            CompositorBackend::Niri => return niri::refresh(&self.data),
             CompositorBackend::Mango => mango::fetch_full_state()?,
         };
         self.data.set_neq(new_state);

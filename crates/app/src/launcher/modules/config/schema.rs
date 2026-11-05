@@ -6,6 +6,7 @@
 //! `config.toml`, so a page deep in the tree can read and write without
 //! knowing its parents.
 
+use std::fmt::Write as _;
 use std::rc::Rc;
 
 use gpui::{AnyElement, App, AppContext};
@@ -129,6 +130,12 @@ impl TextHint {
                 Err("A prefix cannot contain spaces".into())
             }
             TextHint::Strftime if text.is_empty() => Err("A format cannot be empty".into()),
+            TextHint::Strftime
+                if chrono::format::StrftimeItems::new(text)
+                    .any(|item| matches!(item, chrono::format::Item::Error)) =>
+            {
+                Err("Not a valid strftime format".into())
+            }
             _ => Ok(()),
         }
     }
@@ -136,7 +143,12 @@ impl TextHint {
     /// What the value would show, where that is not obvious from the text.
     pub fn preview(self, text: &str) -> Option<String> {
         match self {
-            TextHint::Strftime => Some(chrono::Local::now().format(text).to_string()),
+            // chrono's `to_string()` panics on a bad specifier; `write!` returns `Err`.
+            TextHint::Strftime => {
+                let mut out = String::new();
+                write!(out, "{}", chrono::Local::now().format(text)).ok()?;
+                Some(out)
+            }
             _ => None,
         }
     }
@@ -841,6 +853,16 @@ mod tests {
         assert_eq!(trim_float(32.0), "32");
         assert_eq!(trim_float(0.5), "0.5");
         assert_eq!(trim_float(0.05), "0.05");
+    }
+
+    #[test]
+    fn a_bad_strftime_format_is_rejected_without_panicking() {
+        for bad in ["%Q", "%"] {
+            assert!(TextHint::Strftime.validate(bad).is_err());
+            assert_eq!(TextHint::Strftime.preview(bad), None);
+        }
+        assert!(TextHint::Strftime.validate("%H:%M").is_ok());
+        assert!(TextHint::Strftime.preview("%H:%M").is_some());
     }
 
     #[test]
