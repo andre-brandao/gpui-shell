@@ -318,6 +318,11 @@ pub static STORIES: &[StoryEntry] = &[
         category: StoryCategory::Layout,
         build: stories::squircle::build,
     },
+    StoryEntry {
+        name: "Motion",
+        category: StoryCategory::Layout,
+        build: stories::motion::build,
+    },
     // Shell Patterns
     StoryEntry {
         name: "Launcher",

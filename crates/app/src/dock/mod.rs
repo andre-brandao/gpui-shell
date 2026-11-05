@@ -12,12 +12,15 @@ pub use config::{DockConfig, DockHoverEffect, DockMonitors, DockStyle, DockVisib
 pub use window::{init, reload};
 
 use gpui::{
-    AnyElement, App, Context, DisplayId, InteractiveElement, Render, Size, Styled, Window, div,
-    img, prelude::*, px, relative,
+    AnimationExt, AnimationPhase, AnyElement, App, Context, DisplayId, ElementId,
+    InteractiveElement, Render, Size, Styled, Window, div, img, prelude::*, px, relative,
 };
 use std::collections::HashMap;
 use ui::patterns::surface_radius;
-use ui::{ActiveTheme, Color, Icon, IconName, IconSize, Radius, Spacing, TextSize, nested_radius};
+use ui::{
+    ActiveTheme, Color, Icon, IconName, IconSize, Motion, Radius, Spacing, SpringConfigExt,
+    TextSize, mix, nested_radius,
+};
 
 use crate::config::{ActiveConfig, ConfigSignals, State};
 use crate::state::{AppState, display_id_for_window, watch};
@@ -465,51 +468,71 @@ impl Dock {
             .dispatch(services::CompositorCommand::FocusWindow(window_id));
     }
 
-    fn render_item(&self, item: &DockItem, cx: &mut Context<Self>) -> AnyElement {
+    fn render_item(
+        &self,
+        item: &DockItem,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let theme = cx.theme();
         let config = &cx.config().dock;
         let icon_size = config.icon_size;
         let hover_effect = config.hover_effect;
+        let position = config.position;
         let accent = theme.colors.accent;
+        let text = theme.colors.text;
+        let inactive_indicator = theme.colors.text_muted;
 
-        let element = with_hover_effect(
-            icon_cell(icon_size),
-            hover_effect,
-            icon_size,
-            accent,
-            config.position,
+        // Hover is remembered per item so the effect can spring in and out
+        // rather than switch with the pointer.
+        let hovered = window.use_keyed_state(
+            (ElementId::from("dock-hover"), item.key.clone()),
+            cx,
+            |_, _| false,
         );
+        let is_hovered = *hovered.read(cx);
 
         let window_count = item.windows.len();
         let indicator_width = if window_count > 1 { 20.0 } else { 6.0 };
-        let inactive_indicator = theme.colors.text_muted;
-        let indicators =
-            item.windows
-                .iter()
-                .map(|window| {
-                    div().flex_1().h(px(3.0)).rounded(Radius::Full.pixels()).bg(
-                        if window.is_focused {
-                            accent
-                        } else {
-                            inactive_indicator
-                        },
+        let indicators = item
+            .windows
+            .iter()
+            .map(|window| {
+                div()
+                    .flex_1()
+                    .h(px(3.0))
+                    .rounded(Radius::Full.pixels())
+                    .with_spring(
+                        (ElementId::from("dock-indicator"), window.id.clone()),
+                        Motion::GENTLE.to(window.is_focused),
+                        move |dot, phase| dot.bg(mix(phase, inactive_indicator, accent)),
                     )
-                })
-                .collect::<Vec<_>>();
-
-        // Sized by the cell, so a magnified cell magnifies the icon with it.
-        let icon_element = element
-            .when_some(item.icon_path.clone(), |element, path| {
-                element.child(img(path).size(relative(0.75)))
             })
-            .when(item.icon_path.is_none(), |element| {
-                element.child(
-                    div()
-                        .text_size(TextSize::Medium.rems())
-                        .text_color(theme.colors.text)
-                        .child(item.name.chars().take(1).collect::<String>()),
-                )
-            });
+            .collect::<Vec<_>>();
+
+        let icon_path = item.icon_path.clone();
+        let initial = item.name.chars().take(1).collect::<String>();
+        let icon_element = icon_cell(icon_size).with_spring(
+            (ElementId::from("dock-hover-effect"), item.key.clone()),
+            Motion::LIVELY.to(is_hovered),
+            move |cell, phase| {
+                let cell = with_hover_effect(cell, hover_effect, phase, icon_size, position);
+                // Sized by the cell, so a magnified cell magnifies the icon
+                // with it.
+                let cell = match icon_path {
+                    Some(path) => cell.child(img(path).size(relative(0.75))),
+                    None => cell.child(
+                        div()
+                            .text_size(TextSize::Medium.rems())
+                            .text_color(text)
+                            .child(initial),
+                    ),
+                };
+                cell.when(hover_effect == config::DockHoverEffect::Glow, |cell| {
+                    cell.child(glow_ring(accent, phase))
+                })
+            },
+        );
 
         let item_key = item.key.clone();
         div()
@@ -519,6 +542,7 @@ impl Dock {
             .flex_col()
             .items_center()
             .gap(px(2.0))
+            .on_hover(track_hover(hovered))
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, _event, _window, cx| {
@@ -628,7 +652,7 @@ impl Render for Dock {
         }
         let elements: Vec<AnyElement> = items
             .iter()
-            .map(|item| self.render_item(item, cx))
+            .map(|item| self.render_item(item, window, cx))
             .collect();
 
         div()
@@ -657,7 +681,9 @@ impl Render for Dock {
             .on_mouse_move(cx.listener(|this, _event, _window, cx| {
                 this.set_pointer_inside(true, cx);
             }))
-            .when(launcher, |element| element.child(self.render_launcher(cx)))
+            .when(launcher, |element| {
+                element.child(self.render_launcher(window, cx))
+            })
             .children(elements)
             .into_any_element()
     }
@@ -667,30 +693,40 @@ impl Dock {
     /// The launcher button: an item-sized cell with the bar's launcher icon
     /// in the accent colour, in the same column an item uses so the icons
     /// line up.
-    fn render_launcher(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_launcher(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let dock = &cx.config().dock;
-        let (icon_size, hover_effect) = (dock.icon_size, dock.hover_effect);
+        let (icon_size, hover_effect, position) =
+            (dock.icon_size, dock.hover_effect, dock.position);
+        let accent = cx.theme().colors.accent;
         let icon = crate::icons::source_or(
             cx.config().bar.modules.launcher_btn.icon.as_ref(),
             IconName::Layers,
         );
-        let cell = with_hover_effect(
-            icon_cell(icon_size).id("dock-launcher"),
-            hover_effect,
-            icon_size,
-            cx.theme().colors.accent,
-            dock.position,
-        )
-        .cursor_pointer()
-        .child(
-            div()
-                .size(relative(0.6))
-                .child(Icon::new(icon).size(IconSize::Fill).color(Color::Accent)),
-        )
-        .on_mouse_down(
-            gpui::MouseButton::Left,
-            cx.listener(|_this, _event, _window, cx| crate::launcher::toggle(None, cx)),
-        );
+        let hovered = window.use_keyed_state("dock-launcher-hover", cx, |_, _| false);
+        let is_hovered = *hovered.read(cx);
+        let cell = icon_cell(icon_size)
+            .id("dock-launcher")
+            .cursor_pointer()
+            .on_hover(track_hover(hovered))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|_this, _event, _window, cx| crate::launcher::toggle(None, cx)),
+            )
+            .with_spring(
+                "dock-launcher-hover-effect",
+                Motion::LIVELY.to(is_hovered),
+                move |cell, phase| {
+                    with_hover_effect(cell, hover_effect, phase, icon_size, position)
+                        .child(
+                            div()
+                                .size(relative(0.6))
+                                .child(Icon::new(icon).size(IconSize::Fill).color(Color::Accent)),
+                        )
+                        .when(hover_effect == config::DockHoverEffect::Glow, |cell| {
+                            cell.child(glow_ring(accent, phase))
+                        })
+                },
+            );
         div()
             .flex()
             .flex_col()
@@ -709,38 +745,71 @@ fn icon_cell(icon_size: f32) -> gpui::Div {
         .flex()
         .items_center()
         .justify_center()
-        .rounded(nested_radius(surface_radius(), Spacing::Medium.pixels()))
+        .rounded(icon_cell_radius())
+}
+
+fn icon_cell_radius() -> gpui::Pixels {
+    nested_radius(surface_radius(), Spacing::Medium.pixels())
+}
+
+/// Writes the pointer's presence into `hovered`, which the owning view
+/// observes, so the cell re-renders and its spring retargets.
+fn track_hover(hovered: gpui::Entity<bool>) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+    move |over, _, cx| {
+        hovered.update(cx, |state, cx| {
+            if *state != *over {
+                *state = *over;
+                cx.notify();
+            }
+        });
+    }
+}
+
+/// The glow effect's ring at `phase` of the way in: an overlay, so it never
+/// squeezes the icon it frames.
+fn glow_ring(accent: gpui::Hsla, phase: AnimationPhase) -> gpui::Div {
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(icon_cell_radius())
+        .border_2()
+        .border_color(accent.opacity(phase.0.clamp(0.0, 1.0)))
 }
 
 /// How far a lifted icon rises off the dock's edge.
 const LIFT: f32 = 8.0;
+/// How much a magnified icon grows.
+const MAGNIFY: f32 = 1.3;
 
-/// The hover style of an icon cell. A lift is an offset away from the
-/// screen edge, so it reads the same on every side and moves nothing else;
-/// a magnified cell grows, and its icon with it.
-fn with_hover_effect<E: InteractiveElement + Styled>(
+/// The hover style of an icon cell at `phase` of the way in (0 at rest, 1
+/// hovered). A lift is an offset away from the screen edge, so it reads the
+/// same on every side and moves nothing else; a magnified cell grows, and
+/// its icon with it. Clamped: the dock reserves exactly this much room.
+fn with_hover_effect<E: Styled>(
     element: E,
     effect: config::DockHoverEffect,
+    phase: AnimationPhase,
     icon_size: f32,
-    accent: gpui::Hsla,
     position: crate::bar::config::BarPosition,
 ) -> E {
     use crate::bar::config::BarPosition;
-    let lift = move |style: gpui::StyleRefinement| match position {
-        BarPosition::Bottom => style.bottom(px(LIFT)),
-        BarPosition::Top => style.top(px(LIFT)),
-        BarPosition::Left => style.left(px(LIFT)),
-        BarPosition::Right => style.right(px(LIFT)),
-    };
-    let magnify = move |style: gpui::StyleRefinement| style.size(px(icon_size * 1.3));
-    match effect {
-        config::DockHoverEffect::None => element,
-        config::DockHoverEffect::Lift => element.hover(lift),
-        config::DockHoverEffect::Magnify => element.hover(magnify),
-        config::DockHoverEffect::Glow => {
-            element.hover(move |style| style.border_2().border_color(accent))
+    let lift = |element: E| {
+        let rise = phase.interpolate_clamped(px(0.0), px(LIFT));
+        match position {
+            BarPosition::Bottom => element.bottom(rise),
+            BarPosition::Top => element.top(rise),
+            BarPosition::Left => element.left(rise),
+            BarPosition::Right => element.right(rise),
         }
-        config::DockHoverEffect::MagnifyLift => element.hover(move |style| lift(magnify(style))),
+    };
+    let magnify = |element: E| {
+        element.size(phase.interpolate_clamped(px(icon_size), px(icon_size * MAGNIFY)))
+    };
+    match effect {
+        config::DockHoverEffect::None | config::DockHoverEffect::Glow => element,
+        config::DockHoverEffect::Lift => lift(element),
+        config::DockHoverEffect::Magnify => magnify(element),
+        config::DockHoverEffect::MagnifyLift => lift(magnify(element)),
     }
 }
 

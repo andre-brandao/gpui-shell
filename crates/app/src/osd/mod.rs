@@ -19,7 +19,7 @@ use gpui::{
     prelude::*, px,
 };
 use ui::patterns::OsdIndicator;
-use ui::{ActiveTheme, IconName, Spacing};
+use ui::{ActiveTheme, Enter, IconName, MotionExt, Spacing};
 
 use crate::config::Config;
 use crate::icons;
@@ -58,6 +58,15 @@ impl OsdPosition {
             OsdPosition::Bottom => (0., 0., OSD_MARGIN, 0.),
             OsdPosition::Left => (0., 0., 0., OSD_MARGIN),
             OsdPosition::Right => (0., OSD_MARGIN, 0., 0.),
+        }
+    }
+
+    fn enter_from(self) -> Enter {
+        match self {
+            OsdPosition::Top => Enter::FromAbove,
+            OsdPosition::Bottom => Enter::FromBelow,
+            OsdPosition::Left => Enter::FromLeft,
+            OsdPosition::Right => Enter::FromRight,
         }
     }
 }
@@ -109,15 +118,27 @@ impl Render for OsdView {
             theme.colors.text
         };
 
+        // Volume and brightness are different quantities; one must not slide
+        // into the other when the OSD switches between them.
+        let key = match self.kind {
+            OsdKind::Volume { .. } => "osd-level-volume",
+            OsdKind::Brightness { .. } => "osd-level-brightness",
+        };
+
         // The inset all round is what the window's long/short extent leaves
-        // the pill.
-        div().size_full().p(Spacing::Medium.pixels()).child(
-            OsdIndicator::new(icon, level)
-                .vertical(self.position.is_vertical())
-                .background(theme.surface(Config::global(cx).osd.opacity))
-                .fill(fill)
-                .icon_color(icon_color),
-        )
+        // the pill. The pill arrives from the edge it is anchored to.
+        div()
+            .size_full()
+            .p(Spacing::Medium.pixels())
+            .child(
+                OsdIndicator::new(icon, level)
+                    .key(key)
+                    .vertical(self.position.is_vertical())
+                    .background(theme.surface(Config::global(cx).osd.opacity))
+                    .fill(fill)
+                    .icon_color(icon_color),
+            )
+            .enter("osd-enter", self.position.enter_from())
     }
 }
 

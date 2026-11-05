@@ -28,6 +28,7 @@ pub mod launcher;
 pub mod list;
 pub mod menu;
 pub mod modal;
+pub mod motion;
 pub mod osd;
 pub mod pagination;
 pub mod panel;
